@@ -1,0 +1,39 @@
+# {{site_name}} — Netlify 项目配置
+# 由 HexoManager 生成于 {{year}}
+
+[build]
+  command = "{{build_command}}"
+  publish = "{{output_dir}}"
+
+[build.environment]
+  NODE_VERSION = "{{node_version}}"
+  NPM_FLAGS = "--legacy-peer-deps"
+
+# 单页应用/静态站点：所有 404 回退到 404 页面
+[[redirects]]
+  from = "/*"
+  to = "/404.html"
+  status = 404
+
+# 边缘层故障转移：将主域名流量指向边缘节点
+[[redirects]]
+  from = "/*"
+  to = "https://{{edge_domain}}/:splat"
+  status = 200
+  force = false
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "SAMEORIGIN"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# 站点标识（与 Netlify 后台 Site ID 对应时填写）
+[context.production]
+  environment = { SITE_NAME = "{{site_name}}" }

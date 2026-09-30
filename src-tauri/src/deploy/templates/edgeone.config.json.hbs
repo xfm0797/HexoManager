@@ -1,0 +1,40 @@
+{
+  "name": "{{edgeone_project}}",
+  "description": "{{site_name}} — 由 HexoManager 生成于 {{year}}",
+  "framework": "hexo",
+  "buildCommand": "{{build_command}}",
+  "outputDirectory": "{{output_dir}}",
+  "nodeVersion": "{{node_version}}",
+  "installCommand": "npm install",
+  "rootDirectory": "./",
+  "environment": {
+    "SITE_NAME": "{{site_name}}",
+    "SITE_DOMAIN": "{{domain}}",
+    "EDGE_DOMAIN": "{{edge_domain}}",
+    "ORIGIN_STRATEGY": "{{origin_strategy}}"
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/$1",
+      "continue": true
+    }
+  ],
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" }
+      ]
+    }
+  ],
+  "cleanUrls": true,
+  "trailingSlash": false
+}

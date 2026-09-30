@@ -1,0 +1,44 @@
+# {{site_name}} — Netlify 自动部署
+# 由 HexoManager 生成于 {{year}}
+#
+# 需要在仓库 Secrets 中配置：
+#   NETLIFY_AUTH_TOKEN — Netlify 个人访问令牌
+#   NETLIFY_SITE_ID    — Netlify 站点 ID
+
+name: Deploy to Netlify
+
+on:
+  push:
+    branches:
+      - {{branch}}
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '{{node_version}}'
+          cache: npm
+
+      - name: 安装依赖并构建
+        run: |
+          npm install
+          npx hexo generate
+
+      - name: 部署到 Netlify
+        uses: nwtgck/actions-netlify@v3
+        with:
+          publish-dir: './{{output_dir}}'
+          production-branch: {{branch}}
+          production-deploy: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "部署自 ${{ github.sha }}"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}

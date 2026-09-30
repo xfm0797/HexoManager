@@ -1,0 +1,49 @@
+# {{site_name}} — EdgeOne Pages 自动部署
+# 由 HexoManager 生成于 {{year}}
+#
+# 需要在仓库 Secrets 中配置：
+#   EDGEONE_API_TOKEN — 腾讯云 API 密钥 Token
+#   EDGEONE_PROJECT   — EdgeOne Pages 项目名（可选，默认 {{edgeone_project}}）
+
+name: Deploy to EdgeOne Pages
+
+on:
+  push:
+    branches:
+      - {{branch}}
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '{{node_version}}'
+          cache: npm
+
+      - name: 安装依赖并构建
+        run: |
+          npm install
+          npx hexo generate
+
+      - name: 部署到 EdgeOne Pages
+        env:
+          EDGEONE_API_TOKEN: ${{ secrets.EDGEONE_API_TOKEN }}
+          EDGEONE_PROJECT: ${{ secrets.EDGEONE_PROJECT }}
+        run: |
+          PROJECT="${EDGEONE_PROJECT:-{{edgeone_project}}}"
+          echo "准备部署到 EdgeOne Pages 项目：$PROJECT"
+          echo "构建产物目录：{{output_dir}}"
+          # 若已安装 edgeone CLI，可直接执行：
+          #   npx edgeone pages deploy {{output_dir}} --project "$PROJECT"
+          #
+          # 未安装时请通过 EdgeOne 控制台关联本仓库，配置如下构建参数：
+          #   构建命令：{{build_command}}
+          #   输出目录：{{output_dir}}
+          #   Node 版本：{{node_version}}
+          echo "当前未检测到 edgeone CLI，请按上述说明在控制台完成关联。"

@@ -1,0 +1,304 @@
+/**
+ * {{site_name}} — Cloudflare Workers 智能回源与故障转移脚本
+ * 由 HexoManager 生成于 {{year}}
+ *
+ * 功能：
+ *   1. 多源站健康探测与自动故障转移
+ *   2. 主源失败时自动切换至备源
+ *   3. HTML 不缓存、静态资源长缓存
+ *   4. 自动回切（主源恢复后重新走主源）
+ *
+ * 部署方式：
+ *   npx wrangler deploy {{cloudflare_project}}-router.js
+ *
+ * 需在 wrangler.toml 中声明 KV 命名空间（用于记录源站健康状态）：
+ *   [[kv_namespaces]]
+ *   binding = "ORIGIN_STATE"
+ *   id = "<your-kv-namespace-id>"
+ */
+
+// ==================== 配置区 ====================
+
+/**
+ * 源站列表，按优先级排序。
+ * 第一个为主源，其余为备源。weight 越大优先级越高。
+ */
+const ORIGINS = [
+  {
+    name: '主源',
+    url: 'https://{{origin_url}}'.replace(/^https?:\/\//, ''),
+    weight: 100,
+    priority: 1,
+  },
+  // 备源示例：取消注释并替换为实际地址即可启用
+  // {
+  //   name: '备源-Vercel',
+  //   url: 'your-project.vercel.app',
+  //   weight: 50,
+  //   priority: 2,
+  // },
+  // {
+  //   name: '备源-CloudflarePages',
+  //   url: 'your-project.pages.dev',
+  //   weight: 50,
+  //   priority: 3,
+  // },
+];
+
+/** 回源策略：smart_routing | failover_only | round_robin */
+const ORIGIN_STRATEGY = '{{origin_strategy}}';
+
+/** 健康检查配置 */
+const HEALTH_CHECK = {
+  path: '/index.html',
+  timeoutMs: 5000,
+  failThreshold: 3,   // 连续失败次数达到此值标记为不健康
+  passThreshold: 2,   // 连续成功次数达到此值标记为健康
+  cacheTtlSec: 30,    // 健康状态缓存时长（秒）
+};
+
+/** 需要长缓存的静态资源扩展名 */
+const IMMUTABLE_EXTENSIONS = [
+  '.js', '.css', '.woff', '.woff2', '.ttf', '.otf',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.svg', '.ico',
+];
+
+/** HTML 响应不缓存，保证内容实时性 */
+const NO_CACHE_EXTENSIONS = ['.html', '.xml', '.json', '.txt'];
+
+// ==================== 工具函数 ====================
+
+/** 判断请求路径是否属于静态资源 */
+function isImmutableAsset(pathname) {
+  const lower = pathname.toLowerCase();
+  return IMMUTABLE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+/** 判断是否为需要实时性的内容 */
+function isDynamicContent(pathname) {
+  const lower = pathname.toLowerCase();
+  if (lower === '/' || lower.endsWith('/')) return true;
+  return NO_CACHE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+/** 读取源站健康状态（带内存 + KV 双级缓存） */
+const memoryHealth = new Map();
+
+async function getHealth(env, originName) {
+  const now = Date.now();
+  const cached = memoryHealth.get(originName);
+  if (cached && now - cached.at < HEALTH_CHECK.cacheTtlSec * 1000) {
+    return cached.healthy;
+  }
+
+  if (env && env.ORIGIN_STATE) {
+    try {
+      const kvValue = await env.ORIGIN_STATE.get(`health:${originName}`);
+      if (kvValue !== null) {
+        const parsed = JSON.parse(kvValue);
+        if (now - parsed.at < HEALTH_CHECK.cacheTtlSec * 1000) {
+          memoryHealth.set(originName, parsed);
+          return parsed.healthy;
+        }
+      }
+    } catch (_) {
+      // KV 不可用时降级为内存状态
+    }
+  }
+
+  return cached ? cached.healthy : true;
+}
+
+/** 写入源站健康状态 */
+async function setHealth(env, originName, healthy) {
+  const state = { healthy, at: Date.now() };
+  memoryHealth.set(originName, state);
+  if (env && env.ORIGIN_STATE) {
+    try {
+      await env.ORIGIN_STATE.put(`health:${originName}`, JSON.stringify(state), {
+        expirationTtl: 300,
+      });
+    } catch (_) {
+      // 忽略 KV 写入失败
+    }
+  }
+}
+
+/** 探测单个源站健康状态 */
+async function probeOrigin(origin) {
+  const url = `https://${origin.url}${HEALTH_CHECK.path}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HEALTH_CHECK.timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: { 'User-Agent': 'HexoManager-Edge-HealthCheck/1.0' },
+      cf: { cacheTtl: 0, cacheEverything: false },
+    });
+    clearTimeout(timer);
+    return res.ok || res.status === 301 || res.status === 302;
+  } catch (_) {
+    clearTimeout(timer);
+    return false;
+  }
+}
+
+/** 按策略选择候选源站（已排除不健康源站） */
+async function selectOrigins(env, request) {
+  const healthy = [];
+  for (const origin of ORIGINS) {
+    const ok = await getHealth(env, origin.name);
+    if (ok) healthy.push(origin);
+  }
+
+  // 全部不健康时兜底使用全部源站，避免整体不可用
+  const candidates = healthy.length > 0 ? healthy : [...ORIGINS];
+
+  if (ORIGIN_STRATEGY === 'round_robin') {
+    const idx = Math.floor(Date.now() / 1000) % candidates.length;
+    return [candidates[idx], ...candidates.filter((_, i) => i !== idx)];
+  }
+
+  if (ORIGIN_STRATEGY === 'failover_only') {
+    return [...candidates].sort((a, b) => a.priority - b.priority);
+  }
+
+  // smart_routing：健康源站中按权重降序
+  return [...candidates].sort((a, b) => b.weight - a.weight || a.priority - b.priority);
+}
+
+/** 构造回源请求 */
+async function buildOriginRequest(request, origin) {
+  const incoming = new URL(request.url);
+  const target = new URL(request.url);
+  target.hostname = origin.url;
+  target.protocol = 'https:';
+
+  const headers = new Headers(request.headers);
+  headers.set('Host', origin.url);
+  headers.set('X-Forwarded-Host', incoming.host);
+  headers.set('X-Forwarded-Proto', incoming.protocol.replace(':', ''));
+  headers.set('X-Origin-Name', origin.name);
+
+  return new Request(target.toString(), {
+    method: request.method,
+    headers,
+    body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+    redirect: 'follow',
+  });
+}
+
+/** 附加缓存与安全响应头 */
+function decorateResponse(response, pathname, originName) {
+  const headers = new Headers(response.headers);
+
+  if (isImmutableAsset(pathname)) {
+    headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+  } else if (isDynamicContent(pathname)) {
+    headers.set('Cache-Control', 'public, max-age=0, must-revalidate');
+  }
+
+  headers.set('X-Served-By-Origin', originName);
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('X-Frame-Options', 'SAMEORIGIN');
+  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+// ==================== 主流程 ====================
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    // 健康检查端点
+    if (url.pathname === '/__edge_health') {
+      const report = [];
+      for (const origin of ORIGINS) {
+        const healthy = await probeOrigin(origin);
+        await setHealth(env, origin.name, healthy);
+        report.push({ name: origin.name, url: origin.url, healthy });
+      }
+      return new Response(
+        JSON.stringify({ strategy: ORIGIN_STRATEGY, origins: report, at: new Date().toISOString() },
+          null, 2),
+        { headers: { 'Content-Type': 'application/json; charset=utf-8' } },
+      );
+    }
+
+    const candidates = await selectOrigins(env, request);
+    let lastError = null;
+
+    for (const origin of candidates) {
+      try {
+        const originRequest = await buildOriginRequest(request, origin);
+        const response = await fetch(originRequest);
+
+        // 5xx 视为源站异常，标记不健康并尝试下一个源站
+        if (response.status >= 500) {
+          await setHealth(env, origin.name, false);
+          lastError = `源站 ${origin.name} 返回 ${response.status}`;
+
+          // 后台异步复检，不阻塞当前请求
+          if (ctx && ctx.waitUntil) {
+            ctx.waitUntil(
+              probeOrigin(origin).then((ok) => setHealth(env, origin.name, ok)),
+            );
+          }
+          continue;
+        }
+
+        // 成功：标记健康
+        await setHealth(env, origin.name, true);
+        return decorateResponse(response, url.pathname, origin.name);
+      } catch (error) {
+        await setHealth(env, origin.name, false);
+        lastError = `源站 ${origin.name} 请求失败：${error.message}`;
+        continue;
+      }
+    }
+
+    // 全部源站均不可用
+    return new Response(
+      `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>服务暂时不可用</title>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;
+align-items:center;justify-content:center;height:100vh;margin:0;background:#fafafa;color:#262626}
+.box{text-align:center;max-width:520px;padding:32px}
+h1{font-size:22px;margin:0 0 12px}
+p{color:#8c8c8c;line-height:1.7;margin:0 0 8px;font-size:14px}
+code{background:#f0f0f0;padding:2px 6px;border-radius:4px;font-size:12px}
+</style></head><body><div class="box">
+<h1>站点暂时不可用</h1>
+<p>所有源站均未通过健康检查，边缘节点无法回源。</p>
+<p>详情：<code>${lastError ?? '未知错误'}</code></p>
+<p>站点：{{site_name}} · 边缘域名：{{edge_domain}}</p>
+</div></body></html>`,
+      {
+        status: 503,
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Retry-After': '30' },
+      },
+    );
+  },
+
+  /**
+   * 定时任务：主动巡检所有源站健康状态。
+   * 在 wrangler.toml 中配置：
+   *   [triggers]
+   *   crons = ["*/2 * * * *"]
+   */
+  async scheduled(event, env, ctx) {
+    for (const origin of ORIGINS) {
+      const healthy = await probeOrigin(origin);
+      await setHealth(env, origin.name, healthy);
+    }
+  },
+};

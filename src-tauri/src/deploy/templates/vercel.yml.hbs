@@ -1,0 +1,44 @@
+# {{site_name}} — Vercel 自动部署
+# 由 HexoManager 生成于 {{year}}
+#
+# 需要在仓库 Secrets 中配置：
+#   VERCEL_TOKEN      — Vercel 访问令牌
+#   VERCEL_ORG_ID     — Vercel 团队 / 账号 ID
+#   VERCEL_PROJECT_ID — Vercel 项目 ID
+
+name: Deploy to Vercel
+
+on:
+  push:
+    branches:
+      - {{branch}}
+  workflow_dispatch:
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '{{node_version}}'
+          cache: npm
+
+      - name: 安装 Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: 拉取 Vercel 环境信息
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: 构建项目
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: 部署到 Vercel
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

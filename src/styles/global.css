@@ -1,0 +1,247 @@
+/** 全局样式：Tailwind 基础层 + Ant Design 适配 */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --hm-bg: #f5f6f8;
+  --hm-surface: #ffffff;
+  --hm-border: #e5e7eb;
+  --hm-text: #1f2328;
+  --hm-text-secondary: #6b7280;
+  --hm-sidebar-bg: #ffffff;
+  --hm-code-bg: #f6f8fa;
+  color-scheme: light;
+}
+
+html.dark {
+  --hm-bg: #16181d;
+  --hm-surface: #1e2126;
+  --hm-border: #2f333b;
+  --hm-text: #e6e8eb;
+  --hm-text-secondary: #9aa1ab;
+  --hm-sidebar-bg: #1a1d22;
+  --hm-code-bg: #23262d;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: var(--hm-text);
+  background: var(--hm-bg);
+  overflow: hidden;
+}
+
+/* ---------- 滚动条 ---------- */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 148, 160, 0.4);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 148, 160, 0.65);
+}
+
+/* ---------- 通用工具类 ---------- */
+
+.hm-surface {
+  background: var(--hm-surface);
+  border: 1px solid var(--hm-border);
+  border-radius: 10px;
+}
+
+.hm-scroll {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.hm-text-secondary {
+  color: var(--hm-text-secondary);
+}
+
+.hm-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+}
+
+.hm-gradient-text {
+  background: linear-gradient(120deg, #3366ff, #722ed1);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* 拖拽区域（无边框窗口） */
+.hm-drag-region {
+  -webkit-app-region: drag;
+}
+
+.hm-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* ---------- Ant Design 细节适配 ---------- */
+
+.ant-layout {
+  background: var(--hm-bg);
+}
+
+.ant-card-body {
+  padding: 20px;
+}
+
+/* 让表格在深色模式下也保持可读边界 */
+html.dark .ant-table {
+  background: transparent;
+}
+
+/* Monaco 编辑器容器圆角 */
+.hm-editor {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--hm-border);
+}
+
+/* Markdown 预览排版 */
+.hm-markdown {
+  line-height: 1.75;
+  color: var(--hm-text);
+  word-wrap: break-word;
+}
+
+.hm-markdown h1,
+.hm-markdown h2,
+.hm-markdown h3,
+.hm-markdown h4 {
+  margin: 1.4em 0 0.6em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.hm-markdown h1 {
+  font-size: 1.7em;
+  border-bottom: 1px solid var(--hm-border);
+  padding-bottom: 0.3em;
+}
+
+.hm-markdown h2 {
+  font-size: 1.4em;
+  border-bottom: 1px solid var(--hm-border);
+  padding-bottom: 0.3em;
+}
+
+.hm-markdown h3 {
+  font-size: 1.2em;
+}
+
+.hm-markdown p {
+  margin: 0.8em 0;
+}
+
+.hm-markdown a {
+  color: #3366ff;
+  text-decoration: none;
+}
+
+.hm-markdown a:hover {
+  text-decoration: underline;
+}
+
+.hm-markdown code {
+  background: var(--hm-code-bg);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.88em;
+}
+
+.hm-markdown pre {
+  background: var(--hm-code-bg);
+  padding: 14px 16px;
+  border-radius: 8px;
+  overflow: auto;
+}
+
+.hm-markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.hm-markdown blockquote {
+  margin: 1em 0;
+  padding: 0.2em 1em;
+  border-left: 4px solid #3366ff;
+  color: var(--hm-text-secondary);
+  background: var(--hm-code-bg);
+  border-radius: 0 6px 6px 0;
+}
+
+.hm-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+.hm-markdown th,
+.hm-markdown td {
+  border: 1px solid var(--hm-border);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.hm-markdown th {
+  background: var(--hm-code-bg);
+  font-weight: 600;
+}
+
+.hm-markdown img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.hm-markdown ul,
+.hm-markdown ol {
+  padding-left: 1.6em;
+}
+
+.hm-markdown hr {
+  border: none;
+  border-top: 1px solid var(--hm-border);
+  margin: 1.6em 0;
+}
+
+/* 打印样式（用于导出） */
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .hm-no-print {
+    display: none !important;
+  }
+}

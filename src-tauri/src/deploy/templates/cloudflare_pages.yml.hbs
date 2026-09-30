@@ -1,0 +1,42 @@
+# {{site_name}} — Cloudflare Pages 自动部署
+# 由 HexoManager 生成于 {{year}}
+#
+# 需要在仓库 Secrets 中配置：
+#   CLOUDFLARE_API_TOKEN  — Cloudflare API 令牌（含 Pages 编辑权限）
+#   CLOUDFLARE_ACCOUNT_ID — Cloudflare 账号 ID
+
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - {{branch}}
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '{{node_version}}'
+          cache: npm
+
+      - name: 安装依赖并构建
+        run: |
+          npm install
+          npx hexo generate
+
+      - name: 发布到 Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy {{output_dir}} --project-name={{cloudflare_project}} --branch={{branch}}

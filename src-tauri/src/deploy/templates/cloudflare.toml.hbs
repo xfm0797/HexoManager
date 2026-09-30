@@ -1,0 +1,17 @@
+# {{site_name}} — Cloudflare Pages 项目配置
+# 由 HexoManager 生成于 {{year}}
+# 供 wrangler 读取：npx wrangler pages deploy {{output_dir}} --project-name {{cloudflare_project}}
+
+name = "{{cloudflare_project}}"
+compatibility_date = "{{year}}-01-01"
+pages_build_output_dir = "./{{output_dir}}"
+
+[vars]
+SITE_NAME = "{{site_name}}"
+SITE_DOMAIN = "{{domain}}"
+EDGE_DOMAIN = "{{edge_domain}}"
+ORIGIN_STRATEGY = "{{origin_strategy}}"
+
+# 环境变量（敏感信息请使用 wrangler secret put 写入，勿明文提交）
+# [env.production.vars]
+#   API_TOKEN = ""

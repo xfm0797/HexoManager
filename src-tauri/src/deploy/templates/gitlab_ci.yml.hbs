@@ -1,0 +1,40 @@
+# {{site_name}} — GitLab Pages 自动部署
+# 由 HexoManager 生成于 {{year}}
+
+image: node:{{node_version}}
+
+# 缓存 node_modules 加速后续流水线
+cache:
+  key:
+    files:
+      - package-lock.json
+  paths:
+    - node_modules/
+
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  script:
+    - npm install
+    - npx hexo generate
+  artifacts:
+    paths:
+      - {{output_dir}}
+    expire_in: 1 week
+  only:
+    - {{branch}}
+
+pages:
+  stage: deploy
+  script:
+    - echo "部署到 GitLab Pages，自定义域名：{{domain}}"
+  artifacts:
+    paths:
+      - {{output_dir}}
+  dependencies:
+    - build
+  only:
+    - {{branch}}

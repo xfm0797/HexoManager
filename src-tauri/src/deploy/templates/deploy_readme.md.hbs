@@ -1,0 +1,90 @@
+# {{site_name}} — 部署配置说明
+
+> 本目录由 **HexoManager** 于 {{year}} 自动生成。
+
+## 目录内容
+
+| 文件 | 说明 |
+| :--- | :--- |
+| `edgeone-config.txt` | EdgeOne 智能回源与故障转移配置指南 |
+| `cloudflare-worker.js` | Cloudflare Workers 智能回源与故障转移脚本 |
+| `README.md` | 本说明文件 |
+
+## 站点信息
+
+| 项 | 值 |
+| :--- | :--- |
+| 站点名称 | {{site_name}} |
+| 主域名 | {{domain}} |
+| 边缘域名 | {{edge_domain}} |
+| 仓库地址 | {{repo_url}} |
+| 主分支 | {{branch}} |
+| Node 版本 | {{node_version}} |
+| 构建命令 | `{{build_command}}` |
+| 输出目录 | `{{output_dir}}` |
+| 回源策略 | {{origin_strategy}} |
+
+## 快速开始
+
+### 1. 推送到代码仓库
+
+```bash
+git add .
+git commit -m "chore: 添加部署配置"
+git push origin {{branch}}
+```
+
+### 2. 配置平台密钥
+
+在仓库的 **Settings → Secrets and variables → Actions** 中添加对应平台的密钥：
+
+| 平台 | 所需 Secrets |
+| :--- | :--- |
+| Vercel | `VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID` |
+| Netlify | `NETLIFY_AUTH_TOKEN`、`NETLIFY_SITE_ID` |
+| Cloudflare Pages | `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` |
+| EdgeOne Pages | `EDGEONE_API_TOKEN`、`EDGEONE_PROJECT` |
+| GitHub Pages | 无需额外配置（使用内置 `GITHUB_TOKEN`） |
+| Gitee Pages | 需在 Gitee 控制台开启 Gitee Go 与 Pages 服务 |
+| GitLab Pages | 无需额外配置（使用内置 CI 变量） |
+
+### 3. 部署 Cloudflare Worker（可选）
+
+```bash
+npm install -g wrangler
+wrangler login
+wrangler kv namespace create ORIGIN_STATE   # 记录返回的 id
+# 将 id 填入 wrangler.toml，然后：
+wrangler deploy cloudflare-worker.js
+```
+
+健康检查端点：`https://<worker 域名>/__edge_health`
+
+### 4. 配置 EdgeOne 回源
+
+参阅 `edgeone-config.txt`，按序完成：添加站点 → 配置加速域名 → 配置源站组与
+健康检查 → 配置缓存规则 → 部署 HTTPS 证书。
+
+## 环境变量
+
+{{#if env_vars}}以下环境变量已配置，请在对应平台中同步设置：
+
+| 变量名 | 值 |
+| :--- | :--- |
+{{#each env_vars}}| `{{key}}` | `{{value}}` |
+{{/each}}
+{{else}}未配置额外环境变量。
+{{/if}}
+
+> ⚠️ 敏感信息（API Token、密钥）请使用平台提供的 Secrets 机制，
+> **不要**直接写入本文件或提交到公开仓库。
+
+## 注意事项
+
+1. 本目录中的配置文件可安全提交到版本控制。
+2. 如需修改生成内容，建议在 HexoManager 中重新生成，避免手动改动被覆盖。
+3. 若站点不使用边缘层，可直接删除本目录与相关 workflow 文件。
+
+---
+
+_由 HexoManager 生成 · 最后更新 {{year}}_

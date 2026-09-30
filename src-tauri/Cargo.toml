@@ -1,0 +1,51 @@
+[package]
+name = "hexo-manager"
+version = "1.0.0"
+description = "HexoManager - 桌面端 Hexo 多站点管理工具"
+authors = ["XFM"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "hexo_manager_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# SQLite（bundled 特性内置 SQLite 源码，免系统依赖）
+rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
+
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+
+# 部署配置模板渲染
+handlebars = "6"
+
+# 错误处理
+thiserror = "2"
+
+# 路径与文件名处理
+dirs = "5"
+walkdir = "2"
+
+# YAML 配置读写（Hexo 站点与主题配置均为 YAML）
+serde_yaml = "0.9"
+
+[features]
+# 由 tauri CLI 在构建时注入，用于自定义协议
+custom-protocol = ["tauri/custom-protocol"]

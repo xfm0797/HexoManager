@@ -1,0 +1,44 @@
+# {{site_name}} — Gitee Pages 自动部署
+# 由 HexoManager 生成于 {{year}}
+#
+# 说明：Gitee Go 流水线，需在 Gitee 仓库「服务 → Gitee Go」中启用本流水线。
+# 同时在 Gitee 仓库「服务 → Gitee Pages」中开启 Pages 服务并选择 {{branch}} 分支。
+
+name: deploy-to-gitee-pages
+
+displayName: 部署到 Gitee Pages
+
+triggers:
+  push:
+    branches:
+      include:
+        - {{branch}}
+
+variables:
+  NODE_VERSION: '{{node_version}}'
+
+stages:
+  - stage:
+      name: build_and_deploy
+      displayName: 构建并部署
+      steps:
+        - step: setNodeVersion
+          displayName: 设置 Node.js 版本
+          inputs:
+            version: $(NODE_VERSION)
+
+        - step: npmInstall
+          displayName: 安装依赖
+          inputs:
+            command: install
+
+        - step: executeCommand
+          displayName: 生成静态文件
+          inputs:
+            command: npx hexo generate
+
+        - step: publishArtifact
+          displayName: 上传构建产物
+          inputs:
+            artifact: "{{output_dir}}"
+            path: "{{output_dir}}"

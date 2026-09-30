@@ -1,0 +1,64 @@
+# {{site_name}} — GitHub Pages 自动部署
+# 由 HexoManager 生成于 {{year}}
+#
+# 触发：推送到 main 分支，或手动触发
+# 流程：检出代码 → 安装 Node → 安装依赖 → 生成静态文件 → 发布到 GitHub Pages
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - {{branch}}
+  workflow_dispatch:
+
+# 授予 GITHUB_TOKEN 发布 Pages 所需的最小权限
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间仅保留一次部署，避免并发冲突
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '{{node_version}}'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm install
+
+      - name: 生成静态文件
+        run: npx hexo generate
+
+      - name: 配置 Pages
+        uses: actions/configure-pages@v5
+
+      - name: 上传构建产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./{{output_dir}}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 发布到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
