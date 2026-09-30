@@ -61,7 +61,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "PLACEHOLDER_UPDATE_PUBKEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc0MURFREQ5MjQyRTk2QjMKUldTemxpNGsyZTBkZEErY1A1UUNvbFhaS0FrNERJM210Z2FRaUZWNHZnNnN6Rm54eUlNdGZrZS8K",
       "endpoints": [
         "https://github.com/xfm/hexo-manager/releases/latest/download/latest.json"
       ]
