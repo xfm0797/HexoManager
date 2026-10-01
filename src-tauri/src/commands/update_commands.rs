@@ -152,6 +152,17 @@ pub fn get_local_version(project_root: Option<String>) -> Result<serde_json::Val
     crate::update::check::read_local_version(project_root.as_deref()).map_err(|e| e.to_string())
 }
 
+/// 更新源配置（供「关于与更新」页展示检查链路）。
+#[tauri::command]
+pub fn get_update_config() -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "currentVersion": crate::update::check::APP_VERSION,
+        "endpoints": crate::update::check::update_source_info(),
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+    }))
+}
+
 // ==================== 通用应用设置 ====================
 
 /// 读取全部应用设置（键值对）。

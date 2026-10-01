@@ -8,6 +8,12 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+# 创建 Release 与上传安装包需要写权限：
+# GITHUB_TOKEN 默认只读，缺少 contents: write 会导致
+# tauri-action 报 "Resource not accessible by integration"
+permissions:
+  contents: write
+
 jobs:
   # ===== 代码质量检查 =====
   check:

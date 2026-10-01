@@ -21,6 +21,7 @@ export function useUpdate(options?: { autoCheck?: boolean }) {
 
   const fetchAppInfo = useUpdateStore((s) => s.fetchAppInfo);
   const fetchSettings = useUpdateStore((s) => s.fetchSettings);
+  const fetchConfig = useUpdateStore((s) => s.fetchConfig);
   const saveSettings = useUpdateStore((s) => s.saveSettings);
   const checkUpdate = useUpdateStore((s) => s.checkUpdate);
   const downloadUpdate = useUpdateStore((s) => s.downloadUpdate);
@@ -32,6 +33,7 @@ export function useUpdate(options?: { autoCheck?: boolean }) {
   useEffect(() => {
     if (appInfo === null) void fetchAppInfo();
     void fetchSettings();
+    void fetchConfig();
     void fetchChangelog();
     if (shouldAutoCheck) void checkUpdate(true);
     // 仅在首次挂载时执行
@@ -123,4 +125,11 @@ export function useUpdate(options?: { autoCheck?: boolean }) {
     toggleAutoCheck,
     refreshChangelog: fetchChangelog,
   };
+}
+
+/** 更新源配置（轻量 Hook，供顶栏等处展示） */
+export function useUpdateConfig() {
+  const config = useUpdateStore((s) => s.config);
+  const fetchConfig = useUpdateStore((s) => s.fetchConfig);
+  return { config, fetchConfig };
 }

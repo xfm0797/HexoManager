@@ -60,3 +60,12 @@ export interface DownloadResult {
   size: number;
   success: boolean;
 }
+
+/** 更新源配置（由后端 get_update_config 返回） */
+export interface UpdateConfig {
+  currentVersion: string;
+  /** 默认更新源列表（按优先级排列） */
+  endpoints: string[];
+  os: string;
+  arch: string;
+}

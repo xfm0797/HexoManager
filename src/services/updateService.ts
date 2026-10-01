@@ -6,14 +6,20 @@ import type {
   AppSetting,
   Changelog,
   DownloadResult,
+  UpdateConfig,
   UpdateInfo,
   UpdateSettings,
 } from '@/types';
 
 export const updateService = {
-  /** 检查更新 */
+  /** 检查更新（不传 manifestUrl 时后端使用默认更新源并依次尝试） */
   check(manifestUrl?: string): Promise<UpdateInfo> {
     return call<UpdateInfo>('check_update', { manifestUrl: manifestUrl ?? null });
+  },
+
+  /** 获取更新源配置 */
+  config(): Promise<UpdateConfig> {
+    return call<UpdateConfig>('get_update_config');
   },
 
   /** 下载更新包 */

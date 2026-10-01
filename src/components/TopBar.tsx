@@ -16,7 +16,7 @@ import {
   SyncOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
-import { useSiteStore, useUiStore, useUnreadCount } from '@/stores';
+import { useSiteStore, useUiStore, useUpdateStore, useUnreadCount } from '@/stores';
 import { formatRelative } from '@/utils/format';
 import { SiteStatusBadge } from './StatusBadge';
 
@@ -33,6 +33,12 @@ export function TopBar() {
   const notifications = useUiStore((s) => s.notifications);
   const markAllRead = useUiStore((s) => s.markAllRead);
   const unread = useUnreadCount();
+
+  // 发现新版本且未被忽略时，在顶栏展示升级入口
+  const updateInfo = useUpdateStore((s) => s.updateInfo);
+  const settings = useUpdateStore((s) => s.settings);
+  const updateAvailable =
+    updateInfo?.available === true && updateInfo.latestVersion !== settings.skipVersion;
 
   const currentSite = sites.find((s) => s.id === currentSiteId);
 
@@ -149,6 +155,23 @@ export function TopBar() {
 
       {/* 右侧：操作区 */}
       <div className="flex shrink-0 items-center gap-1">
+        {updateAvailable ? (
+          <Tooltip title={`发现新版本 ${updateInfo?.latestVersion}，点击查看`}>
+            <Button
+              type="text"
+              className="!text-orange-500"
+              icon={
+                <Badge dot offset={[-4, 2]}>
+                  <RocketOutlined />
+                </Badge>
+              }
+              onClick={() => navigate('/updates')}
+            >
+              新版本
+            </Button>
+          </Tooltip>
+        ) : null}
+
         <Tooltip title="刷新站点列表">
           <Button type="text" icon={<SyncOutlined />} onClick={() => void refreshSites()} />
         </Tooltip>

@@ -13,6 +13,7 @@ import {
   Progress,
   Row,
   Space,
+  Steps,
   Switch,
   Table,
   Tabs,
@@ -38,7 +39,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { CodeBlock, PageContainer } from '@/components';
-import { useUpdate } from '@/hooks';
+import { useUpdate, useUpdateConfig } from '@/hooks';
 import { APP_META } from '@/constants';
 import type { Changelog, TechItem } from '@/types';
 import { formatDateTime } from '@/utils/format';
@@ -82,6 +83,7 @@ const LICENSES = [
 /** 关于与更新页面 */
 export function UpdatesPage() {
   const { message } = AntdApp.useApp();
+  const { config } = useUpdateConfig();
 
   const {
     appInfo,
@@ -770,8 +772,53 @@ SOFTWARE.`}
                             '未忽略任何版本'
                           ),
                         },
+                        {
+                          key: 'platform',
+                          label: '当前平台',
+                          children: config ? (
+                            <span className="hm-mono text-xs">
+                              {config.os}-{config.arch}
+                            </span>
+                          ) : (
+                            '—'
+                          ),
+                        },
                       ]}
                     />
+
+                    {/* 更新源链路 */}
+                    <Card
+                      size="small"
+                      title="更新源链路"
+                      extra={
+                        <span className="text-xs hm-text-secondary">
+                          按优先级依次尝试，第一个成功的源生效
+                        </span>
+                      }
+                    >
+                      <Steps
+                        size="small"
+                        direction="vertical"
+                        current={-1}
+                        items={(config?.endpoints ?? []).map((endpoint, index) => ({
+                          key: endpoint,
+                          title: index === 0 ? '首选源（Tauri updater 清单）' : '备用源',
+                          description: (
+                            <span
+                              className="hm-mono cursor-pointer break-all text-xs hover:underline"
+                              onClick={() => void openExternal(endpoint)}
+                            >
+                              {endpoint}
+                            </span>
+                          ),
+                        }))}
+                      />
+                      {!config ? (
+                        <div className="text-xs hm-text-secondary">
+                          更新源配置加载中，或当前环境（浏览器调试模式）不支持该命令
+                        </div>
+                      ) : null}
+                    </Card>
 
                     <Space>
                       <Button

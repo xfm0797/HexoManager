@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **自动更新检测**：内置默认更新源链路（GitHub Releases `latest.json` 首选 + Releases API 回退），应用启动时按设置静默检查最新版本
+- **多格式清单解析**：兼容 Tauri updater v2 三元组平台键（`windows-x86_64` 等）与 GitHub Releases API（`tag_name` + `assets` 按平台挑选安装包）
+- **顶栏更新入口**：发现新版本且未忽略时，顶栏常驻「新版本」角标按钮直达更新页
+- **更新源链路展示**：「关于与更新 → 更新设置」新增当前平台与更新源优先级可视化
+- 新增 `get_update_config` 命令与 5 个更新解析单元测试
+
 ## [1.0.0] - 2026-09-30
 
 ### 新增

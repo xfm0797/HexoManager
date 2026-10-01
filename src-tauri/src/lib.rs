@@ -192,6 +192,7 @@ pub fn run() {
             commands::update_commands::get_app_info,
             commands::update_commands::open_external,
             commands::update_commands::get_local_version,
+            commands::update_commands::get_update_config,
             commands::update_commands::get_app_settings,
             commands::update_commands::set_app_setting,
         ])

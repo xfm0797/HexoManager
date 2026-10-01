@@ -7,4 +7,4 @@ export { useDeployConfig, useDeploy } from './useDeploy';
 export { useHexoBuild, useHexoServer, useHexoEnv } from './useHexo';
 export { useSiteConfig } from './useConfig';
 export { useThemes, usePlugins, useThemeConfig } from './useTheme';
-export { useUpdate } from './useUpdate';
+export { useUpdate, useUpdateConfig } from './useUpdate';

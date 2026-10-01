@@ -2,13 +2,22 @@
 
 import { create } from 'zustand';
 import { updateService } from '@/services';
-import type { AppInfo, Changelog, DownloadResult, UpdateInfo, UpdateSettings } from '@/types';
+import type {
+  AppInfo,
+  Changelog,
+  DownloadResult,
+  UpdateConfig,
+  UpdateInfo,
+  UpdateSettings,
+} from '@/types';
 
 interface UpdateState {
   /** 应用信息 */
   appInfo: AppInfo | null;
   /** 更新设置 */
   settings: UpdateSettings;
+  /** 更新源配置 */
+  config: UpdateConfig | null;
   /** 更新检查结果 */
   updateInfo: UpdateInfo | null;
   /** 更新日志 */
@@ -28,6 +37,8 @@ interface UpdateState {
   fetchAppInfo: () => Promise<void>;
   /** 拉取更新设置 */
   fetchSettings: () => Promise<void>;
+  /** 拉取更新源配置 */
+  fetchConfig: () => Promise<void>;
   /** 保存更新设置 */
   saveSettings: (patch: Partial<UpdateSettings>) => Promise<void>;
   /** 检查更新 */
@@ -56,6 +67,7 @@ const DEFAULT_SETTINGS: UpdateSettings = {
 export const useUpdateStore = create<UpdateState>((set, get) => ({
   appInfo: null,
   settings: DEFAULT_SETTINGS,
+  config: null,
   updateInfo: null,
   changelog: [],
   checking: false,
@@ -76,6 +88,16 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   async fetchSettings() {
     const settings = await updateService.getSettings();
     set({ settings });
+  },
+
+  async fetchConfig() {
+    try {
+      const config = await updateService.config();
+      set({ config });
+    } catch {
+      // 更新源配置获取失败不阻塞界面
+      set({ config: null });
+    }
   },
 
   async saveSettings(patch) {

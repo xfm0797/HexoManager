@@ -584,7 +584,14 @@ npm install
 
 ### 自动更新提示「检查更新失败」
 
-自动更新依赖 GitHub Releases 的 `latest.json`。国内网络受限时可能超时，可在「关于与更新」中关闭自动检查，改为前往项目仓库手动下载。
+自动更新检测按优先级依次尝试以下更新源，第一个成功解析出最新版本的源生效：
+
+1. GitHub Releases 的 `latest.json`（Tauri updater 清单，tauri-action 打 tag 时自动生成上传）
+2. GitHub Releases API（`/releases/latest`，作为清单缺失时的回退）
+
+国内网络受限时可能全部超时，可在「关于与更新」中关闭自动检查，改为前往项目仓库手动下载。
+若需指向自建更新服务，可在调用 `check_update` 命令时传入自定义 `manifest_url`，
+清单格式兼容 `{"version": "...", "platforms": {...}}` 与 GitHub Release 两种结构。
 
 ### 深色模式样式异常
 
