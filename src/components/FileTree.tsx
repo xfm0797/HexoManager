@@ -1,6 +1,6 @@
 /** 文件树：站点目录浏览 */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, Dropdown, Empty, Input, Spin, Tooltip, Tree } from 'antd';
 import type { DataNode, TreeProps } from 'antd/es/tree';
 import {
@@ -91,6 +91,13 @@ export function FileTree({
 }: FileTreeProps) {
   const [keyword, setKeyword] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
+  /** 是否已完成过至少一次数据加载（用于区分"首次加载"与"刷新"） */
+  const loadedOnce = useRef(false);
+  useEffect(() => {
+    if (tree) loadedOnce.current = true;
+  }, [tree]);
+  /** 仅首次加载显示骨架；后续刷新保留旧树，避免整块内容被 Spin 顶掉 */
+  const showSkeleton = loading && !loadedOnce.current;
 
   const allNodes = useMemo(() => {
     const map = new Map<string, FileTreeNode>();
@@ -253,8 +260,11 @@ export function FileTree({
       {tree && tree.children.length > 0 ? (
         <>
           <div className="mb-1 flex items-center justify-between text-xs hm-text-secondary">
-            <span className="truncate hm-mono" title={tree.path}>
-              {tree.name}
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate hm-mono" title={tree.path}>
+                {tree.name}
+              </span>
+              {loading && !showSkeleton ? <Spin size="small" /> : null}
             </span>
             <Badge
               count={allNodes.size - 1}
@@ -265,7 +275,7 @@ export function FileTree({
           </div>
 
           <div className="hm-scroll flex-1">
-            {loading ? (
+            {showSkeleton ? (
               <div className="flex justify-center py-8">
                 <Spin size="small" />
               </div>

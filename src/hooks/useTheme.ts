@@ -202,6 +202,7 @@ export function useThemeConfig(siteId: number | null, themeName?: string | null)
 
   const themeConfig = useConfigStore((s) => s.themeConfig);
   const themeRaw = useConfigStore((s) => s.themeRaw);
+  const themeError = useConfigStore((s) => s.themeError);
   const loading = useConfigStore((s) => s.loading);
   const saving = useConfigStore((s) => s.saving);
 
@@ -214,6 +215,11 @@ export function useThemeConfig(siteId: number | null, themeName?: string | null)
   useEffect(() => {
     if (siteId === null) return;
     void fetchThemeConfig(siteId, themeName ?? undefined);
+  }, [siteId, themeName, fetchThemeConfig]);
+
+  const reload = useCallback(async () => {
+    if (siteId === null) return;
+    await fetchThemeConfig(siteId, themeName ?? undefined);
   }, [siteId, themeName, fetchThemeConfig]);
 
   const save = useCallback(
@@ -229,5 +235,15 @@ export function useThemeConfig(siteId: number | null, themeName?: string | null)
     [siteId, theme, saveThemeConfig, message],
   );
 
-  return { themeConfig, raw: themeRaw, loading, saving, setRaw: setThemeRaw, save };
+  return {
+    themeConfig,
+    raw: themeRaw,
+    loading,
+    saving,
+    /** 主题配置加载/保存失败时的可展示错误信息（此前被 store 吞掉，故编辑区一直空白） */
+    error: themeError,
+    setRaw: setThemeRaw,
+    save,
+    reload,
+  };
 }

@@ -118,6 +118,8 @@ export function FilesPage() {
   const [filesLoading, setFilesLoading] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [showHidden, setShowHidden] = useState(false);
+  /** 树加载失败信息：非空时不允许回退到「目录为空」的空态，避免误导 */
+  const [treeError, setTreeError] = useState<string | null>(null);
 
   // 编辑器状态
   const [editingFile, setEditingFile] = useState<string | null>(null);
@@ -131,16 +133,29 @@ export function FilesPage() {
   const loadTree = useCallback(async () => {
     if (currentSiteId === null) return;
     setTreeLoading(true);
+    setTreeError(null);
     try {
       const result = await siteService.fileTree(currentSiteId, 3);
       setTree(result);
-      if (selectedDir === null) setSelectedDir(result.path);
+      // 首次加载（或原选中目录已不存在）时落到树根，避免选到一个空路径
+      setSelectedDir((prev) => {
+        if (prev === null) return result.path;
+        let exists = false;
+        const walk = (node: FileTreeNode) => {
+          if (node.isDir && node.path === prev) exists = true;
+          node.children.forEach(walk);
+        };
+        walk(result);
+        return exists ? prev : result.path;
+      });
     } catch (e) {
-      message.error(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setTreeError(msg);
+      message.error(msg);
     } finally {
       setTreeLoading(false);
     }
-  }, [currentSiteId, selectedDir, message]);
+  }, [currentSiteId, message]);
 
   /** 加载目录内容 */
   const loadDir = useCallback(
@@ -162,11 +177,16 @@ export function FilesPage() {
   useEffect(() => {
     if (currentSiteId === null) {
       setTree(null);
+      setTreeError(null);
       return;
     }
     void loadTree();
-    // 仅在站点切换时重新加载
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSiteId, loadTree]);
+
+  // 站点切换时重置目录选中，交由 loadTree 回填根目录
+  useEffect(() => {
+    setSelectedDir(null);
+    setFiles([]);
   }, [currentSiteId]);
 
   useEffect(() => {
@@ -826,6 +846,21 @@ export function FilesPage() {
         <div className="flex justify-center py-8">
           <Spin />
         </div>
+      ) : null}
+
+      {treeError ? (
+        <Alert
+          className="mt-4"
+          type="error"
+          showIcon
+          message="文件树加载失败"
+          description={<span className="hm-mono text-xs break-all">{treeError}</span>}
+          action={
+            <Button size="small" onClick={() => void loadTree()}>
+              重试
+            </Button>
+          }
+        />
       ) : null}
 
       <Alert

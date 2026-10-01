@@ -115,9 +115,15 @@ pub fn build_front_matter(front: &Value, body: &str) -> AppResult<String> {
 }
 
 /// 数据库行 → Article。
+/// 将查询行映射为 `Article`。
+///
+/// 索引必须与 `ARTICLE_COLUMNS` 的列顺序严格一一对应（0 起）：
+/// id=0, site_id=1, title=2, slug=3, file_path=4, content=5, excerpt=6, status=7,
+/// categories=8, tags=9, cover_image=10, is_top=11, allow_comment=12, word_count=13,
+/// created_at=14, updated_at=15, published_at=16
 fn row_to_article(row: &rusqlite::Row<'_>) -> rusqlite::Result<Article> {
-    let categories_raw: Option<String> = row.get(9)?;
-    let tags_raw: Option<String> = row.get(10)?;
+    let categories_raw: Option<String> = row.get(8)?;
+    let tags_raw: Option<String> = row.get(9)?;
 
     Ok(Article {
         id: row.get(0)?,
@@ -136,24 +142,19 @@ fn row_to_article(row: &rusqlite::Row<'_>) -> rusqlite::Result<Article> {
         tags: tags_raw
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default(),
-        cover_image: row.get(11)?,
-        is_top: row.get::<_, Option<i64>>(12)?.unwrap_or(0) != 0,
-        allow_comment: row.get::<_, Option<i64>>(13)?.unwrap_or(1) != 0,
-        word_count: row.get::<_, Option<i64>>(14)?.unwrap_or(0),
-        created_at: row.get(15)?,
-        updated_at: row.get(16)?,
-        published_at: row.get(17)?,
+        cover_image: row.get(10)?,
+        is_top: row.get::<_, Option<i64>>(11)?.unwrap_or(0) != 0,
+        allow_comment: row.get::<_, Option<i64>>(12)?.unwrap_or(1) != 0,
+        word_count: row.get::<_, Option<i64>>(13)?.unwrap_or(0),
+        created_at: row.get(14)?,
+        updated_at: row.get(15)?,
+        published_at: row.get(16)?,
     })
 }
 
 const ARTICLE_COLUMNS: &str = "id, site_id, title, slug, file_path, content, excerpt, status, \
                                categories, tags, cover_image, is_top, allow_comment, word_count, \
                                created_at, updated_at, published_at";
-
-// 说明：列顺序需与 row_to_article 索引一致
-const _COLUMN_ORDER_NOTE: &str = "id=0,site_id=1,title=2,slug=3,file_path=4,content=5,excerpt=6,\
-status=7,categories=8,tags=9,cover_image=10,is_top=11,allow_comment=12,word_count=13,\
-created_at=14,updated_at=15,published_at=16";
 
 /// 与 ScannedArticle 列表同步到数据库。
 pub async fn sync_articles(db: &Db, site_id: i64, found: Vec<ScannedArticle>) -> AppResult<()> {
@@ -379,7 +380,14 @@ async fn create_article_impl(
         ARTICLE_COLUMNS
     );
     conn.query_row(&sql, params![site_id, path_str], row_to_article)
-        .map_err(|_| AppError::NotFound("新建文章后未能读取记录".into()))
+        .map_err(|e| match e {
+            // 记录确实不存在
+            rusqlite::Error::QueryReturnedNoRows => {
+                AppError::NotFound(format!("新建文章后未能读取记录：{}", file_path.display()))
+            }
+            // 其他错误（如列索引错位）保留原始信息，避免再次被误报为「记录不存在」
+            other => AppError::Other(format!("读取新建文章记录失败：{}", other)),
+        })
 }
 
 /// 获取文章列表（分页 + 过滤）。
@@ -1202,4 +1210,114 @@ pub async fn get_article_at_commit(
     }
 
     Ok(out.stdout)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    /// 建一张与迁移脚本一致的 articles 表，保证测试贴近真实 schema。
+    fn setup_db() -> Connection {
+        let conn = Connection::open_in_memory().expect("内存数据库");
+        conn.execute_batch(
+            "CREATE TABLE articles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                site_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                slug TEXT,
+                file_path TEXT NOT NULL,
+                content TEXT,
+                excerpt TEXT,
+                status TEXT DEFAULT 'draft',
+                categories TEXT,
+                tags TEXT,
+                cover_image TEXT,
+                is_top INTEGER DEFAULT 0,
+                allow_comment INTEGER DEFAULT 1,
+                word_count INTEGER DEFAULT 0,
+                created_at TEXT,
+                updated_at TEXT,
+                published_at TEXT
+            );",
+        )
+        .expect("建表");
+        conn
+    }
+
+    fn insert_sample(conn: &Connection) {
+        conn.execute(
+            "INSERT INTO articles (site_id, title, slug, file_path, content, excerpt, status,
+                categories, tags, cover_image, is_top, allow_comment, word_count,
+                created_at, updated_at, published_at)
+             VALUES (1, '测试标题', 'hello', '/site/source/_posts/hello.md', '# 正文', '摘要',
+                'published', '[\"分类A\"]', '[\"标签B\"]', '/img/cover.png', 1, 1, 42,
+                '2026-10-01 10:00:00', '2026-10-01 11:00:00', '2026-10-01 10:00:00')",
+            [],
+        )
+        .expect("插入样例");
+    }
+
+    /// 回归锁：`row_to_article` 的索引必须与 `ARTICLE_COLUMNS` 的列序严格对齐。
+    ///
+    /// 历史 bug：categories 起全部错位一格，published_at 读到索引 17（越界），
+    /// 使所有文章读取失败并被 `.map_err(NotFound)` 伪装成「记录不存在」。
+    #[test]
+    fn test_row_to_article_index_alignment() {
+        let conn = setup_db();
+        insert_sample(&conn);
+
+        let sql = format!(
+            "SELECT {} FROM articles WHERE site_id = ?1 AND file_path = ?2",
+            ARTICLE_COLUMNS
+        );
+
+        let article = conn
+            .query_row(
+                &sql,
+                params![1i64, "/site/source/_posts/hello.md"],
+                row_to_article,
+            )
+            .expect("映射文章行失败（列索引错位？）");
+
+        // 逐字段校验，任一错位都会被断言捕获
+        assert_eq!(article.id, 1);
+        assert_eq!(article.site_id, 1);
+        assert_eq!(article.title, "测试标题");
+        assert_eq!(article.slug.as_deref(), Some("hello"));
+        assert_eq!(article.file_path, "/site/source/_posts/hello.md");
+        assert_eq!(article.content.as_deref(), Some("# 正文"));
+        assert_eq!(article.excerpt.as_deref(), Some("摘要"));
+        assert_eq!(article.status, "published");
+        assert_eq!(article.categories, vec!["分类A".to_string()]);
+        assert_eq!(article.tags, vec!["标签B".to_string()]);
+        assert_eq!(article.cover_image.as_deref(), Some("/img/cover.png"));
+        assert!(article.is_top);
+        assert!(article.allow_comment);
+        assert_eq!(article.word_count, 42);
+        assert_eq!(article.created_at.as_deref(), Some("2026-10-01 10:00:00"));
+        assert_eq!(article.updated_at.as_deref(), Some("2026-10-01 11:00:00"));
+        assert_eq!(article.published_at.as_deref(), Some("2026-10-01 10:00:00"));
+    }
+
+    /// 列数与索引上限自检：17 列 → 最大合法索引 16。
+    #[test]
+    fn test_article_columns_count() {
+        let count = ARTICLE_COLUMNS.split(',').count();
+        assert_eq!(
+            count, 17,
+            "ARTICLE_COLUMNS 列数变化，需同步 row_to_article 索引"
+        );
+        // 若索引超出 count-1，rusqlite 会返回 InvalidColumnIndex
+        let conn = setup_db();
+        insert_sample(&conn);
+        let sql = format!("SELECT {} FROM articles", ARTICLE_COLUMNS);
+        let mut stmt = conn.prepare(&sql).expect("预编译");
+        let mut rows = stmt.query([]).expect("查询");
+        let row = rows.next().expect("取行").expect("行存在");
+        // 逐一访问全部索引，越界会在此抛出
+        for i in 0..count {
+            let _ = row.get::<_, Option<String>>(i);
+        }
+    }
 }

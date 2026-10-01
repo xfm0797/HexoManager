@@ -37,6 +37,8 @@ interface ConfigState {
   env: EnvCheck | null;
   /** 外部 YAML 文本（主题配置原始模式） */
   themeRaw: string;
+  /** 主题配置专属错误（与站点配置 error 分离，便于 UI 精准提示） */
+  themeError: string | null;
   /** 加载中 */
   loading: boolean;
   /** 保存中 */
@@ -115,6 +117,7 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
   plugins: [],
   env: null,
   themeRaw: '',
+  themeError: null,
   loading: false,
   saving: false,
   dirty: false,
@@ -255,15 +258,18 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
   },
 
   async fetchThemeConfig(siteId, theme) {
-    set({ loading: true, error: null });
+    set({ loading: true, themeError: null });
     try {
       const themeConfig = await themeService.getConfig(siteId, theme);
       set({ themeConfig, themeRaw: themeConfig.raw ?? '', loading: false });
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
       set({
         themeConfig: null,
+        themeRaw: '',
         loading: false,
-        error: e instanceof Error ? e.message : String(e),
+        error: msg,
+        themeError: msg,
       });
     }
   },

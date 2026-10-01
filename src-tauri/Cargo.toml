@@ -1,6 +1,6 @@
 [package]
 name = "hexo-manager"
-version = "1.0.0"
+version = "1.0.1"
 description = "HexoManager - 桌面端 Hexo 多站点管理工具"
 authors = ["XFM"]
 edition = "2021"
@@ -45,6 +45,10 @@ walkdir = "2"
 
 # YAML 配置读写（Hexo 站点与主题配置均为 YAML）
 serde_yaml = "0.9"
+
+[dev-dependencies]
+# 启用 tauri 的 mock 运行时，用于测试 managed state 注册与解析
+tauri = { version = "2", features = ["test"] }
 
 [features]
 # 由 tauri CLI 在构建时注入，用于自定义协议

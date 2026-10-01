@@ -1,11 +1,11 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "major": 1,
   "minor": 0,
-  "patch": 0,
+  "patch": 1,
   "prerelease": null,
   "buildMetadata": null,
-  "lastUpdated": "2026-09-30T00:00:00Z",
+  "lastUpdated": "2026-10-02T00:00:00Z",
   "description": "HexoManager 首个正式版本：多站点管理、可视化配置、文章编辑、多平台部署",
   "isLocked": false,
   "history": [
@@ -20,6 +20,12 @@
       "type": "major",
       "description": "首个正式版本，覆盖站点/文章/配置/主题/部署/预览/更新八大模块",
       "createdAt": "2026-09-30T00:00:00Z"
+    },
+    {
+      "version": "1.0.1",
+      "type": "patch",
+      "description": "补丁版本",
+      "createdAt": "2026-10-02T00:00:00Z"
     }
   ]
 }

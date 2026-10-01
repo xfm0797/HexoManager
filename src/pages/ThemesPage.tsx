@@ -86,7 +86,9 @@ export function ThemesPage() {
     raw: themeRaw,
     loading: configLoading,
     saving: configSaving,
+    error: themeConfigError,
     save: saveThemeConfig,
+    reload: reloadThemeConfig,
   } = useThemeConfig(configOpen ? currentSiteId : null, configTheme);
 
   const [draftRaw, setDraftRaw] = useState('');
@@ -629,6 +631,42 @@ export function ThemesPage() {
               height="calc(100vh - 260px)"
             />
           </div>
+        ) : themeConfigError ? (
+          <div className="flex h-full flex-col">
+            <Alert
+              type="error"
+              showIcon
+              message="主题配置加载失败"
+              description={
+                <div className="space-y-2">
+                  <div className="hm-mono text-xs break-all">{themeConfigError}</div>
+                  <div className="text-xs hm-text-secondary">
+                    已尝试查找 themes/{configTheme}/_config.yml、_config.{configTheme}.yml 与
+                    themes/{configTheme}/_config.yaml。若主题确实无独立配置文件，可改用站点
+                    _config.yml 的 theme_config 段。
+                  </div>
+                </div>
+              }
+              action={
+                <Space direction="vertical">
+                  <Button size="small" onClick={() => void reloadThemeConfig()}>
+                    重试
+                  </Button>
+                  <Button
+                    size="small"
+                    type="link"
+                    onClick={() =>
+                      void openWithSystem(
+                        `${currentSite?.path ?? ''}/themes/${configTheme ?? ''}`,
+                      )
+                    }
+                  >
+                    打开目录
+                  </Button>
+                </Space>
+              }
+            />
+          </div>
         ) : (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -641,13 +679,16 @@ export function ThemesPage() {
               </div>
             }
           >
-            <Button
-              onClick={() =>
-                void openWithSystem(`${currentSite?.path ?? ''}/themes/${configTheme ?? ''}`)
-              }
-            >
-              打开主题目录
-            </Button>
+            <Space direction="vertical">
+              <Button onClick={() => void reloadThemeConfig()}>重新加载</Button>
+              <Button
+                onClick={() =>
+                  void openWithSystem(`${currentSite?.path ?? ''}/themes/${configTheme ?? ''}`)
+                }
+              >
+                打开主题目录
+              </Button>
+            </Space>
           </Empty>
         )}
       </Drawer>

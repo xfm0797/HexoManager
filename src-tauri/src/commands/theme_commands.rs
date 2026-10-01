@@ -21,12 +21,45 @@ fn site_path_of(db: &Db, site_id: i64) -> AppResult<String> {
 }
 
 /// 读取站点 _config.yml 中当前启用的主题名。
-fn current_theme(site_path: &str) -> String {
+///
+/// 解析失败或未配置 `theme` 字段时返回 `None`，由调用方决定如何处理；
+/// 不再静默兜底为 `landscape`（那会让后续报错指向一个与用户无关的主题）。
+fn current_theme_opt(site_path: &str) -> Option<String> {
     let cfg = format!("{}/_config.yml", site_path.trim_end_matches('/'));
     crate::hexo::config_parser::parse_yaml_file(&cfg)
         .ok()
-        .and_then(|v| v.get("theme").and_then(|t| t.as_str()).map(str::to_string))
-        .unwrap_or_else(|| "landscape".into())
+        .and_then(|v| {
+            v.get("theme").and_then(|t| match t {
+                Value::String(s) => Some(s.clone()),
+                // Hexo 支持 `theme: {name: xxx}` 的对象写法
+                Value::Object(o) => o.get("name").and_then(Value::as_str).map(str::to_string),
+                _ => None,
+            })
+        })
+        .filter(|s| !s.trim().is_empty())
+}
+
+/// 读取当前主题名，缺省时按 `themes/` 目录中的唯一主题推断，最后才回退 `landscape`。
+fn current_theme(site_path: &str) -> String {
+    if let Some(name) = current_theme_opt(site_path) {
+        return name;
+    }
+
+    // 站点未显式配置 theme 时，若 themes/ 下只有一个主题，就直接用它
+    let themes_dir = Path::new(site_path).join("themes");
+    if let Ok(entries) = std::fs::read_dir(&themes_dir) {
+        let candidates: Vec<String> = entries
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|name| !name.starts_with('.'))
+            .collect();
+        if candidates.len() == 1 {
+            return candidates[0].clone();
+        }
+    }
+
+    "landscape".into()
 }
 
 /// 从主题的 package.json 或 _config.yml 提取元信息。
@@ -356,44 +389,102 @@ pub fn get_theme_config(
 ) -> Result<ThemeConfig, String> {
     let db = &state.db;
     let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
-    let theme_name = theme.unwrap_or_else(|| current_theme(&site_path));
 
-    let theme_dir = Path::new(&site_path).join("themes").join(&theme_name);
-    let cfg_path = theme_dir.join("_config.yml");
-    let cfg_str = cfg_path.display().to_string();
+    // 优先使用调用方指定的主题名（来自界面点击的那个主题卡片）
+    let theme_name = theme
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| current_theme(&site_path));
 
-    if !cfg_path.exists() {
-        // 主题可能使用根目录下的 _config.<theme>.yml
-        let alt = Path::new(&site_path).join(format!("_config.{}.yml", theme_name));
-        if alt.exists() {
-            let raw = std::fs::read_to_string(&alt).map_err(|e| e.to_string())?;
-            let config =
-                crate::hexo::config_parser::parse_yaml_str(&raw).map_err(|e| e.to_string())?;
+    let site_root = Path::new(&site_path);
+    let active = current_theme(&site_path);
+
+    // 主题配置的常见存放位置，按 Hexo 实际约定排序：
+    // 1. themes/<theme>/_config.yml        主题自带默认配置
+    // 2. _config.<theme>.yml               站点级覆盖（官方推荐做法）
+    // 3. themes/<theme>/_config.yaml       少见的 yaml 扩展名
+    let candidates = [
+        site_root.join("themes").join(&theme_name).join("_config.yml"),
+        site_root.join(format!("_config.{}.yml", theme_name)),
+        site_root.join("themes").join(&theme_name).join("_config.yaml"),
+    ];
+
+    for path in candidates.iter() {
+        if path.exists() {
+            let raw = std::fs::read_to_string(path).map_err(|e| {
+                format!("读取主题配置失败（{}）：{}", path.display(), e)
+            })?;
+            let config = crate::hexo::config_parser::parse_yaml_str(&raw)
+                .map_err(|e| format!("解析主题配置失败（{}）：{}", path.display(), e))?;
+
             return Ok(ThemeConfig {
+                is_active: theme_name == active,
                 site_id,
                 theme_name,
                 config,
-                is_active: true,
                 raw,
             });
         }
-        return Err(format!(
-            "主题配置文件不存在：{}（请确认主题是否已安装）",
-            cfg_str
-        ));
     }
 
-    let raw = std::fs::read_to_string(&cfg_path).map_err(|e| e.to_string())?;
-    let config = crate::hexo::config_parser::parse_yaml_str(&raw).map_err(|e| e.to_string())?;
-    let active = current_theme(&site_path);
+    // 都找不到：给出可操作的诊断信息，而不是只有一句「文件不存在」
+    let theme_dir = site_root.join("themes").join(&theme_name);
 
-    Ok(ThemeConfig {
-        is_active: theme_name == active,
-        site_id,
-        theme_name,
-        config,
-        raw,
-    })
+    let hint = if !theme_dir.exists() {
+        // 主题目录本身不存在 —— 列出现有主题帮助定位
+        let mut installed: Vec<String> = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(site_root.join("themes")) {
+            installed = entries
+                .flatten()
+                .filter(|e| e.path().is_dir())
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .filter(|n| !n.starts_with('.'))
+                .collect();
+        }
+
+        if installed.is_empty() {
+            format!(
+                "主题目录不存在：{}。该站点尚未安装任何主题，请先在「主题管理」中安装。",
+                theme_dir.display()
+            )
+        } else {
+            format!(
+                "主题目录不存在：{}。当前已安装的主题：{}。",
+                theme_dir.display(),
+                installed.join("、")
+            )
+        }
+    } else {
+        // 主题目录在但没配置文件 —— 列出目录内实际文件
+        let mut files: Vec<String> = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&theme_dir) {
+            files = entries
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .filter(|n| !n.starts_with('.'))
+                .take(20)
+                .collect();
+        }
+
+        if files.is_empty() {
+            format!(
+                "主题「{}」目录为空，主题可能未完整安装（{}）。",
+                theme_name,
+                theme_dir.display()
+            )
+        } else {
+            format!(
+                "主题「{}」目录中未找到 _config.yml（目录内容：{}）。",
+                theme_name,
+                files.join("、")
+            )
+        }
+    };
+
+    Err(format!(
+        "{}（主题名：{}，站点路径：{}）",
+        hint, theme_name, site_path
+    ))
 }
 
 /// 更新主题配置。
@@ -697,4 +788,98 @@ pub fn get_theme_preview_url(
     }
 
     Err("未在主题文档中找到演示链接".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    /// 每个用例独立建临时站点目录，避免相互污染
+    fn temp_site(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "hexo-mgr-theme-test-{}-{}",
+            tag,
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn write(path: &std::path::Path, content: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, content).unwrap();
+    }
+
+    /// theme 字段为字符串时能正确解析
+    #[test]
+    fn test_current_theme_opt_string_form() {
+        let site = temp_site("str");
+        write(
+            &site.join("_config.yml"),
+            "title: Demo\ntheme: next\n",
+        );
+        assert_eq!(current_theme_opt(site.to_str().unwrap()), Some("next".into()));
+        let _ = fs::remove_dir_all(&site);
+    }
+
+    /// theme 字段为 `{name: xxx}` 对象写法时也要能解析
+    #[test]
+    fn test_current_theme_opt_object_form() {
+        let site = temp_site("obj");
+        write(
+            &site.join("_config.yml"),
+            "title: Demo\ntheme:\n  name: butterfly\n",
+        );
+        assert_eq!(
+            current_theme_opt(site.to_str().unwrap()),
+            Some("butterfly".into())
+        );
+        let _ = fs::remove_dir_all(&site);
+    }
+
+    /// 未配置 theme 且 themes/ 下只有一个主题时按该主题推断，
+    /// 不再无条件兜底 landscape（这正是「加载配置不出来」的根因之一）
+    #[test]
+    fn test_current_theme_infers_single_installed_theme() {
+        let site = temp_site("infer");
+        write(&site.join("_config.yml"), "title: Demo\n");
+        fs::create_dir_all(site.join("themes").join("butterfly")).unwrap();
+
+        assert_eq!(current_theme_opt(site.to_str().unwrap()), None);
+        assert_eq!(current_theme(site.to_str().unwrap()), "butterfly");
+        let _ = fs::remove_dir_all(&site);
+    }
+
+    /// 完全无法推断时才回退 landscape
+    #[test]
+    fn test_current_theme_falls_back_to_landscape() {
+        let site = temp_site("fallback");
+        write(&site.join("_config.yml"), "title: Demo\n");
+        assert_eq!(current_theme(site.to_str().unwrap()), "landscape");
+        let _ = fs::remove_dir_all(&site);
+    }
+
+    /// 官方推荐做法：站点根目录的 _config.<theme>.yml 也应被找到
+    #[test]
+    fn test_theme_config_candidate_order_covers_site_level_override() {
+        let site = temp_site("override");
+        fs::create_dir_all(site.join("themes").join("next")).unwrap();
+        write(
+            &site.join("_config.next.yml"),
+            "menu:\n  home: /\n",
+        );
+
+        let candidates = [
+            site.join("themes").join("next").join("_config.yml"),
+            site.join("_config.next.yml"),
+            site.join("themes").join("next").join("_config.yaml"),
+        ];
+        let hit = candidates.iter().find(|p| p.exists()).unwrap();
+        assert!(hit.ends_with("_config.next.yml"));
+        let _ = fs::remove_dir_all(&site);
+    }
 }

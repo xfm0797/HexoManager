@@ -11,7 +11,6 @@ pub mod utils;
 
 use db::Db;
 use hexo::server::ServerRegistry;
-use std::sync::Arc;
 use tauri::Manager;
 
 /// 应用全局状态：数据库连接 + 预览服务注册表。
@@ -68,6 +67,9 @@ pub fn run() {
                 servers: ServerRegistry::new(),
             };
 
+            // 直接注册 AppState 本体：命令签名统一为 State<'_, AppState>，
+            // Tauri 按具体类型查找 state，注册成 Arc<AppState> 会导致
+            // 运行时报 "state not managed for field `state`"
             app.manage(state);
 
             // 启动时清理已退出的预览服务记录
@@ -198,4 +200,60 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("HexoManager 启动失败");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+    use std::sync::{Arc, Mutex};
+
+    /// 验证 managed state 的注册类型与命令签名（`State<'_, AppState>`）一致。
+    ///
+    /// 此前 `app.manage(Arc::new(state))` 注册的是 `Arc<AppState>`，而命令
+    /// 统一声明 `State<'_, AppState>`，Tauri 按具体类型查找，运行时全部命令
+    /// 报 "state not managed for field `state`"。该测试确保此类回归被拦下。
+    #[test]
+    fn test_app_state_managed_as_appstate() {
+        let app = tauri::test::mock_app();
+
+        // 内存数据库即可：本测试只关心 state 的类型解析，不依赖表结构
+        let conn = Connection::open_in_memory().expect("打开内存数据库失败");
+        let state = AppState {
+            db: Db(Arc::new(Mutex::new(conn))),
+            servers: ServerRegistry::new(),
+        };
+
+        // 与 run() 中 setup 的注册方式保持一致
+        assert!(app.manage(state), "AppState 注册失败（重复注册？）");
+
+        // 关键断言：按 AppState 类型解析成功 —— 与命令运行时的查找完全一致
+        let resolved = app.state::<AppState>();
+        assert!(resolved.db.conn().is_ok());
+        assert_eq!(resolved.servers.list().len(), 0);
+    }
+
+    /// 反例回归锁：若注册成 `Arc<AppState>`（旧实现的 bug），
+    /// 命令按 `AppState` 查找必然失败 —— 正是线上报错的复现。
+    #[test]
+    fn test_arc_wrapped_registration_cannot_resolve() {
+        let app = tauri::test::mock_app();
+
+        let conn = Connection::open_in_memory().expect("打开内存数据库失败");
+        let state = AppState {
+            db: Db(Arc::new(Mutex::new(conn))),
+            servers: ServerRegistry::new(),
+        };
+
+        // 旧实现：注册 Arc<AppState>
+        assert!(app.manage(Arc::new(state)));
+
+        // 命令要的是 State<'_, AppState> —— 查不到，与用户报错一致
+        assert!(
+            app.try_state::<AppState>().is_none(),
+            "Arc 包装注册不应能按 AppState 类型解析"
+        );
+        // 按真实注册类型 Arc<AppState> 反而能查到，进一步印证类型不匹配
+        assert!(app.try_state::<Arc<AppState>>().is_some());
+    }
 }

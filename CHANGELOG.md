@@ -6,13 +6,33 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-02
+
+### 修复
+
+- **修复「文件管理」点击文件后长时间 loading 的问题**：
+  - `loadTree` 的 `useCallback` 依赖含 `selectedDir`，而它自己又会 `setSelectedDir`，导致每次点击目录都重建回调并触发整棵文件树重新拉取（实测旧实现 effect 触发 3 次、新实现 1 次）；现移除该依赖并改用函数式 `setSelectedDir`
+  - `FileTree` 在 `loading` 为真时用 `Spin` 整体替换树内容，刷新期间列表被完全顶掉；现仅在**首次加载**显示骨架，后续刷新保留旧树并在标题旁显示小尺寸指示器
+  - 文件树加载失败只弹一条 toast、树仍显示空态；现新增 `treeError` 状态并在页面展示带重试按钮的错误 Alert
+  - 站点切换时未重置 `selectedDir`/`files`，可能残留上一个站点的目录选择；现显式重置
+- **修复「编辑主题配置」加载不出内容的问题**（三层原因）：
+  - 后端 `current_theme` 在站点未配置 `theme` 字段时静默兜底 `landscape`，导致去读一个与用户无关的主题目录；现改为「显式配置 → `themes/` 唯一主题推断 → 最后兜底」
+  - 后端 `get_theme_config` 只查 `themes/<theme>/_config.yml` 一个位置，漏掉官方的站点级覆盖文件 `_config.<theme>.yml`；现按 3 个候选路径依次查找
+  - 前端 `fetchThemeConfig` 把错误写进 `error` 却从不由 Hook 暴露，抽屉因此落入「该主题没有独立的 _config.yml」的误导性空态；现新增 `themeError` 并透出，抽屉展示错误详情 + 重试按钮
+- 主题配置加载失败时返回可操作的诊断信息：列出现有主题名或主题目录实际内容，而非一句「文件不存在」
+- 支持 Hexo 的 `theme: {name: xxx}` 对象写法
+- **修复文章模块完全不可用的问题**：`row_to_article` 的列索引与 `ARTICLE_COLUMNS` 错位（`categories` 起全部偏移一格，`published_at` 读到越界索引 17），导致新建文章报「资源未找到：新建文章后未能读取记录」，文章列表、详情、保存、发布、下架、搜索同样失效
+- 修正 `create_article` 的错误映射：区分「记录确实不存在」与「映射失败」，不再把内部错误伪装成 `NotFound`
+- 清理误导性的 `_COLUMN_ORDER_NOTE` 注释，改为在 `row_to_article` 上方标注权威列序
+
 ### 新增
 
 - **自动更新检测**：内置默认更新源链路（GitHub Releases `latest.json` 首选 + Releases API 回退），应用启动时按设置静默检查最新版本
 - **多格式清单解析**：兼容 Tauri updater v2 三元组平台键（`windows-x86_64` 等）与 GitHub Releases API（`tag_name` + `assets` 按平台挑选安装包）
 - **顶栏更新入口**：发现新版本且未忽略时，顶栏常驻「新版本」角标按钮直达更新页
 - **更新源链路展示**：「关于与更新 → 更新设置」新增当前平台与更新源优先级可视化
-- 新增 `get_update_config` 命令与 5 个更新解析单元测试
+- 新增 `get_update_config` 命令与 14 个单元测试（更新解析 5 个、state 注册 2 个、文章列索引 2 个、主题解析 5 个）
+- 修复 managed state 类型不匹配：`app.manage(Arc::new(state))` 改为 `app.manage(state)`，此前全部 83 处带 state 的命令均报 "state not managed"
 
 ## [1.0.0] - 2026-09-30
 
