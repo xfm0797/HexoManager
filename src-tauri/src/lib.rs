@@ -68,7 +68,7 @@ pub fn run() {
                 servers: ServerRegistry::new(),
             };
 
-            app.manage(Arc::new(state));
+            app.manage(state);
 
             // 启动时清理已退出的预览服务记录
             Ok(())
