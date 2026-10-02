@@ -127,6 +127,8 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'HexoManager ${{ github.ref_name }}'
           releaseBody: '详见 [CHANGELOG.md](./CHANGELOG.md)'
-          releaseDraft: true
+          # 直接发布正式版（非草稿）：推送 v* 标签后立即对用户可见，
+          # 自动更新链路 /releases/latest/download/latest.json 也能立刻取到。
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
