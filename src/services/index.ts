@@ -2,6 +2,7 @@
 
 export { siteService } from './siteService';
 export { articleService } from './articleService';
+export { templateService } from './templateService';
 export { hexoService } from './hexoService';
 export { gitService } from './gitService';
 export { configService } from './configService';

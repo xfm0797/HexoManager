@@ -19,6 +19,7 @@ export { Sidebar } from './Sidebar';
 export { TopBar } from './TopBar';
 export { MainLayout } from './MainLayout';
 export { ArticleListItem } from './ArticleListItem';
+export { FrontMatterTemplatesPanel } from './FrontMatterTemplatesPanel';
 export { FileTree } from './FileTree';
 export { PlatformCard, PlatformGrid } from './PlatformCard';
 export { ConfigPreviewModal, FileCheckList } from './ConfigPreviewModal';

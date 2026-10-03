@@ -23,9 +23,10 @@ import {
   InfoCircleOutlined,
   ReloadOutlined,
   SettingOutlined,
+  ThunderboltOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
-import { PageContainer, SettingsPanel } from '@/components';
+import { FrontMatterTemplatesPanel, PageContainer, SettingsPanel } from '@/components';
 import { useUiStore } from '@/stores';
 import { APP_META } from '@/constants';
 import { copyToClipboard, openWithSystem } from '@/utils/desktop';
@@ -115,6 +116,19 @@ export function SettingsPage() {
                       </span>
                     ),
                     children: <SettingsPanel />,
+                  },
+                  {
+                    key: 'templates',
+                    label: (
+                      <span>
+                        <ThunderboltOutlined /> 写作模板
+                      </span>
+                    ),
+                    children: (
+                      <div className="max-w-4xl">
+                        <FrontMatterTemplatesPanel />
+                      </div>
+                    ),
                   },
                   {
                     key: 'storage',

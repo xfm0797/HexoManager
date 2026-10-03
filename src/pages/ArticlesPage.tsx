@@ -6,6 +6,7 @@ import {
   Alert,
   App as AntdApp,
   Button,
+  Checkbox,
   Divider,
   Drawer,
   Dropdown,
@@ -13,6 +14,7 @@ import {
   Form,
   Input,
   Modal,
+  Radio,
   Segmented,
   Select,
   Space,
@@ -37,6 +39,7 @@ import {
   SaveOutlined,
   SearchOutlined,
   SplitCellsOutlined,
+  ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
 import {
@@ -44,20 +47,44 @@ import {
   CodeEditor,
   EmptyState,
   ErrorState,
+  FrontMatterTemplatesPanel,
   MarkdownPreview,
   PageContainer,
   SkeletonTable,
   TagInput,
 } from '@/components';
 import { useArticleEditor, useArticleHistory, useArticles } from '@/hooks';
-import { useArticleStore, useSiteStore } from '@/stores';
+import { useArticleStore, useSiteStore, useTemplateStore } from '@/stores';
 import { articleService } from '@/services';
-import type { Article, UpdateArticleInput } from '@/types';
+import type { Article, TemplateBodyMode, UpdateArticleInput } from '@/types';
 import { formatDateTime, formatRelative, truncate } from '@/utils/format';
 import { countWords, extractExcerpt } from '@/utils/markdown';
 import { pickFiles } from '@/utils/desktop';
 
 type EditorLayout = 'edit' | 'split' | 'preview';
+
+/** 记住上次选用的模板，下次新建文章时默认带上 */
+const LAST_TEMPLATE_KEY = 'hexo-manager:last-front-matter-template';
+
+function readLastTemplateId(): number | null {
+  try {
+    const raw = localStorage.getItem(LAST_TEMPLATE_KEY);
+    if (!raw) return null;
+    const id = Number(raw);
+    return Number.isFinite(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastTemplateId(id: number | null) {
+  try {
+    if (id === null) localStorage.removeItem(LAST_TEMPLATE_KEY);
+    else localStorage.setItem(LAST_TEMPLATE_KEY, String(id));
+  } catch {
+    // localStorage 不可用时忽略
+  }
+}
 
 /** 文章管理页面 */
 export function ArticlesPage() {
@@ -85,21 +112,48 @@ export function ArticlesPage() {
   const [metaOpen, setMetaOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [newTemplateId, setNewTemplateId] = useState<number | null>(() => readLastTemplateId());
   const [creating, setCreating] = useState(false);
   const [autoSave, setAutoSave] = useState(true);
 
+  // ---- Front Matter 模板 ----
+  const templates = useTemplateStore((s) => s.templates);
+  const fetchTemplates = useTemplateStore((s) => s.fetchTemplates);
+  const applyTemplate = useTemplateStore((s) => s.applyTemplate);
+  const markTemplateUsed = useTemplateStore((s) => s.markUsed);
+  const [templateManageOpen, setTemplateManageOpen] = useState(false);
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [applyTemplateId, setApplyTemplateId] = useState<number | null>(null);
+  const [applyOverwrite, setApplyOverwrite] = useState(false);
+  const [applyBodyMode, setApplyBodyMode] = useState<TemplateBodyMode>('none');
+  const [applying, setApplying] = useState(false);
+
   const [metaForm] = Form.useForm<UpdateArticleInput>();
 
-  const { draft, dirty, saving, patch, reset } = useArticleEditor(editingId);
+  const { draft, dirty, saving, patch, reset, reload } = useArticleEditor(editingId);
   const { history, loading: historyLoading } = useArticleHistory(historyOpen ? editingId : null);
 
   const autoSaveTimer = useRef<number | null>(null);
   const lastSavedRef = useRef<string>('');
 
-  // 进入页面时拉取分类与标签
+  // 进入页面时拉取分类、标签与模板
   useEffect(() => {
     if (currentSiteId !== null) void fetchTaxonomies(currentSiteId);
   }, [currentSiteId, fetchTaxonomies]);
+
+  useEffect(() => {
+    void fetchTemplates();
+  }, [fetchTemplates]);
+
+  // 模板加载完成后校正「上次使用」的选择（模板可能已被删除）
+  useEffect(() => {
+    if (templates.length === 0) return;
+    setNewTemplateId((prev) => {
+      if (prev !== null && templates.some((t) => t.id === prev)) return prev;
+      const fallback = readLastTemplateId();
+      return fallback !== null && templates.some((t) => t.id === fallback) ? fallback : null;
+    });
+  }, [templates]);
 
   // 支持 URL 直接打开某篇文章
   useEffect(() => {
@@ -225,8 +279,12 @@ export function ArticlesPage() {
     }
 
     try {
-      const article = await createArticle(currentSiteId, newTitle.trim());
-      message.success('文章已创建');
+      const article = await createArticle(currentSiteId, newTitle.trim(), {
+        templateId: newTemplateId,
+      });
+      if (newTemplateId !== null) markTemplateUsed(newTemplateId);
+      writeLastTemplateId(newTemplateId);
+      message.success(newTemplateId ? '文章已创建并套用模板' : '文章已创建');
       setCreating(false);
       setNewTitle('');
       setEditingId(article.id);
@@ -245,14 +303,67 @@ export function ArticlesPage() {
     }
 
     try {
-      const article = await createArticle(currentSiteId, newTitle.trim(), { isDraft: true });
-      message.success('草稿已创建');
+      const article = await createArticle(currentSiteId, newTitle.trim(), {
+        isDraft: true,
+        templateId: newTemplateId,
+      });
+      if (newTemplateId !== null) markTemplateUsed(newTemplateId);
+      writeLastTemplateId(newTemplateId);
+      message.success(newTemplateId ? '草稿已创建并套用模板' : '草稿已创建');
       setCreating(false);
       setNewTitle('');
       setEditingId(article.id);
       setEditorOpen(true);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  /** 打开「套用模板」对话框 */
+  const openApplyDialog = () => {
+    setApplyTemplateId(newTemplateId ?? templates[0]?.id ?? null);
+    setApplyOverwrite(false);
+    setApplyBodyMode('none');
+    setApplyOpen(true);
+  };
+
+  /** 把模板套用到当前编辑的文章（后端直接改文件，需整体重载草稿） */
+  const handleApplyTemplate = async () => {
+    if (editingId === null) return;
+    if (applyTemplateId === null) {
+      message.warning('请选择要套用的模板');
+      return;
+    }
+
+    setApplying(true);
+    try {
+      const result = await applyTemplate({
+        articleId: editingId,
+        templateId: applyTemplateId,
+        overwrite: applyOverwrite,
+        bodyMode: applyBodyMode,
+      });
+
+      await reload();
+      writeLastTemplateId(applyTemplateId);
+      setApplyOpen(false);
+
+      const parts: string[] = [];
+      if (result.appliedFields.length > 0) {
+        parts.push(`字段 ${result.appliedFields.map((f) => f).join('、')}`);
+      }
+      if (result.bodyChanged) parts.push('正文骨架');
+
+      if (parts.length === 0) {
+        message.info('模板已套用，但所有字段都已存在且正文未改动');
+      } else {
+        message.success(`已套用模板：写入${parts.join('，')}`);
+      }
+      await fetchTaxonomies(currentSiteId as number);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setApplying(false);
     }
   };
 
@@ -382,6 +493,17 @@ export function ArticlesPage() {
       flush
       extra={
         <Space>
+          <Tooltip title="维护写新文章时常用的 Front Matter 字段">
+            <Button
+              icon={<ThunderboltOutlined />}
+              onClick={() => {
+                setTemplateManageOpen(true);
+                void fetchTemplates({ force: true });
+              }}
+            >
+              写作模板
+            </Button>
+          </Tooltip>
           <Button
             icon={<ImportOutlined />}
             onClick={() => void handleImport()}
@@ -611,6 +733,14 @@ export function ArticlesPage() {
                     ]}
                   />
 
+                  <Tooltip title="套用 Front Matter 模板">
+                    <Button
+                      size="small"
+                      icon={<ThunderboltOutlined />}
+                      onClick={openApplyDialog}
+                      disabled={templates.length === 0}
+                    />
+                  </Tooltip>
                   <Tooltip title="文章元信息">
                     <Button
                       size="small"
@@ -751,6 +881,65 @@ export function ArticlesPage() {
             />
           </div>
 
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-sm">Front Matter 模板</span>
+              <Button
+                type="link"
+                size="small"
+                className="!px-0"
+                onClick={() => setTemplateManageOpen(true)}
+              >
+                管理模板
+              </Button>
+            </div>
+            <Select
+              allowClear
+              className="w-full"
+              placeholder="不使用模板（只写入标题、日期、分类、标签）"
+              value={newTemplateId ?? undefined}
+              onChange={(v) => {
+                setNewTemplateId(v ?? null);
+                writeLastTemplateId(v ?? null);
+              }}
+              options={templates.map((t) => ({
+                value: t.id,
+                label: (
+                  <span className="flex items-center gap-2">
+                    <span>{t.icon || '📄'}</span>
+                    <span>{t.name}</span>
+                    {t.description ? (
+                      <span className="truncate text-xs opacity-60">{t.description}</span>
+                    ) : null}
+                  </span>
+                ),
+              }))}
+            />
+            {(() => {
+              const selected = templates.find((t) => t.id === newTemplateId);
+              if (!selected) return null;
+              const keys = Object.keys(selected.fields ?? {});
+              return (
+                <div className="mt-2 flex flex-wrap items-center gap-1">
+                  {keys.length === 0 ? (
+                    <span className="text-xs hm-text-secondary">该模板没有自定义字段</span>
+                  ) : (
+                    keys.map((k) => (
+                      <Tag key={k} className="m-0 hm-mono" style={{ fontSize: 11 }}>
+                        {k}
+                      </Tag>
+                    ))
+                  )}
+                  {selected.body ? (
+                    <Tag color="blue" className="m-0" style={{ fontSize: 11 }}>
+                      含正文骨架
+                    </Tag>
+                  ) : null}
+                </div>
+              );
+            })()}
+          </div>
+
           <Alert
             type="info"
             showIcon
@@ -772,6 +961,121 @@ export function ArticlesPage() {
           ) : null}
         </div>
       </Modal>
+
+      {/* 套用模板对话框 */}
+      <Modal
+        open={applyOpen}
+        title="套用 Front Matter 模板"
+        width={560}
+        onCancel={() => setApplyOpen(false)}
+        footer={
+          <Space>
+            <Button onClick={() => setApplyOpen(false)}>取消</Button>
+            <Button
+              type="primary"
+              icon={<ThunderboltOutlined />}
+              loading={applying}
+              disabled={applyTemplateId === null}
+              onClick={() => void handleApplyTemplate()}
+            >
+              套用
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4 pt-2">
+          <div>
+            <div className="mb-1.5 text-sm">选择模板</div>
+            <Select
+              className="w-full"
+              placeholder="请选择模板"
+              value={applyTemplateId ?? undefined}
+              onChange={(v) => setApplyTemplateId(v)}
+              options={templates.map((t) => ({
+                value: t.id,
+                label: `${t.icon || '📄'} ${t.name}${t.description ? ` · ${t.description}` : ''}`,
+              }))}
+            />
+          </div>
+
+          {(() => {
+            const selected = templates.find((t) => t.id === applyTemplateId);
+            if (!selected) return null;
+            const entries = Object.entries(selected.fields ?? {});
+            return (
+              <div>
+                <div className="mb-1.5 text-sm">将写入的字段</div>
+                {entries.length === 0 ? (
+                  <div className="text-xs hm-text-secondary">该模板没有自定义字段</div>
+                ) : (
+                  <div className="max-h-40 space-y-1 overflow-auto rounded border p-2" style={{ borderColor: 'var(--hm-border)' }}>
+                    {entries.map(([k, v]) => (
+                      <div key={k} className="flex items-center justify-between gap-3 text-xs">
+                        <span className="hm-mono">{k}</span>
+                        <span className="hm-mono truncate hm-text-secondary">
+                          {JSON.stringify(v)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <Checkbox
+            checked={applyOverwrite}
+            onChange={(e) => setApplyOverwrite(e.target.checked)}
+          >
+            <span className="text-sm">覆盖已有同名字段</span>
+            <div className="text-xs hm-text-secondary">
+              不勾选时只补齐缺失或为空的字段，已有内容一律保留
+            </div>
+          </Checkbox>
+
+          <div>
+            <div className="mb-1.5 text-sm">正文处理</div>
+            <Radio.Group
+              value={applyBodyMode}
+              onChange={(e) => setApplyBodyMode(e.target.value as TemplateBodyMode)}
+            >
+              <Space direction="vertical" size={4}>
+                <Radio value="none">
+                  <span className="text-sm">保持正文不变</span>
+                  <span className="ml-2 text-xs hm-text-secondary">推荐</span>
+                </Radio>
+                <Radio value="append">
+                  <span className="text-sm">在正文末尾追加骨架</span>
+                </Radio>
+                <Radio value="replace">
+                  <span className="text-sm">用骨架替换正文</span>
+                  <span className="ml-2 text-xs text-orange-500">会丢失现有内容</span>
+                </Radio>
+              </Space>
+            </Radio.Group>
+          </div>
+
+          {dirty ? (
+            <Alert
+              type="warning"
+              showIcon
+              message="当前有未保存的改动"
+              description="套用模板会直接改写磁盘文件并重新载入编辑器，未保存的正文修改将丢失。建议先保存。"
+            />
+          ) : null}
+        </div>
+      </Modal>
+
+      {/* 模板管理抽屉 */}
+      <Drawer
+        open={templateManageOpen}
+        onClose={() => setTemplateManageOpen(false)}
+        title="写作模板"
+        width={760}
+        destroyOnClose
+      >
+        <FrontMatterTemplatesPanel />
+      </Drawer>
 
       {/* 元信息抽屉 */}
       <Drawer

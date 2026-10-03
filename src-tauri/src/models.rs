@@ -1,6 +1,7 @@
 //! 领域模型定义（与数据库表结构、前端 TypeScript 类型一一对应）。
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 // ==================== 站点 ====================
 
@@ -137,6 +138,71 @@ pub struct Category {
 pub struct Tag {
     pub name: String,
     pub count: i64,
+}
+
+// ==================== Front Matter 模板 ====================
+
+/// Front Matter 模板。
+///
+/// 模板是**全局**的（不区分站点）：一套「常用字段」在多站点间复用。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrontMatterTemplate {
+    pub id: i64,
+    /// 模板名（列表主标题）
+    pub name: String,
+    /// 一句话说明，用于选择时的副标题
+    pub description: Option<String>,
+    /// 展示用图标（emoji 或图标名）
+    pub icon: Option<String>,
+    /// 模板字段，必须是 JSON 对象；值可为任意 YAML 可表达的类型
+    pub fields: Value,
+    /// 正文骨架，支持 `{{title}}` / `{{slug}}` / `{{date}}` / `{{datetime}}` 占位符
+    pub body: Option<String>,
+    /// 是否为内置模板（内置模板不可删除）
+    pub is_builtin: bool,
+    /// 排序值（小的在前）
+    pub sort_order: i64,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+/// 模板保存入参（`id` 为空表示新建）。
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveFrontMatterTemplateInput {
+    pub id: Option<i64>,
+    pub name: String,
+    pub description: Option<String>,
+    pub icon: Option<String>,
+    pub fields: Option<Value>,
+    pub body: Option<String>,
+    pub sort_order: Option<i64>,
+}
+
+/// 套用模板到已有文章时的选项。
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyTemplateInput {
+    pub article_id: i64,
+    pub template_id: i64,
+    /// 已存在的同名字段是否被模板覆盖（默认 `false`，只补缺失字段）
+    pub overwrite: Option<bool>,
+    /// 正文处理方式：`none`（默认，不动正文）/ `replace` / `append`
+    pub body_mode: Option<String>,
+}
+
+/// 套用模板的结果：文章本身 + 本次实际改动了什么（供 UI 回报）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyTemplateResult {
+    pub article: Article,
+    /// 实际写入 front matter 的字段名
+    pub applied_fields: Vec<String>,
+    /// 实际生效的正文处理方式
+    pub body_mode: String,
+    /// 正文是否真的被改动
+    pub body_changed: bool,
 }
 
 // ==================== Git ====================

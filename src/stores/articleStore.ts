@@ -46,7 +46,12 @@ interface ArticleState {
   createArticle: (
     siteId: number,
     title: string,
-    options?: { isDraft?: boolean; categories?: string[]; tags?: string[] },
+    options?: {
+      isDraft?: boolean;
+      categories?: string[];
+      tags?: string[];
+      templateId?: number | null;
+    },
   ) => Promise<Article>;
   /** 保存文章 */
   saveArticle: (

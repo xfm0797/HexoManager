@@ -35,7 +35,13 @@ export const articleService = {
   create(
     siteId: number,
     title: string,
-    options?: { isDraft?: boolean; categories?: string[]; tags?: string[] },
+    options?: {
+      isDraft?: boolean;
+      categories?: string[];
+      tags?: string[];
+      /** Front Matter 模板 ID，传入后自动套用模板字段与正文骨架 */
+      templateId?: number | null;
+    },
   ): Promise<Article> {
     return call<Article>('create_article', {
       siteId,
@@ -43,6 +49,7 @@ export const articleService = {
       isDraft: options?.isDraft ?? false,
       categories: options?.categories ?? [],
       tags: options?.tags ?? [],
+      templateId: options?.templateId ?? null,
     });
   },
 
@@ -67,8 +74,8 @@ export const articleService = {
   },
 
   /** 新建草稿 */
-  createDraft(siteId: number, title: string): Promise<Article> {
-    return call<Article>('create_draft', { siteId, title });
+  createDraft(siteId: number, title: string, templateId?: number | null): Promise<Article> {
+    return call<Article>('create_draft', { siteId, title, templateId: templateId ?? null });
   },
 
   /** 批量导入 Markdown */

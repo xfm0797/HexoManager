@@ -121,7 +121,7 @@ pub fn build_front_matter(front: &Value, body: &str) -> AppResult<String> {
 /// id=0, site_id=1, title=2, slug=3, file_path=4, content=5, excerpt=6, status=7,
 /// categories=8, tags=9, cover_image=10, is_top=11, allow_comment=12, word_count=13,
 /// created_at=14, updated_at=15, published_at=16
-fn row_to_article(row: &rusqlite::Row<'_>) -> rusqlite::Result<Article> {
+pub(crate) fn row_to_article(row: &rusqlite::Row<'_>) -> rusqlite::Result<Article> {
     let categories_raw: Option<String> = row.get(8)?;
     let tags_raw: Option<String> = row.get(9)?;
 
@@ -152,7 +152,7 @@ fn row_to_article(row: &rusqlite::Row<'_>) -> rusqlite::Result<Article> {
     })
 }
 
-const ARTICLE_COLUMNS: &str = "id, site_id, title, slug, file_path, content, excerpt, status, \
+pub(crate) const ARTICLE_COLUMNS: &str = "id, site_id, title, slug, file_path, content, excerpt, status, \
                                categories, tags, cover_image, is_top, allow_comment, word_count, \
                                created_at, updated_at, published_at";
 
@@ -273,7 +273,7 @@ fn site_path_of(db: &Db, site_id: i64) -> AppResult<String> {
 }
 
 /// 读取文章源文件并解析。
-fn read_article_file(file_path: &str) -> AppResult<(Value, String)> {
+pub(crate) fn read_article_file(file_path: &str) -> AppResult<(Value, String)> {
     let content = std::fs::read_to_string(file_path)?;
     let (front, body) = split_front_matter(&content);
     Ok((front.unwrap_or_else(|| serde_json::json!({})), body))
@@ -282,6 +282,9 @@ fn read_article_file(file_path: &str) -> AppResult<(Value, String)> {
 // ==================== Tauri 命令 ====================
 
 /// 新建文章。
+///
+/// `template_id` 非空时，会把该 Front Matter 模板的字段与正文骨架一并写入，
+/// 省去手动补 `toc` / `comments` / `cover` 等常用字段。
 #[tauri::command]
 pub async fn create_article(
     state: State<'_, AppState>,
@@ -290,6 +293,7 @@ pub async fn create_article(
     is_draft: Option<bool>,
     categories: Option<Vec<String>>,
     tags: Option<Vec<String>>,
+    template_id: Option<i64>,
 ) -> Result<Article, String> {
     let db = Db::from_arc(&state.db);
     create_article_impl(
@@ -299,11 +303,13 @@ pub async fn create_article(
         is_draft.unwrap_or(false),
         categories.unwrap_or_default(),
         tags.unwrap_or_default(),
+        template_id,
     )
     .await
     .map_err(|e| e.to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn create_article_impl(
     db: &Db,
     site_id: i64,
@@ -311,6 +317,7 @@ async fn create_article_impl(
     is_draft: bool,
     categories: Vec<String>,
     tags: Vec<String>,
+    template_id: Option<i64>,
 ) -> AppResult<Article> {
     let site_path = site_path_of(db, site_id)?;
     let slug = slugify(title);
@@ -318,6 +325,15 @@ async fn create_article_impl(
         format!("post-{}", chrono::Utc::now().timestamp())
     } else {
         slug
+    };
+
+    // 先取出模板（若有），后面统一合并字段与正文骨架
+    let template = match template_id {
+        Some(id) => {
+            let conn = db.conn()?;
+            Some(crate::commands::template_commands::load_template(&conn, id)?)
+        }
+        None => None,
     };
 
     let sub_dir = if is_draft { "_drafts" } else { "_posts" };
@@ -342,6 +358,13 @@ async fn create_article_impl(
         "categories": categories,
     });
 
+    // 模板字段只补缺失：外观里手填的分类/标签优先级更高
+    if let Some(tpl) = &template {
+        if let Some(obj) = front.as_object_mut() {
+            crate::commands::template_commands::merge_template_fields(obj, &tpl.fields, false);
+        }
+    }
+
     if is_draft {
         // 草稿通常不写 date
         if let Some(obj) = front.as_object_mut() {
@@ -349,9 +372,25 @@ async fn create_article_impl(
         }
     }
 
-    let body = format!("# {}\n\n", title);
+    // 正文骨架：模板提供了就用它（渲染 {{title}} 等占位符），否则退回「一级标题 + 空行」
+    let body = match template.as_ref().and_then(|t| t.body.as_deref()) {
+        Some(skeleton) if !skeleton.trim().is_empty() => {
+            crate::commands::template_commands::render_body(
+                skeleton,
+                &crate::commands::template_commands::RenderContext { title, slug: &slug },
+            )
+        }
+        _ => format!("# {}\n\n", title),
+    };
     let content = build_front_matter(&front, &body)?;
     std::fs::write(&file_path, &content)?;
+
+    // 最终落库的分类/标签以实际写出的 front matter 为准（模板可能补了分类）
+    let categories = front
+        .get("categories")
+        .map(to_string_list)
+        .unwrap_or_default();
+    let tags = front.get("tags").map(to_string_list).unwrap_or_default();
 
     let scanned = ScannedArticle {
         title: title.to_string(),
@@ -782,14 +821,17 @@ async fn publish_article_impl(db: &Db, article_id: i64, publish: bool) -> AppRes
 }
 
 /// 新建草稿。
+///
+/// `template_id` 语义同 `create_article`。
 #[tauri::command]
 pub async fn create_draft(
     state: State<'_, AppState>,
     site_id: i64,
     title: String,
+    template_id: Option<i64>,
 ) -> Result<Article, String> {
     let db = Db::from_arc(&state.db);
-    create_article_impl(&db, site_id, &title, true, Vec::new(), Vec::new())
+    create_article_impl(&db, site_id, &title, true, Vec::new(), Vec::new(), template_id)
         .await
         .map_err(|e| e.to_string())
 }

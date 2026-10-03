@@ -114,7 +114,26 @@ export function useArticleEditor(articleId: number | null) {
     }
   }, [current]);
 
-  return { draft, dirty, loading, saving, patch, save, reset, current };
+  /**
+   * 从磁盘重新载入当前文章，丢弃本地草稿。
+   *
+   * 用于「后端已经改过文件」的场景（如套用 Front Matter 模板），
+   * 此时本地草稿已落后于磁盘，必须整体刷新而不是打补丁。
+   */
+  const reload = useCallback(async () => {
+    if (articleId === null) return null;
+    setLoading(true);
+    try {
+      const article = await openArticle(articleId);
+      setDraft(article);
+      setDirty(false);
+      return article;
+    } finally {
+      setLoading(false);
+    }
+  }, [articleId, openArticle]);
+
+  return { draft, dirty, loading, saving, patch, save, reset, reload, current };
 }
 
 /** 文章历史版本（基于 Git） */

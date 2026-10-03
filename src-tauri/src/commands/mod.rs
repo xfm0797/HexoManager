@@ -7,5 +7,6 @@ pub mod file_commands;
 pub mod git_commands;
 pub mod hexo_commands;
 pub mod site_commands;
+pub mod template_commands;
 pub mod theme_commands;
 pub mod update_commands;

@@ -107,6 +107,11 @@ pub fn run() {
             commands::article_commands::delete_tag,
             commands::article_commands::get_article_history,
             commands::article_commands::get_article_at_commit,
+            // ===== Front Matter 模板（7.2 扩展）=====
+            commands::template_commands::get_front_matter_templates,
+            commands::template_commands::save_front_matter_template,
+            commands::template_commands::delete_front_matter_template,
+            commands::template_commands::apply_front_matter_template,
             // ===== Hexo 操作（7.3）=====
             commands::hexo_commands::hexo_build,
             commands::hexo_commands::hexo_clean,

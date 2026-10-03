@@ -137,10 +137,27 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
+-- Front Matter 模板表
+-- 模板为全局（跨站点）共享：用户维护一套「常用字段」，写新文章时一键套用。
+-- fields 为 JSON 对象字符串；body 为正文骨架（支持 {{title}} 等占位符）。
+CREATE TABLE IF NOT EXISTS front_matter_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    icon TEXT,
+    fields TEXT NOT NULL DEFAULT '{}',
+    body TEXT,
+    is_builtin INTEGER DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_articles_site ON articles(site_id);
 CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status);
 CREATE INDEX IF NOT EXISTS idx_deploy_logs_site ON deploy_logs(site_id);
 CREATE INDEX IF NOT EXISTS idx_plugins_site ON plugins(site_id);
 CREATE INDEX IF NOT EXISTS idx_theme_configs_site ON theme_configs(site_id);
+CREATE INDEX IF NOT EXISTS idx_templates_order ON front_matter_templates(sort_order, id);
 "#;

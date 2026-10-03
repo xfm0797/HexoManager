@@ -2,6 +2,7 @@
 
 export type * from './site';
 export type * from './article';
+export * from './template';
 export type * from './config';
 export type * from './deploy';
 export type * from './theme';

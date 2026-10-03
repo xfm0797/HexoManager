@@ -414,6 +414,7 @@ pub async fn hexo_new_post_article(
     site_id: i64,
     title: String,
     is_draft: Option<bool>,
+    template_id: Option<i64>,
 ) -> Result<Article, String> {
     crate::commands::article_commands::create_article(
         state,
@@ -422,6 +423,7 @@ pub async fn hexo_new_post_article(
         Some(is_draft.unwrap_or(false)),
         None,
         None,
+        template_id,
     )
     .await
 }

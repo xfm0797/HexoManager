@@ -50,7 +50,7 @@ HexoManager 是一款基于 **Tauri 2.x + React 18** 的跨平台桌面应用，
 | --- | --- |
 | **工作台** | 当前站点统计概览、最近文章、最近部署时间线、站点快捷切换 |
 | **站点管理** | 4 步创建向导、导入已有站点、卡片/表格双视图、详情统计、复制、备份、删除（可选清理文件） |
-| **文章管理** | Monaco 编辑 + Markdown 实时预览、三种布局、30 秒自动保存、Ctrl+S、元信息与历史版本、发布/下架、批量导入 |
+| **文章管理** | Monaco 编辑 + Markdown 实时预览、三种布局、30 秒自动保存、Ctrl+S、元信息与历史版本、发布/下架、批量导入、**Front Matter 模板一键套用** |
 | **分类标签** | 分类与标签的占比统计、文章关联、重命名、合并、删除、标签云、分类树 |
 | **配置管理** | `_config.yml` 可视化表单 + 原始 YAML 双向编辑、实时语法校验、只读预览、导出导入、差异对比、恢复备份 |
 | **主题管理** | 已安装主题网格、主题市场、npm/git 两种安装方式、主题配置 YAML 编辑 |
@@ -62,7 +62,7 @@ HexoManager 是一款基于 **Tauri 2.x + React 18** 的跨平台桌面应用，
 | **部署记录** | 历史表格（筛选/排序/搜索）、日志详情抽屉、导出、回滚、成功率与耗时统计 |
 | **关于与更新** | 软件信息、技术栈分层视图、检查更新、下载安装、自动检查开关、忽略版本、更新日志、开源许可 |
 | **消息中心** | 通知列表（按类型聚合）、未读筛选、预览服务管理（打开/停止） |
-| **偏好设置** | 主题模式、编辑器字号、自动保存间隔、危险操作确认、新建站点默认值、本地数据管理 |
+| **偏好设置** | 主题模式、编辑器字号、自动保存间隔、危险操作确认、新建站点默认值、**写作模板管理**、本地数据管理 |
 
 ---
 
@@ -357,14 +357,15 @@ hexo-manager/
 | `theme_configs` | 主题配置 | `site_id`、`theme_name`、`config_path`、`installed_at` |
 | `plugins` | 插件清单 | `id`、`site_id`、`name`、`version`、`enabled` |
 | `update_settings` | 更新设置 | `auto_check`、`last_check_at`、`skip_version` |
+| `front_matter_templates` | Front Matter 写作模板（**全局共享**，无 `site_id`） | `id`、`name`、`description`、`icon`、`fields`(JSON)、`body`、`is_builtin`、`sort_order` |
 
-所有表对 `site_id` 建立外键并配置 `ON DELETE CASCADE`，删除站点时自动清理关联数据；`articles.site_id`、`deploy_logs.site_id` 等字段建立索引以加速查询。
+所有表对 `site_id` 建立外键并配置 `ON DELETE CASCADE`，删除站点时自动清理关联数据；`articles.site_id`、`deploy_logs.site_id` 等字段建立索引以加速查询。`front_matter_templates` 为跨站点复用的全局表，不参与级联删除。
 
 ---
 
 ## Rust 命令清单
 
-共 **9 个命令模块，60+ 个命令**，全部返回 `Result<T, String>`，错误信息已中文化。
+共 **10 个命令模块，64+ 个命令**，全部返回 `Result<T, String>`，错误信息已中文化。
 
 | 模块 | 命令 |
 | --- | --- |
@@ -377,6 +378,7 @@ hexo-manager/
 | **主题管理** | `get_themes`、`install_theme`、`uninstall_theme`、`switch_theme`、`get_theme_config`、`save_theme_config`、`search_theme_market`、`get_plugins`、`install_plugin`、`uninstall_plugin`、`get_recommended_plugins` |
 | **配置管理** | `get_site_config`、`save_site_config`、`get_config_raw`、`save_config_raw`、`validate_config`、`backup_config`、`restore_config` |
 | **更新管理** | `get_app_info`、`check_update`、`download_update`、`install_update`、`get_update_settings`、`save_update_settings`、`get_changelog`、`open_external` |
+| **写作模板** | `get_front_matter_templates`、`save_front_matter_template`、`delete_front_matter_template`、`apply_front_matter_template` |
 
 ### 异步命令注意事项
 

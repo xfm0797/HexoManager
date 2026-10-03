@@ -5,7 +5,7 @@ import type { PlatformId } from '@/types';
 /** 应用元信息 */
 export const APP_META = {
   name: 'HexoManager',
-  version: '1.0.2',
+  version: '1.1.0',
   description: '桌面端 Hexo 多站点管理工具',
   author: 'XFM',
   license: 'MIT',
@@ -301,6 +301,35 @@ export const ARTICLE_STATUS_OPTIONS = [
   { label: '已发布', value: 'published' },
   { label: '草稿', value: 'draft' },
 ] as const;
+
+/** Front Matter 模板正文骨架可用占位符 */
+export const TEMPLATE_BODY_PLACEHOLDERS = [
+  { token: '{{title}}', label: '文章标题' },
+  { token: '{{slug}}', label: '文件名 slug' },
+  { token: '{{date}}', label: '日期 YYYY-MM-DD' },
+  { token: '{{datetime}}', label: '日期时间 YYYY-MM-DD HH:mm:ss' },
+] as const;
+
+/**
+ * Front Matter 常用字段建议值。
+ *
+ * 仅用于模板编辑器的「字段名」下拉补全 —— 用户仍可自由输入任意字段名，
+ * 因为不同主题会自定义各自的 front matter 字段。
+ */
+export const FRONT_MATTER_FIELD_PRESETS = [
+  { name: 'categories', label: '分类', type: 'list' as const, sample: ['技术'] },
+  { name: 'tags', label: '标签', type: 'list' as const, sample: ['随笔'] },
+  { name: 'toc', label: '目录', type: 'boolean' as const, sample: true },
+  { name: 'comments', label: '评论', type: 'boolean' as const, sample: true },
+  { name: 'sticky', label: '置顶', type: 'boolean' as const, sample: false },
+  { name: 'mathjax', label: '数学公式', type: 'boolean' as const, sample: true },
+  { name: 'cover', label: '封面图', type: 'text' as const, sample: '/images/cover.jpg' },
+  { name: 'description', label: '描述', type: 'text' as const, sample: '' },
+  { name: 'excerpt', label: '摘要', type: 'text' as const, sample: '' },
+  { name: 'author', label: '作者', type: 'text' as const, sample: '' },
+  { name: 'keywords', label: '关键词', type: 'list' as const, sample: [] },
+  { name: 'abbrlink', label: '固定链接', type: 'text' as const, sample: '' },
+];
 
 /** 站点状态展示配置 */
 export const SITE_STATUS_META: Record<
