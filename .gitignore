@@ -35,3 +35,6 @@ pnpm-debug.log*
 
 # Local sites created by the app (dev only)
 .local-sites/
+
+# 复现程序的构建产物
+.repro/**/target/

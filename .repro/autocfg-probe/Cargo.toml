@@ -1,0 +1,11 @@
+[package]
+name = "autocfg-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# indexmap 1.9.3 的 build.rs 依赖 autocfg 1.x 做 sysroot 探测
+[build-dependencies]
+autocfg = "1"
+
+[workspace]
