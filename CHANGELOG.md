@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **修复「文章管理 → 编辑区一直 loading，预览正常」**：编辑区用的 `@monaco-editor/react` 底层由 `@monaco-editor/loader` 从 jsDelivr CDN（`https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs`）动态注入 `<script>` 加载 Monaco，而应用 CSP 的 `script-src 'self'` 会拦截外链脚本，导致 loader 的 Promise 永不 resolve、编辑器永久停在 loading；预览走的是已打包的 `react-markdown`，同源渲染故不受影响
+  - 新增 `src/utils/monaco.ts`：用 `loader.config({ monaco })` 把 loader 指向本地打包的 monaco 实例，并配置 `MonacoEnvironment.getWorker` 使用本地 worker，彻底去掉运行时 CDN 依赖
+  - 在 `src/main.tsx` 最顶部以副作用方式引入该模块，确保先于任何编辑器渲染生效
+  - 注意：`monaco-editor@0.57` 的 `exports` 已把子路径映射为 `./esm/vs/*.js`，worker 需以 `monaco-editor/<lang>/xxx.worker.js?worker`（去前缀、保留 `.js`）形式导入
+
 ## [1.0.1] - 2026-10-02
 
 ### 修复
