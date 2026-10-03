@@ -192,13 +192,14 @@ src-tauri/target/release/bundle/
    npm run tauri icon path/to/your-icon.png
    ```
 
-2. **更新公钥**：`src-tauri/tauri.conf.json` 中的 `plugins.updater.pubkey` 目前是占位符。启用自动更新前需替换为真实公钥：
+2. **更新公钥**：`src-tauri/tauri.conf.json` 的 `plugins.updater.pubkey` 已内置正式公钥
+   （minisign key id `741DEDD9242E96B3`），无需再替换。仅在轮换签名密钥时才需要修改：
 
    ```bash
    npm run tauri signer generate -w ~/.tauri/hexo-manager.key
    ```
 
-   将输出的公钥内容填入 `pubkey` 字段，私钥妥善保管并配置为 CI 的 `TAURI_SIGNING_PRIVATE_KEY` 环境变量。
+   将命令输出的 Public Key 填入 `pubkey` 字段，私钥妥善保管并配置为 CI 的 `TAURI_SIGNING_PRIVATE_KEY` 环境变量。**公钥必须与 CI 所用私钥配对**，否则客户端校验更新包签名会失败。
 
 3. **签名与公证**（发布到应用商店时）：
    - macOS 需配置 Apple Developer 证书与公证（notarization）
