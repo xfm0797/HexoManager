@@ -1,8 +1,8 @@
 {
-  "version": "1.0.1-rc.1",
+  "version": "1.0.2-rc.1",
   "major": 1,
   "minor": 0,
-  "patch": 1,
+  "patch": 2,
   "prerelease": "rc.1",
   "buildMetadata": null,
   "lastUpdated": "2026-10-03T00:00:00Z",
@@ -28,9 +28,9 @@
       "createdAt": "2026-10-02T00:00:00Z"
     },
     {
-      "version": "1.0.1-rc.1",
+      "version": "1.0.2-rc.1",
       "type": "prerelease",
-      "description": "1.0.1 候选版本（RC1）：修复 Monaco 编辑器因 CDN 被 CSP 拦截导致编辑区永久 loading",
+      "description": "1.0.2 候选版本（RC1）：修复 Monaco 编辑器因 CDN 被 CSP 拦截导致编辑区永久 loading",
       "createdAt": "2026-10-03T00:00:00Z"
     }
   ]
