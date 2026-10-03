@@ -124,7 +124,7 @@ sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
 ### 1. 安装依赖
 
 ```bash
-git clone https://github.com/xfm/hexo-manager.git
+git clone https://github.com/xfm0797/HexoManager.git
 cd hexo-manager
 
 # 前端依赖

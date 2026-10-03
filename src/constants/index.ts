@@ -5,11 +5,11 @@ import type { PlatformId } from '@/types';
 /** 应用元信息 */
 export const APP_META = {
   name: 'HexoManager',
-  version: '1.0.0',
+  version: '1.0.2',
   description: '桌面端 Hexo 多站点管理工具',
   author: 'XFM',
   license: 'MIT',
-  repository: 'https://github.com/xfm/hexo-manager',
+  repository: 'https://github.com/xfm0797/HexoManager',
   homepage: 'https://hexo-manager.xfm.dev',
 } as const;
 

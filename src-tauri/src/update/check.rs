@@ -10,16 +10,16 @@ pub const APP_NAME: &str = "HexoManager";
 pub const APP_DESCRIPTION: &str = "桌面端 Hexo 多站点管理工具";
 pub const APP_AUTHOR: &str = "XFM";
 pub const APP_LICENSE: &str = "MIT";
-pub const APP_REPOSITORY: &str = "https://github.com/xfm/hexo-manager";
-pub const APP_HOMEPAGE: &str = "https://github.com/xfm/hexo-manager";
+pub const APP_REPOSITORY: &str = "https://github.com/xfm0797/HexoManager";
+pub const APP_HOMEPAGE: &str = "https://github.com/xfm0797/HexoManager";
 
 /// 默认更新源（按优先级排列，依次尝试）。
 ///
 /// 1. GitHub Releases 上的 Tauri updater 清单（tauri-action 打 tag 时自动生成 latest.json）
 /// 2. GitHub Releases API（作为 latest.json 缺失或网络异常时的回退）
 pub const UPDATE_ENDPOINTS: &[&str] = &[
-    "https://github.com/xfm/hexo-manager/releases/latest/download/latest.json",
-    "https://api.github.com/repos/xfm/hexo-manager/releases/latest",
+    "https://github.com/xfm0797/HexoManager/releases/latest/download/latest.json",
+    "https://api.github.com/repos/xfm0797/HexoManager/releases/latest",
 ];
 
 /// 单个更新源的请求超时。
