@@ -6,6 +6,20 @@
 
 
 
+## [Unreleased]
+
+## [1.1.0] - 2026-10-03
+
+### 新增
+
+- **文章 Front Matter 模板**：把「写新文章时的常用字段」沉淀成模板，一键套用
+  - 新建文章对话框可选择模板，创建时即写入模板字段与正文骨架（字段只补缺失，外观里手填的分类/标签优先）
+  - 编辑器工具栏新增「套用模板」：可对已有文章补字段，支持「只补缺失 / 覆盖同名字段」与「正文不动 / 追加骨架 / 替换正文」
+  - 新增「写作模板」管理面板（文章管理页与偏好设置页均可进入）：表格 / YAML 双模式编辑字段，支持文本、数字、开关、列表、嵌套 JSON 五种类型
+  - 正文骨架支持 `{{title}}` / `{{slug}}` / `{{date}}` / `{{datetime}}` 占位符
+  - 内置「技术长文 / 教程·操作指南 / 生活随笔」三套模板，可编辑、可另存，但不可删除
+  - 后端新增 `front_matter_templates` 表与 `get/save/delete/apply_front_matter_template` 四个命令；模板为全局共享（跨站点复用）
+
 ## [1.0.2] - 2026-10-03
 
 ### 修复
@@ -63,6 +77,8 @@
 - 数据库：SQLite，8 张业务表 + 索引
 
 
+[Unreleased]: https://github.com/xfm0797/HexoManager/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/xfm0797/HexoManager/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/xfm0797/HexoManager/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/xfm0797/HexoManager/compare/v1.0.0...v1.0.1
 
