@@ -53,3 +53,11 @@ tauri = { version = "2", features = ["test"] }
 [features]
 # 由 tauri CLI 在构建时注入，用于自定义协议
 custom-protocol = ["tauri/custom-protocol"]
+
+[patch.crates-io]
+# schemars 0.8.22 的 `preserve_order` 特性错误地启用 indexmap 1.x，而其代码按
+# indexmap 2.x 的 API 编写（IndexMap 缺省第三个泛型参数），与 tauri-build /
+# tauri-plugin 2.7.x（启用 preserve_order）组合必然编译失败（E0107）。
+# 本补丁把 preserve_order 接到该 crate 自带的 indexmap2 路径（官方 2.x 依赖）。
+# 上游发布修复版本（schemars 0.8.23+ 或 tauri-build 调整）后可移除本段。
+schemars = { path = "patches/schemars-0.8.22" }
