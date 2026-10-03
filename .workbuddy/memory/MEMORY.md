@@ -19,6 +19,18 @@
   最新内容，且不要擅自恢复其删掉的结构
 - 发布走 GitHub Actions：推送 `v*` 标签触发 `.github/workflows/build.yml` 三平台打包；
   当前 `releaseDraft: false` + `prerelease: false` = 直接发布**正式版** Release（1.0.2 起适用）
+- **重发某一版本（补产物）的安全做法：移动 tag 到新提交后强推**
+  （`git tag -f vX.Y.Z <sha>` → `git push origin :refs/tags/vX.Y.Z` → `git push origin vX.Y.Z --force`）。
+  原因：`tauri-action` 按 tag 名 `getOrCreateRelease` → 复用已有 Release 且**不会把正式版降回草稿**；
+  `uploadAssets` 对同名资产**先删后传** → 不产生重复。前提是新提交确实带上了要修的 workflow 改动
+- **核对发版结果用 GitHub REST API**（本机**无** `gh` CLI）：
+  `/repos/<o>/<r>/actions/workflows/build.yml/runs`、`/repos/<o>/<r>/actions/runs/<id>/jobs`、
+  `/repos/<o>/<r>/releases/tags/vX.Y.Z`、`https://github.com/<o>/<r>/releases/latest/download/latest.json`。
+  **`curl` 必须加 `--ssl-no-revoke`**：本机 schannel 吊销服务器不可达，否则报
+  `0x80092013 吊销功能无法检查吊销`（HTTP 000）。另：Git Bash 的 `/tmp` 与 Windows 原生 Python
+  **不互通**，临时 json 落到仓库目录再用 Read 读（README 场景记得事后删除，避免污染工作区）
+- `latest.json` 是自动更新的关键产物，须含 **darwin-aarch64 / darwin-x86_64 / windows-* / linux-***
+  各键且 `signature` 非空（约 428~444 字符）；缺 macOS 键说明 macOS job 失败
 
 ## Monaco 编辑器
 - 编辑器统一走 `src/components/CodeEditor.tsx`（封装 `@monaco-editor/react`）
@@ -54,6 +66,23 @@
   GitHub 运行器不受影响（CI 不带补丁也能编译），上游修复后应移除该补丁
 - 本机 Rust：cargo/rustc 1.98.1（rustup stable-x86_64-pc-windows-msvc）；
   镜像走 `.cargo/config.toml` 里的 rsproxy
+- ⚠️ **本机跑不了本项目的 `cargo test`**：测试二进制一加载就 `STATUS_ENTRYPOINT_NOT_FOUND`
+  (`0xC0000139`，`cargo test` 报 `exit code: 0xc0000139`)。而 `cargo new` 的最小工程
+  `cargo test` 正常 → 是 tauri 目标在本机的加载问题（补 `WebView2Loader.dll` 到 exe 同级无效）。
+  可用 `cargo check --all-targets` 保证测试代码**能编译**；真正执行交给 CI / 其它机器
+
+## 文章 Front Matter 模板（1.0.2 之后新增）
+- 数据表 `front_matter_templates` 是**全局表**（**无 `site_id`**，不参与站点级联删除），
+  `fields` 存 JSON 对象字符串、`body` 存正文骨架（`{{title}}`/`{{slug}}`/`{{date}}`/`{{datetime}}`）
+- 命令模块 `src-tauri/src/commands/template_commands.rs`：
+  `get/save/delete/apply_front_matter_template`
+- 合并语义：`merge_template_fields(front, fields, overwrite)` **默认只补缺失/空字段**；
+  `RESERVED_FIELDS = ["title","updated"]` 永不被模板覆盖；套用到已有文章时 `bodyMode`
+  默认 `none`（不动正文），可选 `append` / `replace`
+- 内置模板靠 `ensure_seeded` 播种，**表非空即跳过** —— 用户删掉内置模板后不会被加回来，
+  改播种逻辑时要守住这个「不覆盖用户数据」的性质
+- 前端：`components/FrontMatterTemplatesPanel.tsx`（表格 / YAML 双模式，YAML 用已有的 `js-yaml`）；
+  入口在文章管理页（新建弹窗选择 + 编辑器工具栏「套用模板」+ 抽屉管理）与偏好设置页「写作模板」页签
 
 ## 约定 / 注意事项
 - 仓库地址统一为 **`github.com/xfm0797/HexoManager`**（与 git remote 一致；提交 `0ce793d` 已修正
