@@ -1,9 +1,9 @@
 {
-  "version": "1.0.2-rc.1",
+  "version": "1.0.2",
   "major": 1,
   "minor": 0,
   "patch": 2,
-  "prerelease": "rc.1",
+  "prerelease": null,
   "buildMetadata": null,
   "lastUpdated": "2026-10-03T00:00:00Z",
   "description": "HexoManager 首个正式版本：多站点管理、可视化配置、文章编辑、多平台部署",
@@ -28,9 +28,9 @@
       "createdAt": "2026-10-02T00:00:00Z"
     },
     {
-      "version": "1.0.2-rc.1",
-      "type": "prerelease",
-      "description": "1.0.2 候选版本（RC1）：修复 Monaco 编辑器因 CDN 被 CSP 拦截导致编辑区永久 loading",
+      "version": "1.0.2",
+      "type": "patch",
+      "description": "修复 Monaco 编辑器因 CDN 被 CSP 拦截导致编辑区永久 loading",
       "createdAt": "2026-10-03T00:00:00Z"
     }
   ]

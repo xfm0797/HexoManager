@@ -4,7 +4,9 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本 2.0.0](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+
+
+## [1.0.2] - 2026-10-03
 
 ### 修复
 
@@ -60,5 +62,7 @@
 - Rust 后端：rusqlite (SQLite)、tokio、handlebars、reqwest
 - 数据库：SQLite，8 张业务表 + 索引
 
-[Unreleased]: https://github.com/xfm/hexo-manager/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/xfm/hexo-manager/releases/tag/v1.0.0
+
+[1.0.2]: https://github.com/xfm0797/HexoManager/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/xfm0797/HexoManager/compare/v1.0.0...v1.0.1
+
