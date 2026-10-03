@@ -28,6 +28,18 @@
   `import w from 'monaco-editor/<lang>/<name>.worker.js?worker'`
   —— 去掉 `esm/vs/` 前缀、保留 `.js` 扩展名
 
+## CI（GitHub Actions）/ 跨平台打包
+- **`NODE_OPTIONS: --max-old-space-size=4096` 已在 `.github/workflows/build.yml` 的 workflow 级
+  `env` 中固定**：V8 老生代上限按物理内存自动推导，macos-latest 仅 7GB → 约 2048MB，
+  而 vite/rollup 展开 monaco-editor + antd 的堆峰值需 2048~2560MB → 只有 macOS 打包会 OOM
+  （`FATAL ERROR: Ineffective mark-compacts near heap limit`，死在 `beforeBuildCommand`）。
+  ubuntu / windows-latest 为 16GB（默认 4144MB）故不受影响。**改动该 env 前先想清楚**
+- **重跑失败的 workflow 无法修复此类问题**：GitHub 重跑用的是该 commit/tag 当时保存的
+  workflow 定义，旧文件里的缺陷会原样复现 → 必须让新提交带上修复后重新触发
+- 复现脚本：`.repro/vite-oom-repro.sh <MB>`（复跑 vite build 并判定）；跑前先前台 `rm -rf dist`
+- `tauri-action` 步骤自带 `env`（GITHUB_TOKEN 等）与 workflow 级 `env` 是**合并**关系，
+  同名才覆盖 → workflow 级变量在 beforeBuildCommand 里仍生效
+
 ## 本地构建 / 打包（Windows）
 - 命令：`npm run tauri:build`；产物在 `src-tauri/target/release/bundle/{msi,nsis}/`
   （`hexo-manager.exe` 在 `src-tauri/target/release/`）
