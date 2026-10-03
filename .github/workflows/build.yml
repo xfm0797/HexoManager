@@ -14,6 +14,18 @@ on:
 permissions:
   contents: write
 
+# V8 默认的老生代（old space）上限是**按物理内存自动推导**的：
+#   16 GB 运行器（ubuntu / windows-latest）→ 约 4 GB，够用；
+#    7 GB 运行器（macos-latest）        → 约 2 GB，**必定 OOM**。
+# 而本项目 vite/rollup 在 transform 阶段要展开 monaco-editor（含 5 个 worker）
+# 与 antd 的模块图，实测堆峰值在 2.0~2.5 GB 之间，因此 macOS 打包会在
+# beforeBuildCommand（vite build）阶段抛
+#   FATAL ERROR: Ineffective mark-compacts near heap limit
+# 显式抬高上限后三平台一致。注意 --max-old-space-size 只是**上限**而非预分配，
+# 不会让实际占用变高；这里给 4 GB，对实测峰值有约 1.6 倍余量。
+env:
+  NODE_OPTIONS: '--max-old-space-size=4096'
+
 jobs:
   # ===== 代码质量检查 =====
   check:
