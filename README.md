@@ -1,5 +1,7 @@
 # HexoManager
 
+[English](./README.en.md) | 简体中文
+
 > 桌面端 Hexo 多站点管理工具 —— 用图形界面管理多个 Hexo 站点，从写作到上线一条链路完成。
 
 [![Tauri](https://img.shields.io/badge/Tauri-2.x-24C8DB?logo=tauri)](https://tauri.app)
