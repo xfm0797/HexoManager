@@ -1,12 +1,12 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "major": 1,
-  "minor": 1,
+  "minor": 2,
   "patch": 0,
   "prerelease": null,
   "buildMetadata": null,
-  "lastUpdated": "2026-10-03T00:00:00Z",
-  "description": "HexoManager 首个正式版本：多站点管理、可视化配置、文章编辑、多平台部署",
+  "lastUpdated": "2026-10-10T00:00:00Z",
+  "description": "中英双语界面：非中文环境默认英文，中文环境保持中文，偏好设置可手动切换",
   "isLocked": false,
   "history": [
     {
@@ -38,6 +38,12 @@
       "type": "minor",
       "description": "新增文章 Front Matter 模板：常用字段一键套用，支持新建时套用与对已有文章补字段",
       "createdAt": "2026-10-03T00:00:00Z"
+    },
+    {
+      "version": "1.2.0",
+      "type": "minor",
+      "description": "中英双语界面：跟随系统语言，非中文环境默认英文（满足 AppImage 目录收录要求），偏好设置可手动切换",
+      "createdAt": "2026-10-10T00:00:00Z"
     }
   ]
 }

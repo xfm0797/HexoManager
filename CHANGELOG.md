@@ -8,6 +8,29 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-10
+
+### 新增
+
+- **中英双语界面（i18n）**：非中文环境默认英文，中文环境保持中文
+  - 语言解析规则为「显式偏好 > 系统语言」：系统语言以 `zh` 开头 → 简体中文；**其余一切（含 `en`、`C`、空值）→ 英文**，因此非中文环境首次启动即为英文界面
+  - 「偏好设置 → 常规 → 界面语言」新增三选：跟随系统 / 简体中文 / English；选择持久化到 `localStorage`（`hexo-manager:locale`），偏好为「跟随系统」时监听 `languagechange` 实时跟进
+  - 切换语言同步生效：AntD `ConfigProvider` locale、`dayjs` 区域、`<html lang>`、窗口标题
+  - 实现方式取「中文原文即词条」：源码保留中文原文并用 `t()` 包裹，英文译文集中在 `src/i18n/locales/en-US.ts`（**键即中文原文**），命中即翻译、未命中原样回退中文，不引入任何第三方 i18n 依赖
+  - 支持 `{name}` 占位符插值；数字与时长按语言分别格式化（`万/亿` 对应 `K/M/B`，时长对应 `x 分 y 秒` / `xm ys`）
+  - 新增 `scripts/i18n-merge.mjs`（增量合并词条零件，不覆盖手工修正）与 `scripts/i18n-coverage.mjs`（覆盖率校验，存在缺译文时退出码 1，可用作 CI 卡口）
+  - 当前覆盖率：源码 1356 条 `t()` 词条 / 字典 1466 条，**缺译文 0**；编辑器、设置、看板、分类标签、通知、404、工具函数与后端消息层均已覆盖
+- **后端错误消息的前端英文映射层** `src/i18n/backendMessages.ts`
+  - Rust 侧 250+ 条中文错误（统一 `Result<T, String>`）不改命令签名，改由 `services/invoke.ts` 在 catch 中按「精确表 + 带参正则规则表」映射为英文，未命中则原样返回中文，绝不吞掉信息
+  - 彻底解法是把 Rust 侧错误改为错误码枚举，届时该过渡层即可移除
+
+### 修复
+
+- 修复「关于与更新 → 技术栈」分层展示顺序错乱：`LAYER_ORDER` 与后端 `src-tauri/src/update/check.rs` 的 `layer` 取值不一致（如后端为 `UI 组件库` 而前端写 `UI 组件`），`indexOf` 恒返回 -1，该分组总是被排到最前
+- 技术栈分层名改为跟随当前界面语言展示
+- 修正 `backendMessages` 精确表中两条与 Rust 原文不符的键（`站点尚未安装依赖，请先执行 npm install` 与 `无法获取预览进程 PID` 各少一个空格），此前这两条英文映射不会生效
+- 清理 4 处失效的 `// eslint-disable-next-line no-await-in-loop` 指令（该规则并未启用，指令只是历史残留，会让 `npm run lint --max-warnings 0` 直接报错）
+
 ## [1.1.0] - 2026-10-03
 
 ### 新增
@@ -77,7 +100,8 @@
 - 数据库：SQLite，8 张业务表 + 索引
 
 
-[Unreleased]: https://github.com/xfm0797/HexoManager/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/xfm0797/HexoManager/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/xfm0797/HexoManager/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/xfm0797/HexoManager/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/xfm0797/HexoManager/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/xfm0797/HexoManager/compare/v1.0.0...v1.0.1

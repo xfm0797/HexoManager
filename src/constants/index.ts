@@ -5,7 +5,7 @@ import type { PlatformId } from '@/types';
 /** 应用元信息 */
 export const APP_META = {
   name: 'HexoManager',
-  version: '1.1.0',
+  version: '1.2.0',
   description: '桌面端 Hexo 多站点管理工具',
   author: 'XFM',
   license: 'MIT',
