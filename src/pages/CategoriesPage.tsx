@@ -36,12 +36,14 @@ import { useArticles } from '@/hooks';
 import { useArticleStore, useSiteStore } from '@/stores';
 import type { Article, Category, Tag as TagItem } from '@/types';
 import { formatNumber, formatPercent, truncate } from '@/utils/format';
+import { useI18n } from '@/i18n';
 
 type TaxonomyKind = 'category' | 'tag';
 
 /** 分类标签管理页面 */
 export function CategoriesPage() {
   const { message, modal } = AntdApp.useApp();
+  const { t } = useI18n();
 
   const currentSiteId = useSiteStore((s) => s.currentSiteId);
   const stats = useSiteStore((s) => s.stats);
@@ -65,6 +67,9 @@ export function CategoriesPage() {
   const [busy, setBusy] = useState(false);
   const [renameForm] = Form.useForm<{ newName: string }>();
   const [mergeForm] = Form.useForm<{ from: string[]; to: string }>();
+
+  // 「分类 / 标签」在文案里的称呼随当前页签变化
+  const kindLabel = kind === 'category' ? t('分类') : t('标签');
 
   // 首次进入与站点切换时重新拉取
   useEffect(() => {
@@ -128,7 +133,7 @@ export function CategoriesPage() {
         await renameTag(currentSiteId, renaming.name, newName.trim());
       }
 
-      message.success('重命名完成');
+      message.success(t('重命名完成'));
       setRenaming(null);
       if (activeName === renaming.name) setActiveName(newName.trim());
     } catch (e) {
@@ -142,16 +147,19 @@ export function CategoriesPage() {
     if (currentSiteId === null) return;
 
     modal.confirm({
-      title: `删除${kind === 'category' ? '分类' : '标签'}「${item.name}」？`,
-      content: `将从 ${item.count} 篇文章中移除该${kind === 'category' ? '分类' : '标签'}，文章本身不会被删除。`,
-      okText: '确认删除',
+      title: t('删除{kind}「{name}」？', { kind: kindLabel, name: item.name }),
+      content: t('将从 {count} 篇文章中移除该{kind}，文章本身不会被删除。', {
+        count: item.count,
+        kind: kindLabel,
+      }),
+      okText: t('确认删除'),
       okButtonProps: { danger: true },
-      cancelText: '取消',
+      cancelText: t('取消'),
       onOk: async () => {
         try {
           if (kind === 'category') await deleteCategory(currentSiteId, item.name);
           else await deleteTag(currentSiteId, item.name);
-          message.success('已移除');
+          message.success(t('已移除'));
           if (activeName === item.name) setActiveName(null);
         } catch (e) {
           message.error(e instanceof Error ? e.message : String(e));
@@ -166,7 +174,7 @@ export function CategoriesPage() {
     try {
       const { from, to } = await mergeForm.validateFields();
       if (from.length === 0) {
-        message.warning('请选择要合并的项');
+        message.warning(t('请选择要合并的项'));
         return;
       }
 
@@ -175,15 +183,13 @@ export function CategoriesPage() {
       for (const source of from) {
         if (source === to) continue;
         if (kind === 'category') {
-          // eslint-disable-next-line no-await-in-loop
           await renameCategory(currentSiteId, source, to);
         } else {
-          // eslint-disable-next-line no-await-in-loop
           await renameTag(currentSiteId, source, to);
         }
       }
 
-      message.success('合并完成');
+      message.success(t('合并完成'));
       setMerging(false);
       mergeForm.resetFields();
       void fetchTaxonomies(currentSiteId);
@@ -202,11 +208,14 @@ export function CategoriesPage() {
 
   return (
     <PageContainer
-      title="分类与标签"
+      title={t('分类与标签')}
       description={
         currentSiteId === null
-          ? '请先在顶栏选择站点'
-          : `分类 ${categories.length} 个 · 标签 ${tags.length} 个`
+          ? t('请先在顶栏选择站点')
+          : t('分类 {categories} 个 · 标签 {tags} 个', {
+              categories: categories.length,
+              tags: tags.length,
+            })
       }
       card={false}
       flush
@@ -217,7 +226,7 @@ export function CategoriesPage() {
             onClick={() => setMerging(true)}
             disabled={currentSiteId === null || currentList.length < 2}
           >
-            合并
+            {t('合并')}
           </Button>
           <Button
             icon={<ReloadOutlined />}
@@ -228,7 +237,7 @@ export function CategoriesPage() {
             }}
             disabled={currentSiteId === null}
           >
-            刷新
+            {t('刷新')}
           </Button>
         </Space>
       }
@@ -237,8 +246,8 @@ export function CategoriesPage() {
         <div className="hm-surface">
           <EmptyState
             kind="articles"
-            title="请先选择站点"
-            description="在顶栏切换站点后管理分类与标签"
+            title={t('请先选择站点')}
+            description={t('在顶栏切换站点后管理分类与标签')}
           />
         </div>
       ) : (
@@ -246,36 +255,36 @@ export function CategoriesPage() {
           {/* 汇总指标 */}
           <StatGrid columns={4}>
             <StatCard
-              title="分类总数"
+              title={t('分类总数')}
               value={categories.length}
               icon={<TagsOutlined />}
               iconColor="#722ed1"
             />
             <StatCard
-              title="标签总数"
+              title={t('标签总数')}
               value={tags.length}
               icon={<TagsOutlined />}
               iconColor="#3366ff"
             />
             <StatCard
-              title="文章总数"
+              title={t('文章总数')}
               value={formatNumber(stats?.articleCount ?? articles.length)}
               icon={<TagsOutlined />}
               iconColor="#52c41a"
             />
             <StatCard
-              title="平均每篇标签数"
+              title={t('平均每篇标签数')}
               value={
                 (stats?.articleCount ?? articles.length) > 0
                   ? (
-                      tags.reduce((sum, t) => sum + t.count, 0) /
+                      tags.reduce((sum, item) => sum + item.count, 0) /
                       (stats?.articleCount ?? articles.length)
                     ).toFixed(1)
                   : '0'
               }
               icon={<TagsOutlined />}
               iconColor="#fa8c16"
-              tooltip="标签引用总次数 ÷ 文章总数"
+              tooltip={t('标签引用总次数 ÷ 文章总数')}
             />
           </StatGrid>
 
@@ -295,8 +304,8 @@ export function CategoriesPage() {
                       setKeyword('');
                     }}
                     items={[
-                      { key: 'category', label: `分类 (${categories.length})` },
-                      { key: 'tag', label: `标签 (${tags.length})` },
+                      { key: 'category', label: t('分类 ({count})', { count: categories.length }) },
+                      { key: 'tag', label: t('标签 ({count})', { count: tags.length }) },
                     ]}
                   />
                 }
@@ -306,7 +315,7 @@ export function CategoriesPage() {
                     allowClear
                     size="small"
                     prefix={<SearchOutlined className="opacity-50" />}
-                    placeholder={`搜索${kind === 'category' ? '分类' : '标签'}`}
+                    placeholder={t('搜索{kind}', { kind: kindLabel })}
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
                   />
@@ -317,13 +326,11 @@ export function CategoriesPage() {
                     <EmptyState
                       kind={keyword ? 'search' : 'articles'}
                       compact
-                      title={
-                        keyword ? '没有匹配项' : `暂无${kind === 'category' ? '分类' : '标签'}`
-                      }
+                      title={keyword ? t('没有匹配项') : t('暂无{kind}', { kind: kindLabel })}
                       description={
                         keyword
-                          ? '换个关键词试试'
-                          : '在文章元信息中设置分类与标签后会自动出现在这里'
+                          ? t('换个关键词试试')
+                          : t('在文章元信息中设置分类与标签后会自动出现在这里')
                       }
                     />
                   ) : (
@@ -337,7 +344,7 @@ export function CategoriesPage() {
                           }`}
                           onClick={() => setActiveName(item.name)}
                           actions={[
-                            <Tooltip title="重命名" key="rename">
+                            <Tooltip title={t('重命名')} key="rename">
                               <Button
                                 type="text"
                                 size="small"
@@ -349,7 +356,7 @@ export function CategoriesPage() {
                                 }}
                               />
                             </Tooltip>,
-                            <Tooltip title="删除" key="delete">
+                            <Tooltip title={t('删除')} key="delete">
                               <Button
                                 type="text"
                                 size="small"
@@ -367,7 +374,7 @@ export function CategoriesPage() {
                             <div className="flex items-center justify-between gap-2">
                               <span className="truncate text-sm">{item.name}</span>
                               <span className="shrink-0 text-xs hm-text-secondary">
-                                {item.count} 篇
+                                {t('{count} 篇', { count: item.count })}
                               </span>
                             </div>
                             <Progress
@@ -388,7 +395,10 @@ export function CategoriesPage() {
                   className="border-t px-3 py-2 text-xs hm-text-secondary"
                   style={{ borderColor: 'var(--hm-border)' }}
                 >
-                  共 {filtered.length} 项 · 引用 {totalArticlesInList} 次
+                  {t('共 {count} 项 · 引用 {refs} 次', {
+                    count: filtered.length,
+                    refs: totalArticlesInList,
+                  })}
                 </div>
               </Card>
             </Col>
@@ -399,17 +409,17 @@ export function CategoriesPage() {
                 size="small"
                 title={
                   activeName
-                    ? `「${activeName}」下的文章`
-                    : `选择左侧的${kind === 'category' ? '分类' : '标签'}查看关联文章`
+                    ? t('「{name}」下的文章', { name: activeName })
+                    : t('选择左侧的{kind}查看关联文章', { kind: kindLabel })
                 }
                 extra={
                   activeName ? (
                     <Space size={4}>
                       <Tag color={kind === 'category' ? 'purple' : 'blue'} className="m-0">
-                        {groupedArticles.length} 篇
+                        {t('{count} 篇', { count: groupedArticles.length })}
                       </Tag>
                       <Button size="small" type="text" onClick={() => setActiveName(null)}>
-                        清除选择
+                        {t('清除选择')}
                       </Button>
                     </Space>
                   ) : null
@@ -422,19 +432,21 @@ export function CategoriesPage() {
                       image={Empty.PRESENTED_IMAGE_SIMPLE}
                       description={
                         <span className="text-sm hm-text-secondary">
-                          点击左侧列表项查看该{kind === 'category' ? '分类' : '标签'}下的所有文章
+                          {t('点击左侧列表项查看该{kind}下的所有文章', { kind: kindLabel })}
                         </span>
                       }
                     />
                   </div>
                 ) : articlesLoading ? (
-                  <div className="p-4 text-center text-sm hm-text-secondary">加载中…</div>
+                  <div className="p-4 text-center text-sm hm-text-secondary">{t('加载中…')}</div>
                 ) : groupedArticles.length === 0 ? (
                   <EmptyState
                     kind="articles"
                     compact
-                    title="没有关联文章"
-                    description="该分类下暂无文章（可能是文章列表未加载完整）"
+                    title={t('没有关联文章')}
+                    description={t('该{kind}下暂无文章（可能是文章列表未加载完整）', {
+                      kind: kindLabel,
+                    })}
                   />
                 ) : (
                   <List
@@ -449,16 +461,19 @@ export function CategoriesPage() {
                             </span>
                             {article.status === 'draft' ? (
                               <Tag className="m-0" style={{ fontSize: 11 }}>
-                                草稿
+                                {t('草稿')}
                               </Tag>
                             ) : null}
                           </div>
                           <div className="mt-0.5 flex items-center gap-3 text-xs hm-text-secondary">
-                            <span>{article.wordCount} 字</span>
+                            <span>{t('{count} 字', { count: article.wordCount })}</span>
                             {article.categories.length > 0 ? (
                               <span>
-                                分类：{article.categories.slice(0, 2).join('、')}
-                                {article.categories.length > 2 ? '…' : ''}
+                                {t('分类：{list}', {
+                                  list: `${article.categories.slice(0, 2).join('、')}${
+                                    article.categories.length > 2 ? '…' : ''
+                                  }`,
+                                })}
                               </span>
                             ) : null}
                           </div>
@@ -471,7 +486,7 @@ export function CategoriesPage() {
 
               {/* 标签云 */}
               {kind === 'tag' && tags.length > 0 ? (
-                <Card size="small" title="标签云" className="mt-4">
+                <Card size="small" title={t('标签云')} className="mt-4">
                   <Space size={[6, 8]} wrap>
                     {tags.map((tag) => {
                       const ratio = maxCount > 0 ? tag.count / maxCount : 0;
@@ -494,13 +509,15 @@ export function CategoriesPage() {
               ) : null}
 
               {categories.length > 0 && kind === 'category' ? (
-                <Card size="small" title="分类层级" className="mt-4">
+                <Card size="small" title={t('分类层级')} className="mt-4">
                   <Alert
                     className="mb-3"
                     type="info"
                     showIcon
-                    message="Hexo 支持多级分类"
-                    description="在文章的 categories 中使用「父级/子级」写法即可建立层级，此处按名称扁平展示。"
+                    message={t('Hexo 支持多级分类')}
+                    description={t(
+                      '在文章的 categories 中使用「父级/子级」写法即可建立层级，此处按名称扁平展示。',
+                    )}
                   />
                   <Tree
                     treeData={categoryTree}
@@ -521,18 +538,14 @@ export function CategoriesPage() {
           <Alert
             type="info"
             showIcon
-            message="操作说明"
+            message={t('操作说明')}
             description={
               <ul className="mt-1 mb-0 list-disc pl-4 text-xs leading-relaxed">
                 <li>
-                  重命名会把所有涉及该{kind === 'category' ? '分类' : '标签'}
-                  的文章批量更新为新的名称
+                  {t('重命名会把所有涉及该{kind}的文章批量更新为新的名称', { kind: kindLabel })}
                 </li>
-                <li>合并功能等价于把多个源项依次重命名为目标项，适合清理拼写不统一的标签</li>
-                <li>
-                  删除操作只会从文章元信息中移除该{kind === 'category' ? '分类' : '标签'}
-                  ，不会删除文章
-                </li>
+                <li>{t('合并功能等价于把多个源项依次重命名为目标项，适合清理拼写不统一的标签')}</li>
+                <li>{t('删除操作只会从文章元信息中移除该{kind}，不会删除文章', { kind: kindLabel })}</li>
               </ul>
             }
           />
@@ -542,27 +555,27 @@ export function CategoriesPage() {
       {/* 重命名弹窗 */}
       <Modal
         open={renaming !== null}
-        title={`重命名${renaming?.kind === 'category' ? '分类' : '标签'}`}
+        title={t('重命名{kind}', { kind: renaming?.kind === 'category' ? t('分类') : t('标签') })}
         onCancel={() => setRenaming(null)}
         onOk={() => void handleRename()}
         confirmLoading={busy}
-        okText="确认重命名"
-        cancelText="取消"
+        okText={t('确认重命名')}
+        cancelText={t('取消')}
         width={460}
       >
         <Form form={renameForm} layout="vertical" className="pt-2">
-          <Form.Item label="原名称">
+          <Form.Item label={t('原名称')}>
             <Input value={renaming?.name} disabled className="hm-mono" />
           </Form.Item>
           <Form.Item
             name="newName"
-            label="新名称"
+            label={t('新名称')}
             rules={[
-              { required: true, message: '请输入新名称' },
-              { max: 60, message: '名称不能超过 60 个字符' },
+              { required: true, message: t('请输入新名称') },
+              { max: 60, message: t('名称不能超过 60 个字符') },
             ]}
           >
-            <Input autoFocus className="hm-mono" placeholder="请输入新的名称" />
+            <Input autoFocus className="hm-mono" placeholder={t('请输入新的名称')} />
           </Form.Item>
         </Form>
       </Modal>
@@ -570,12 +583,12 @@ export function CategoriesPage() {
       {/* 合并弹窗 */}
       <Modal
         open={merging}
-        title={`合并${kind === 'category' ? '分类' : '标签'}`}
+        title={t('合并{kind}', { kind: kindLabel })}
         onCancel={() => setMerging(false)}
         onOk={() => void handleMerge()}
         confirmLoading={busy}
-        okText="开始合并"
-        cancelText="取消"
+        okText={t('开始合并')}
+        cancelText={t('取消')}
         width={520}
       >
         <Form form={mergeForm} layout="vertical" className="pt-2">
@@ -583,18 +596,18 @@ export function CategoriesPage() {
             className="mb-3"
             type="warning"
             showIcon
-            message="合并操作会批量修改文章"
-            description="合并后，所有使用源项的文章都会改用目标名称，源项将不再存在。"
+            message={t('合并操作会批量修改文章')}
+            description={t('合并后，所有使用源项的文章都会改用目标名称，源项将不再存在。')}
           />
 
           <Form.Item
             name="from"
-            label={`要合并的${kind === 'category' ? '分类' : '标签'}`}
-            rules={[{ required: true, message: '请选择至少一项' }]}
+            label={t('要合并的{kind}', { kind: kindLabel })}
+            rules={[{ required: true, message: t('请选择至少一项') }]}
           >
             <Select
               mode="multiple"
-              placeholder="选择要合并掉的项"
+              placeholder={t('选择要合并掉的项')}
               options={currentList.map((item) => ({
                 label: `${item.name} (${item.count})`,
                 value: item.name,
@@ -604,12 +617,12 @@ export function CategoriesPage() {
 
           <Form.Item
             name="to"
-            label="合并到（目标名称）"
-            rules={[{ required: true, message: '请填写或选择目标名称' }]}
+            label={t('合并到（目标名称）')}
+            rules={[{ required: true, message: t('请填写或选择目标名称') }]}
           >
             <Select
               showSearch
-              placeholder="选择已有项或输入新名称"
+              placeholder={t('选择已有项或输入新名称')}
               mode="tags"
               maxCount={1}
               options={currentList.map((item) => ({
@@ -625,7 +638,9 @@ export function CategoriesPage() {
           <Divider className="my-2" />
 
           <div className="text-xs hm-text-secondary">
-            当前占比：{formatPercent(filtered.length, currentList.length)} 的项被搜索条件筛出
+            {t('当前占比：{percent} 的项被搜索条件筛出', {
+              percent: formatPercent(filtered.length, currentList.length),
+            })}
           </div>
         </Form>
       </Modal>

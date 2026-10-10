@@ -64,11 +64,13 @@ import {
 } from '@/utils/format';
 import { copyToClipboard, openWithSystem, pickDirectory } from '@/utils/desktop';
 import { validateSiteName } from '@/utils/validator';
+import { useI18n } from '@/i18n';
 
 type ViewMode = 'grid' | 'table';
 
 /** 站点管理页面 */
 export function SitesPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { message, modal } = AntdApp.useApp();
@@ -119,7 +121,7 @@ export function SitesPage() {
 
     try {
       const site = await useSiteStore.getState().importSite(path);
-      message.success(`已导入站点「${site.name}」`);
+      message.success(t('已导入站点「{name}」', { name: site.name }));
       void refresh();
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
@@ -156,25 +158,25 @@ export function SitesPage() {
     let deleteFiles = false;
 
     modal.confirm({
-      title: `删除站点「${site.name}」？`,
+      title: t('删除站点「{name}」？', { name: site.name }),
       width: 480,
       content: (
         <div className="space-y-2">
           <p className="mb-2 text-sm">
-            此操作将从管理列表中移除该站点（不影响磁盘上的文件，除非勾选下方选项）。
+            {t('此操作将从管理列表中移除该站点（不影响磁盘上的文件，除非勾选下方选项）。')}
           </p>
           <Checkbox
             onChange={(e) => {
               deleteFiles = e.target.checked;
             }}
           >
-            <span className="text-red-500">同时删除磁盘上的站点目录（不可恢复）</span>
+            <span className="text-red-500">{t('同时删除磁盘上的站点目录（不可恢复）')}</span>
           </Checkbox>
         </div>
       ),
-      okText: '确认删除',
+      okText: t('确认删除'),
       okButtonProps: { danger: true },
-      cancelText: '取消',
+      cancelText: t('取消'),
       onOk: async () => {
         try {
           await remove(site.id, deleteFiles);
@@ -187,16 +189,16 @@ export function SitesPage() {
   };
 
   const handleDuplicate = (site: Site) => {
-    const nameRef = { value: `${site.name} 副本` };
+    const nameRef = { value: t('{name} 副本', { name: site.name }) };
     let pathRef = '';
 
     modal.confirm({
-      title: '复制站点',
+      title: t('复制站点'),
       width: 520,
       content: (
         <div className="space-y-3 pt-2">
           <div>
-            <div className="mb-1 text-xs hm-text-secondary">新站点名称</div>
+            <div className="mb-1 text-xs hm-text-secondary">{t('新站点名称')}</div>
             <Input
               defaultValue={nameRef.value}
               onChange={(e) => {
@@ -205,11 +207,11 @@ export function SitesPage() {
             />
           </div>
           <div>
-            <div className="mb-1 text-xs hm-text-secondary">新站点目录</div>
+            <div className="mb-1 text-xs hm-text-secondary">{t('新站点目录')}</div>
             <div className="flex gap-2">
               <Input
                 id="duplicate-path-input"
-                placeholder="选择目标目录"
+                placeholder={t('选择目标目录')}
                 onChange={(e) => {
                   pathRef = e.target.value;
                 }}
@@ -227,22 +229,22 @@ export function SitesPage() {
                   }
                 }}
               >
-                选择
+                {t('选择')}
               </Button>
             </div>
           </div>
         </div>
       ),
-      okText: '开始复制',
-      cancelText: '取消',
+      okText: t('开始复制'),
+      cancelText: t('取消'),
       onOk: async () => {
         if (!pathRef.trim()) {
-          message.error('请选择新站点目录');
-          throw new Error('未选择目录');
+          message.error(t('请选择新站点目录'));
+          throw new Error(t('未选择目录'));
         }
         try {
           await siteService.duplicate(site.id, nameRef.value, pathRef);
-          message.success('站点复制完成');
+          message.success(t('站点复制完成'));
           await refresh();
         } catch (e) {
           message.error(e instanceof Error ? e.message : String(e));
@@ -256,10 +258,10 @@ export function SitesPage() {
     const target = await pickDirectory('选择备份保存目录');
     if (!target) return;
 
-    const hide = message.loading('正在备份站点…', 0);
+    const hide = message.loading(t('正在备份站点…'), 0);
     try {
       const result = await siteService.backup(site.id, target);
-      message.success(`备份完成：${result}`);
+      message.success(t('备份完成：{path}', { path: result }));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -278,12 +280,12 @@ export function SitesPage() {
 
   const handleCopyPath = async (site: Site) => {
     const ok = await copyToClipboard(site.path);
-    if (ok) message.success('路径已复制');
+    if (ok) message.success(t('路径已复制'));
   };
 
   const columns: ColumnsType<Site> = [
     {
-      title: '站点',
+      title: t('站点'),
       dataIndex: 'name',
       key: 'name',
       width: 280,
@@ -307,7 +309,7 @@ export function SitesPage() {
                 </span>
                 {site.id === currentSiteId ? (
                   <Tag color="blue" className="m-0" style={{ fontSize: 11 }}>
-                    当前
+                    {t('当前')}
                   </Tag>
                 ) : null}
               </div>
@@ -323,25 +325,27 @@ export function SitesPage() {
       },
     },
     {
-      title: '状态',
+      title: t('状态'),
       dataIndex: 'status',
       key: 'status',
       width: 90,
       render: (status: string) => <SiteStatusBadge status={status} asTag />,
     },
     {
-      title: '文章',
+      title: t('文章'),
       key: 'articles',
       width: 110,
       render: (_value, site) => (
         <span className="text-sm">
           {site.articleCount}
-          <span className="ml-1 text-xs hm-text-secondary">/ {site.draftCount} 草稿</span>
+          <span className="ml-1 text-xs hm-text-secondary">
+            / {t('{count} 草稿', { count: site.draftCount })}
+          </span>
         </span>
       ),
     },
     {
-      title: '主题',
+      title: t('主题'),
       dataIndex: 'theme',
       key: 'theme',
       width: 120,
@@ -349,7 +353,7 @@ export function SitesPage() {
         theme ? <Tag className="m-0">{theme}</Tag> : <span className="hm-text-secondary">—</span>,
     },
     {
-      title: '域名',
+      title: t('域名'),
       dataIndex: 'domain',
       key: 'domain',
       ellipsis: true,
@@ -361,24 +365,24 @@ export function SitesPage() {
         ),
     },
     {
-      title: '最近部署',
+      title: t('最近部署'),
       dataIndex: 'lastDeployAt',
       key: 'lastDeployAt',
       width: 130,
       render: (value: string | null) => (
         <span className="text-xs hm-text-secondary">
-          {value ? formatRelative(value) : '从未部署'}
+          {value ? formatRelative(value) : t('从未部署')}
         </span>
       ),
     },
     {
-      title: '操作',
+      title: t('操作'),
       key: 'actions',
       width: 200,
       fixed: 'right',
       render: (_value, site) => (
         <Space size={2}>
-          <Tooltip title="设为当前站点">
+          <Tooltip title={t('设为当前站点')}>
             <Button
               type="text"
               size="small"
@@ -386,11 +390,11 @@ export function SitesPage() {
               disabled={site.id === currentSiteId}
               onClick={() => {
                 setCurrentSite(site.id);
-                message.success(`已切换到「${site.name}」`);
+                message.success(t('已切换到「{name}」', { name: site.name }));
               }}
             />
           </Tooltip>
-          <Tooltip title="编辑">
+          <Tooltip title={t('编辑')}>
             <Button
               type="text"
               size="small"
@@ -398,7 +402,7 @@ export function SitesPage() {
               onClick={() => handleEdit(site)}
             />
           </Tooltip>
-          <Tooltip title="打开目录">
+          <Tooltip title={t('打开目录')}>
             <Button
               type="text"
               size="small"
@@ -406,7 +410,7 @@ export function SitesPage() {
               onClick={() => void handleOpenFolder(site)}
             />
           </Tooltip>
-          <Tooltip title="复制站点">
+          <Tooltip title={t('复制站点')}>
             <Button
               type="text"
               size="small"
@@ -414,7 +418,7 @@ export function SitesPage() {
               onClick={() => handleDuplicate(site)}
             />
           </Tooltip>
-          <Tooltip title="备份">
+          <Tooltip title={t('备份')}>
             <Button
               type="text"
               size="small"
@@ -422,7 +426,7 @@ export function SitesPage() {
               onClick={() => void handleBackup(site)}
             />
           </Tooltip>
-          <Tooltip title="删除">
+          <Tooltip title={t('删除')}>
             <Button
               type="text"
               size="small"
@@ -442,17 +446,17 @@ export function SitesPage() {
 
   return (
     <PageContainer
-      title="站点管理"
-      description={`共 ${sites.length} 个站点`}
+      title={t('站点管理')}
+      description={t('共 {count} 个站点', { count: sites.length })}
       card={false}
       flush
       extra={
         <Space>
           <Button icon={<ImportOutlined />} onClick={() => void handleImport()}>
-            导入站点
+            {t('导入站点')}
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setWizardOpen(true)}>
-            新建站点
+            {t('新建站点')}
           </Button>
         </Space>
       }
@@ -462,25 +466,25 @@ export function SitesPage() {
         {sites.length > 0 ? (
           <StatGrid columns={4}>
             <StatCard
-              title="站点总数"
+              title={t('站点总数')}
               value={sites.length}
               icon={<AppstoreOutlined />}
               iconColor="#3366ff"
             />
             <StatCard
-              title="文章总数"
+              title={t('文章总数')}
               value={formatNumber(totalArticles)}
               icon={<UnorderedListOutlined />}
               iconColor="#722ed1"
             />
             <StatCard
-              title="草稿"
+              title={t('草稿')}
               value={totalDrafts}
               icon={<EditOutlined />}
               iconColor="#faad14"
             />
             <StatCard
-              title="已部署站点"
+              title={t('已部署站点')}
               value={`${deployedSites} / ${sites.length}`}
               icon={<RocketOutlined />}
               iconColor="#52c41a"
@@ -494,14 +498,14 @@ export function SitesPage() {
             <Input
               allowClear
               prefix={<SearchOutlined className="opacity-50" />}
-              placeholder="搜索站点名称、路径或域名"
+              placeholder={t('搜索站点名称、路径或域名')}
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               style={{ width: 260 }}
             />
             {keyword ? (
               <span className="text-xs hm-text-secondary">
-                匹配 {filtered.length} / {sites.length}
+                {t('匹配 {matched} / {total}', { matched: filtered.length, total: sites.length })}
               </span>
             ) : null}
           </Space>
@@ -511,13 +515,13 @@ export function SitesPage() {
               value={viewMode}
               onChange={(v) => setViewMode(v as ViewMode)}
               options={[
-                { label: '卡片', value: 'grid', icon: <AppstoreOutlined /> },
-                { label: '表格', value: 'table', icon: <TableOutlined /> },
+                { label: t('卡片'), value: 'grid', icon: <AppstoreOutlined /> },
+                { label: t('表格'), value: 'table', icon: <TableOutlined /> },
               ]}
             />
-            <Tooltip title="刷新">
+            <Tooltip title={t('刷新')}>
               <Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading}>
-                刷新
+                {t('刷新')}
               </Button>
             </Tooltip>
           </Space>
@@ -534,8 +538,8 @@ export function SitesPage() {
           <div className="hm-surface">
             <EmptyState
               kind={keyword ? 'search' : 'sites'}
-              title={keyword ? '没有匹配的站点' : undefined}
-              actionText={keyword ? undefined : '创建第一个站点'}
+              title={keyword ? t('没有匹配的站点') : undefined}
+              actionText={keyword ? undefined : t('创建第一个站点')}
               onAction={keyword ? undefined : () => setWizardOpen(true)}
               onRefresh={keyword ? () => setKeyword('') : () => void refresh()}
             />
@@ -572,7 +576,7 @@ export function SitesPage() {
               pagination={{
                 pageSize: 10,
                 showSizeChanger: true,
-                showTotal: (t) => `共 ${t} 个站点`,
+                showTotal: (total) => t('共 {count} 个站点', { count: total }),
               }}
             />
           </div>
@@ -589,18 +593,18 @@ export function SitesPage() {
       {/* 编辑弹窗 */}
       <Modal
         open={editing !== null}
-        title={`编辑站点「${editing?.name ?? ''}」`}
+        title={t('编辑站点「{name}」', { name: editing?.name ?? '' })}
         onCancel={() => setEditing(null)}
         onOk={() => void handleSaveEdit()}
         confirmLoading={saving}
-        okText="保存"
-        cancelText="取消"
+        okText={t('保存')}
+        cancelText={t('取消')}
         width={560}
       >
         <Form form={editForm} layout="vertical" className="pt-2">
           <Form.Item
             name="name"
-            label="站点名称"
+            label={t('站点名称')}
             rules={[
               {
                 validator: (_rule, value: string) => {
@@ -613,18 +617,18 @@ export function SitesPage() {
             <Input maxLength={60} showCount />
           </Form.Item>
 
-          <Form.Item name="description" label="站点描述">
+          <Form.Item name="description" label={t('站点描述')}>
             <Input.TextArea rows={3} maxLength={200} showCount />
           </Form.Item>
 
           <Row gutter={12}>
             <Col span={12}>
-              <Form.Item name="domain" label="站点域名">
+              <Form.Item name="domain" label={t('站点域名')}>
                 <Input placeholder="blog.example.com" className="hm-mono" />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="theme" label="当前主题">
+              <Form.Item name="theme" label={t('当前主题')}>
                 <Input placeholder="landscape" className="hm-mono" />
               </Form.Item>
             </Col>
@@ -632,18 +636,18 @@ export function SitesPage() {
 
           <Row gutter={12}>
             <Col span={12}>
-              <Form.Item name="nodeVersion" label="Node 版本">
-                <Input placeholder="系统默认" className="hm-mono" />
+              <Form.Item name="nodeVersion" label={t('Node 版本')}>
+                <Input placeholder={t('系统默认')} className="hm-mono" />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="status" label="站点状态">
+              <Form.Item name="status" label={t('站点状态')}>
                 <Radio.Group
                   optionType="button"
                   buttonStyle="solid"
                   options={[
-                    { label: '正常', value: 'active' },
-                    { label: '已归档', value: 'archived' },
+                    { label: t('正常'), value: 'active' },
+                    { label: t('已归档'), value: 'archived' },
                   ]}
                 />
               </Form.Item>
@@ -653,7 +657,7 @@ export function SitesPage() {
           <Alert
             type="info"
             showIcon
-            message="站点目录不可修改"
+            message={t('站点目录不可修改')}
             description={
               <span className="hm-mono text-xs">
                 {editing?.path}
@@ -663,7 +667,7 @@ export function SitesPage() {
                   icon={<CopyOutlined />}
                   onClick={() => editing && void handleCopyPath(editing)}
                 >
-                  复制
+                  {t('复制')}
                 </Button>
               </span>
             }
@@ -680,7 +684,7 @@ export function SitesPage() {
             <SiteStatusBadge status={detailSite?.status} asTag />
             {detailSite?.id === currentSiteId ? (
               <Tag color="blue" className="m-0">
-                当前站点
+                {t('当前站点')}
               </Tag>
             ) : null}
           </div>
@@ -688,12 +692,12 @@ export function SitesPage() {
         onCancel={() => setDetailSite(null)}
         footer={
           <Space>
-            <Button onClick={() => setDetailSite(null)}>关闭</Button>
+            <Button onClick={() => setDetailSite(null)}>{t('关闭')}</Button>
             <Button
               icon={<FolderOpenOutlined />}
               onClick={() => detailSite && void handleOpenFolder(detailSite)}
             >
-              打开目录
+              {t('打开目录')}
             </Button>
             <Button
               type="primary"
@@ -701,12 +705,12 @@ export function SitesPage() {
               onClick={() => {
                 if (detailSite) {
                   setCurrentSite(detailSite.id);
-                  message.success(`已切换到「${detailSite.name}」`);
+                  message.success(t('已切换到「{name}」', { name: detailSite.name }));
                 }
               }}
               disabled={detailSite?.id === currentSiteId}
             >
-              设为当前站点
+              {t('设为当前站点')}
             </Button>
           </Space>
         }
@@ -717,7 +721,7 @@ export function SitesPage() {
             items={[
               {
                 key: 'overview',
-                label: '概览',
+                label: t('概览'),
                 children: (
                   <div className="space-y-4">
                     <Descriptions
@@ -725,15 +729,15 @@ export function SitesPage() {
                       size="small"
                       bordered
                       items={[
-                        { key: 'name', label: '站点名称', children: detailSite.name },
+                        { key: 'name', label: t('站点名称'), children: detailSite.name },
                         {
                           key: 'status',
-                          label: '状态',
+                          label: t('状态'),
                           children: <SiteStatusBadge status={detailSite.status} asTag />,
                         },
                         {
                           key: 'path',
-                          label: '站点目录',
+                          label: t('站点目录'),
                           span: 2,
                           children: (
                             <span className="hm-mono text-xs break-all">{detailSite.path}</span>
@@ -741,35 +745,35 @@ export function SitesPage() {
                         },
                         {
                           key: 'domain',
-                          label: '域名',
+                          label: t('域名'),
                           children: detailSite.domain ?? '—',
                         },
-                        { key: 'theme', label: '主题', children: detailSite.theme ?? '—' },
+                        { key: 'theme', label: t('主题'), children: detailSite.theme ?? '—' },
                         {
                           key: 'node',
-                          label: 'Node 版本',
-                          children: detailSite.nodeVersion ?? '系统默认',
+                          label: t('Node 版本'),
+                          children: detailSite.nodeVersion ?? t('系统默认'),
                         },
                         {
                           key: 'created',
-                          label: '创建时间',
+                          label: t('创建时间'),
                           children: formatDateTime(detailSite.createdAt),
                         },
                         {
                           key: 'updated',
-                          label: '更新时间',
+                          label: t('更新时间'),
                           children: formatDateTime(detailSite.updatedAt),
                         },
                         {
                           key: 'deploy',
-                          label: '最近部署',
+                          label: t('最近部署'),
                           children: detailSite.lastDeployAt
                             ? formatDateTime(detailSite.lastDeployAt)
-                            : '从未部署',
+                            : t('从未部署'),
                         },
                         {
                           key: 'desc',
-                          label: '描述',
+                          label: t('描述'),
                           span: 2,
                           children: detailSite.description ?? '—',
                         },
@@ -778,22 +782,22 @@ export function SitesPage() {
 
                     <StatGrid columns={3}>
                       <StatCard
-                        title="文章数"
+                        title={t('文章数')}
                         value={stats?.articleCount ?? detailSite.articleCount}
                         icon={<UnorderedListOutlined />}
                       />
                       <StatCard
-                        title="草稿数"
+                        title={t('草稿数')}
                         value={stats?.draftCount ?? detailSite.draftCount}
                         icon={<EditOutlined />}
                         iconColor="#faad14"
                       />
                       <StatCard
-                        title="占用空间"
+                        title={t('占用空间')}
                         value={formatFileSize(stats?.diskUsage ?? 0)}
                         icon={<FolderOpenOutlined />}
                         iconColor="#722ed1"
-                        tooltip="站点目录占用的磁盘空间"
+                        tooltip={t('站点目录占用的磁盘空间')}
                       />
                     </StatGrid>
                   </div>
@@ -801,7 +805,7 @@ export function SitesPage() {
               },
               {
                 key: 'taxonomy',
-                label: `分类与标签${
+                label: `${t('分类与标签')}${
                   stats && (stats.categories.length || stats.tags.length)
                     ? ` (${stats.categories.length}/${stats.tags.length})`
                     : ''
@@ -810,7 +814,7 @@ export function SitesPage() {
                   <div className="space-y-4">
                     <div>
                       <div className="mb-2 text-sm font-medium">
-                        分类（{stats?.categories.length ?? 0}）
+                        {t('分类（{count}）', { count: stats?.categories.length ?? 0 })}
                       </div>
                       {stats && stats.categories.length > 0 ? (
                         <Space size={6} wrap>
@@ -821,7 +825,7 @@ export function SitesPage() {
                           ))}
                         </Space>
                       ) : (
-                        <span className="text-sm hm-text-secondary">暂无分类</span>
+                        <span className="text-sm hm-text-secondary">{t('暂无分类')}</span>
                       )}
                     </div>
 
@@ -829,7 +833,7 @@ export function SitesPage() {
 
                     <div>
                       <div className="mb-2 text-sm font-medium">
-                        标签（{stats?.tags.length ?? 0}）
+                        {t('标签（{count}）', { count: stats?.tags.length ?? 0 })}
                       </div>
                       {stats && stats.tags.length > 0 ? (
                         <Space size={6} wrap>
@@ -840,7 +844,7 @@ export function SitesPage() {
                           ))}
                         </Space>
                       ) : (
-                        <span className="text-sm hm-text-secondary">暂无标签</span>
+                        <span className="text-sm hm-text-secondary">{t('暂无标签')}</span>
                       )}
                     </div>
                   </div>
@@ -848,18 +852,18 @@ export function SitesPage() {
               },
               {
                 key: 'quick',
-                label: '快捷操作',
+                label: t('快捷操作'),
                 children: (
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { label: '文章管理', desc: '撰写与发布文章', path: '/articles' },
-                      { label: '配置管理', desc: '编辑 _config.yml', path: '/config' },
-                      { label: '主题管理', desc: '切换与配置主题', path: '/themes' },
-                      { label: '插件管理', desc: '安装与管理插件', path: '/plugins' },
-                      { label: '文件管理', desc: '浏览站点目录', path: '/files' },
-                      { label: '本地预览', desc: '启动本地服务', path: '/preview' },
-                      { label: '部署配置', desc: '生成 CI/CD 配置', path: '/deploy' },
-                      { label: 'Git 操作', desc: '提交与推送', path: '/git' },
+                      { label: t('文章管理'), desc: t('撰写与发布文章'), path: '/articles' },
+                      { label: t('配置管理'), desc: t('编辑 _config.yml'), path: '/config' },
+                      { label: t('主题管理'), desc: t('切换与配置主题'), path: '/themes' },
+                      { label: t('插件管理'), desc: t('安装与管理插件'), path: '/plugins' },
+                      { label: t('文件管理'), desc: t('浏览站点目录'), path: '/files' },
+                      { label: t('本地预览'), desc: t('启动本地服务'), path: '/preview' },
+                      { label: t('部署配置'), desc: t('生成 CI/CD 配置'), path: '/deploy' },
+                      { label: t('Git 操作'), desc: t('提交与推送'), path: '/git' },
                     ].map((item) => (
                       <Button
                         key={item.path}

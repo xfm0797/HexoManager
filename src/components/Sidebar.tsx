@@ -25,6 +25,7 @@ import {
 } from '@ant-design/icons';
 import { NAV_GROUPS, NAV_ITEMS, APP_META } from '@/constants';
 import { useUiStore, useUnreadCount, useSiteStore } from '@/stores';
+import { useI18n } from '@/i18n';
 
 const { Sider } = Layout;
 
@@ -55,6 +56,7 @@ export function Sidebar() {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const unread = useUnreadCount();
   const currentSiteId = useSiteStore((s) => s.currentSiteId);
+  const { t } = useI18n();
 
   // 当前选中项（匹配最长的路径前缀，保证子路由也能高亮）
   const selectedKey = useMemo(() => {
@@ -92,18 +94,18 @@ export function Sidebar() {
           label:
             item.key === 'notifications' && unread > 0 && !collapsed ? (
               <span className="flex items-center justify-between">
-                <span>{item.label}</span>
+                <span>{t(item.label)}</span>
                 <span className="ml-2 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] text-white">
                   {unread > 99 ? '99+' : unread}
                 </span>
               </span>
             ) : (
-              item.label
+              t(item.label)
             ),
         };
       });
 
-      groups.push({ group: NAV_GROUPS[group], children: groupItems });
+      groups.push({ group: t(NAV_GROUPS[group]), children: groupItems });
     }
 
     return groups.flatMap(({ group, children: groupChildren }) => [
@@ -114,7 +116,7 @@ export function Sidebar() {
         children: groupChildren,
       },
     ]);
-  }, [collapsed, unread, currentSiteId]);
+  }, [collapsed, unread, currentSiteId, t]);
 
   const handleClick: MenuProps['onClick'] = ({ key }) => {
     const item = NAV_ITEMS.find((nav) => nav.key === key);
@@ -165,14 +167,14 @@ export function Sidebar() {
 
         {/* 折叠按钮 */}
         <div className="shrink-0 border-t p-2" style={{ borderColor: 'var(--hm-border)' }}>
-          <Tooltip title={collapsed ? '展开侧栏' : '收起侧栏'} placement="right">
+          <Tooltip title={collapsed ? t('展开侧栏') : t('收起侧栏')} placement="right">
             <Button
               type="text"
               block
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               onClick={toggleSidebar}
             >
-              {collapsed ? null : '收起'}
+              {collapsed ? null : t('收起')}
             </Button>
           </Tooltip>
         </div>

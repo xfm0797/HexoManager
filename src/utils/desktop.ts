@@ -2,10 +2,25 @@
 
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { open as openPath } from '@tauri-apps/plugin-shell';
+import { t } from '@/i18n';
+
+/**
+ * 原生对话框标题取词。
+ *
+ * 调用方可能传中文原文（如 `'选择站点目录'`）也可能传已翻译过的文案，
+ * 这里统一过一遍字典：中文环境原样返回，英文环境命中即翻译，未命中亦原样返回。
+ */
+function dialogTitle(title: string | undefined, fallback: string): string {
+  return t(title ?? fallback);
+}
 
 /** 选择目录，返回绝对路径（取消时返回 null） */
 export async function pickDirectory(title = '选择目录'): Promise<string | null> {
-  const result = await openDialog({ directory: true, multiple: false, title });
+  const result = await openDialog({
+    directory: true,
+    multiple: false,
+    title: dialogTitle(title, '选择目录'),
+  });
   return typeof result === 'string' ? result : null;
 }
 
@@ -17,7 +32,7 @@ export async function pickFile(options?: {
   const result = await openDialog({
     directory: false,
     multiple: false,
-    title: options?.title ?? '选择文件',
+    title: dialogTitle(options?.title, '选择文件'),
     filters: options?.filters,
   });
   return typeof result === 'string' ? result : null;
@@ -31,7 +46,7 @@ export async function pickFiles(options?: {
   const result = await openDialog({
     directory: false,
     multiple: true,
-    title: options?.title ?? '选择文件',
+    title: dialogTitle(options?.title, '选择文件'),
     filters: options?.filters,
   });
   if (Array.isArray(result)) return result;
@@ -45,7 +60,7 @@ export async function pickSavePath(options?: {
   filters?: { name: string; extensions: string[] }[];
 }): Promise<string | null> {
   const result = await saveDialog({
-    title: options?.title ?? '保存文件',
+    title: dialogTitle(options?.title, '保存文件'),
     defaultPath: options?.defaultPath,
     filters: options?.filters,
   });

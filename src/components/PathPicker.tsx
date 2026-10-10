@@ -4,6 +4,7 @@ import { Button, Input, Space } from 'antd';
 import { FolderOpenOutlined, FileSearchOutlined } from '@ant-design/icons';
 import type { InputProps } from 'antd';
 import { pickDirectory, pickFile } from '@/utils/desktop';
+import { useI18n } from '@/i18n';
 
 interface PathPickerProps {
   value?: string;
@@ -27,17 +28,20 @@ export function PathPicker({
   value = '',
   onChange,
   mode = 'directory',
-  placeholder = '请选择目录',
+  placeholder,
   disabled = false,
   filters,
   onPicked,
   status,
 }: PathPickerProps) {
+  const { t } = useI18n();
+  const hint = placeholder ?? t('请选择目录');
+
   const handlePick = async () => {
     const picked =
       mode === 'directory'
-        ? await pickDirectory(placeholder)
-        : await pickFile({ title: placeholder, filters });
+        ? await pickDirectory(hint)
+        : await pickFile({ title: hint, filters });
 
     if (picked) {
       onChange?.(picked);
@@ -50,7 +54,7 @@ export function PathPicker({
       <Input
         value={value}
         onChange={(e) => onChange?.(e.target.value)}
-        placeholder={placeholder}
+        placeholder={hint}
         disabled={disabled}
         status={status}
         className="hm-mono"
@@ -61,7 +65,7 @@ export function PathPicker({
         onClick={handlePick}
         disabled={disabled}
       >
-        选择
+        {t('选择')}
       </Button>
     </Space.Compact>
   );

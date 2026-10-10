@@ -23,6 +23,7 @@
 - [Rust 命令清单](#rust-命令清单)
 - [CI/CD 配置生成](#cicd-配置生成)
 - [版本规范](#版本规范)
+- [界面语言（i18n）](#界面语言i18n)
 - [开发规范](#开发规范)
 - [常见问题](#常见问题)
 
@@ -62,7 +63,7 @@ HexoManager 是一款基于 **Tauri 2.x + React 18** 的跨平台桌面应用，
 | **部署记录** | 历史表格（筛选/排序/搜索）、日志详情抽屉、导出、回滚、成功率与耗时统计 |
 | **关于与更新** | 软件信息、技术栈分层视图、检查更新、下载安装、自动检查开关、忽略版本、更新日志、开源许可 |
 | **消息中心** | 通知列表（按类型聚合）、未读筛选、预览服务管理（打开/停止） |
-| **偏好设置** | 主题模式、编辑器字号、自动保存间隔、危险操作确认、新建站点默认值、**写作模板管理**、本地数据管理 |
+| **偏好设置** | 主题模式、**界面语言（中文 / English / 跟随系统）**、编辑器字号、自动保存间隔、危险操作确认、新建站点默认值、**写作模板管理**、本地数据管理 |
 
 ---
 
@@ -75,12 +76,13 @@ HexoManager 是一款基于 **Tauri 2.x + React 18** 的跨平台桌面应用，
 | React | 18.3.1 | UI 框架 |
 | TypeScript | 5.7.3 | 严格模式，禁止 `any` |
 | Vite | 5.4.11 | 构建工具 |
-| Ant Design | 5.29.3 | 组件库（中文 locale + 明暗主题算法） |
+| Ant Design | 5.29.3 | 组件库（locale 随界面语言切换 + 明暗主题算法） |
 | Tailwind CSS | 3.4.19 | 原子化样式（关闭 preflight 以避免与 AntD reset 冲突） |
 | Zustand | 4.5.7 | 状态管理（6 个 store） |
 | React Router | 6.30.6 | 哈希路由（适配 Tauri 本地协议） |
 | Monaco Editor | 4.7.0 | 代码与 Markdown 编辑器 |
 | react-markdown + remark-gfm | 10.x / 4.x | Markdown 渲染 |
+| 自研 i18n | — | 中英双语，中文原文即词条，无第三方依赖 |
 
 ### 后端（Rust）
 
@@ -166,6 +168,8 @@ npm run tauri:dev
 | `npm run format` | Prettier 格式化 |
 | `npm run build` | 类型检查 + 前端构建（产物在 `dist/`） |
 | `npm run tauri:build` | 打包桌面安装包 |
+| `npm run i18n:merge` | 合并 `src/i18n/locales/_parts/*.json` 词条零件到 `en-US.ts` |
+| `npm run i18n:check` | i18n 覆盖率检查（缺译文 / 译文残留中文时退出码为 1） |
 
 ---
 
@@ -286,7 +290,15 @@ hexo-manager/
 │   ├── types/                        # 类型定义（8 个）
 │   ├── utils/                        # 工具函数（7 个）
 │   ├── constants/                    # 常量与枚举
+│   ├── i18n/                         # 国际化（中文原文即词条）
+│   │   ├── index.ts                  # t() / useI18n() / 语言解析与切换
+│   │   ├── backendMessages.ts        # 后端中文错误的英文映射层
+│   │   └── locales/en-US.ts          # 英文词条字典（由脚本生成，勿手改）
 │   └── styles/global.css             # 全局样式与 CSS 变量
+│
+├── scripts/                          # 开发期脚本（Node，无依赖）
+│   ├── i18n-merge.mjs                # 合并词条零件到 en-US.ts（增量、幂等）
+│   └── i18n-coverage.mjs             # i18n 覆盖率与「译文残留中文」检查
 │
 ├── src-tauri/                        # Tauri 后端（Rust）
 │   ├── Cargo.toml
@@ -489,6 +501,50 @@ git push origin v1.0.0
 遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，分类包括：
 
 `Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`
+
+---
+
+## 界面语言（i18n）
+
+应用支持**简体中文与英文**两套界面，默认**跟随系统语言**：
+
+| 系统语言（`LANG` / `LC_*` → webview 的 `navigator.language`） | 默认界面 |
+| --- | --- |
+| 以 `zh` 开头（`zh-CN`、`zh-TW`、`zh_CN.UTF-8`…） | 简体中文 |
+| 其余一切（`en_US`、`de_DE`、`C`、`POSIX`、空值…） | **英文** |
+
+也可以在「偏好设置 → 常规 → 界面语言」中固定为「简体中文 / English / 跟随系统」，选择会写入 `localStorage`（键 `hexo-manager:locale`）。系统语言变化时（`languagechange` 事件），偏好为「跟随系统」的会实时跟进。
+
+### 实现方式：中文原文即词条
+
+源码里保留中文原文，只用 `t()` 包一层；英文译文集中在 `src/i18n/locales/en-US.ts`，**键就是中文原文**：
+
+```tsx
+const { t } = useI18n();           // 组件内：订阅语言变化，切换语言时重渲染
+t('共 {count} 篇', { count: 3 });   // 支持 {name} 占位符插值
+
+import { t } from '@/i18n';        // 模块级 / 非组件代码直接用（非响应式）
+```
+
+- 中文环境：原样返回，零查表开销
+- 英文环境：查字典命中即返回英文，**未命中则原样回退中文**（永不显示 key，永不抛错）
+- 切换语言的副作用（`dayjs.locale`、`<html lang>`、AntD `ConfigProvider` locale、窗口标题）由 `src/i18n` 与 `src/App.tsx` 统一处理
+- 字典在加载时一次性求值并参与 tree-shaking，不引入任何第三方 i18n 依赖
+
+### 新增文案的流程
+
+1. 代码里把文案用 `t('中文原文')` 包起来
+2. 把「中文原文 → 英文译文」写进 `src/i18n/locales/_parts/` 下任意一个 `.json`（多个文件可并行准备）
+3. 跑 `node scripts/i18n-merge.mjs` 增量合并进 `en-US.ts`（**不要手工编辑该文件**，零件目录合并后会自动清空）
+4. 跑 `node scripts/i18n-coverage.mjs` 校验覆盖率：存在缺译文时退出码为 1，可直接用作 CI 卡口
+
+### 哪些中文**不应该**翻译
+
+值一旦会被写进文件或数据库、作为参数传给 Rust 命令、或参与比较与匹配，就必须保持原样。典型例子：枚举与状态值（`published`、`active`）、CSS 类名、`localStorage` 键、URL、正则、文件路径、Git 分支名、配置键名、日志内容、包名与主题名。这类字符串**不要**用 `t()` 包裹。
+
+### 后端错误的英文映射
+
+Rust 侧命令统一返回 `Result<T, String>`，错误文案是中文。为避免改动 60+ 个命令签名，新增了一个**过渡层** `src/i18n/backendMessages.ts`：`src/services/invoke.ts` 在 catch 中调用 `translateBackendMessage()`，按「精确表 + 带参正则规则表」映射为英文，未命中则原样返回中文。彻底解法是把 Rust 侧错误改为错误码枚举，届时该文件即可移除。
 
 ---
 

@@ -41,6 +41,7 @@ import {
 } from '@/components';
 import { usePlugins } from '@/hooks';
 import { useSiteStore } from '@/stores';
+import { useI18n } from '@/i18n';
 import type { Plugin } from '@/types';
 import { formatDateTime } from '@/utils/format';
 import { openWithSystem } from '@/utils/desktop';
@@ -124,6 +125,7 @@ const RECOMMENDED_PLUGINS = [
 /** 插件管理页面 */
 export function PluginsPage() {
   const { message, modal } = AntdApp.useApp();
+  const { t } = useI18n();
 
   const currentSiteId = useSiteStore((s) => s.currentSiteId);
   const currentSite = useSiteStore((s) => s.sites.find((site) => site.id === s.currentSiteId));
@@ -152,11 +154,15 @@ export function PluginsPage() {
       const lower = keyword.toLowerCase();
       return (
         item.name.toLowerCase().includes(lower) ||
+        // 中英文两套文案都要能命中，否则英文界面下搜 "sitemap" 找不到「站点地图」
         item.display.toLowerCase().includes(lower) ||
-        item.description.toLowerCase().includes(lower)
+        t(item.display).toLowerCase().includes(lower) ||
+        item.description.toLowerCase().includes(lower) ||
+        t(item.description).toLowerCase().includes(lower)
       );
     });
-  }, [categoryFilter, keyword]);
+    // t 随语言切换更换函数身份，因此语言变化会自动重算搜索结果
+  }, [categoryFilter, keyword, t]);
 
   const filteredPlugins = useMemo(() => {
     if (!keyword.trim()) return plugins;
@@ -166,7 +172,7 @@ export function PluginsPage() {
 
   const handleInstall = async (name: string) => {
     if (!name.trim()) {
-      message.warning('请输入插件名称');
+      message.warning(t('请输入插件名称'));
       return;
     }
 
@@ -182,18 +188,18 @@ export function PluginsPage() {
 
   const handleUninstall = (plugin: Plugin) => {
     modal.confirm({
-      title: `卸载插件「${plugin.name}」？`,
-      content: '将从 package.json 中移除依赖并卸载该 npm 包，站点可能需要重新生成。',
-      okText: '卸载',
+      title: t('卸载插件「{name}」？', { name: plugin.name }),
+      content: t('将从 package.json 中移除依赖并卸载该 npm 包，站点可能需要重新生成。'),
+      okText: t('卸载'),
       okButtonProps: { danger: true },
-      cancelText: '取消',
+      cancelText: t('取消'),
       onOk: () => uninstall(plugin.name),
     });
   };
 
   const columns: ColumnsType<Plugin> = [
     {
-      title: '插件',
+      title: t('插件'),
       dataIndex: 'name',
       key: 'name',
       render: (name: string, plugin) => {
@@ -208,12 +214,12 @@ export function PluginsPage() {
                 <span className="hm-mono truncate text-sm">{name}</span>
                 {recommended ? (
                   <Tag color="blue" className="m-0" style={{ fontSize: 11 }}>
-                    {recommended.category}
+                    {t(recommended.category)}
                   </Tag>
                 ) : null}
               </div>
               {recommended ? (
-                <div className="text-xs hm-text-secondary">{recommended.description}</div>
+                <div className="text-xs hm-text-secondary">{t(recommended.description)}</div>
               ) : plugin.config ? (
                 <div className="truncate text-xs hm-text-secondary">{plugin.config}</div>
               ) : null}
@@ -223,7 +229,7 @@ export function PluginsPage() {
       },
     },
     {
-      title: '版本',
+      title: t('版本'),
       dataIndex: 'version',
       key: 'version',
       width: 100,
@@ -237,7 +243,7 @@ export function PluginsPage() {
         ),
     },
     {
-      title: '启用',
+      title: t('启用'),
       dataIndex: 'isActive',
       key: 'isActive',
       width: 90,
@@ -246,13 +252,13 @@ export function PluginsPage() {
           size="small"
           checked={isActive}
           onChange={(checked) => void toggle(plugin.name, checked)}
-          checkedChildren="启用"
-          unCheckedChildren="停用"
+          checkedChildren={t('启用')}
+          unCheckedChildren={t('停用')}
         />
       ),
     },
     {
-      title: '安装时间',
+      title: t('安装时间'),
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 150,
@@ -261,12 +267,12 @@ export function PluginsPage() {
       ),
     },
     {
-      title: '操作',
+      title: t('操作'),
       key: 'actions',
       width: 150,
       render: (_value, plugin) => (
         <Space size={2}>
-          <Tooltip title="查看详情">
+          <Tooltip title={t('查看详情')}>
             <Button
               type="text"
               size="small"
@@ -274,7 +280,7 @@ export function PluginsPage() {
               onClick={() => setDetailPlugin(plugin)}
             />
           </Tooltip>
-          <Tooltip title="打开 npm 页面">
+          <Tooltip title={t('打开 npm 页面')}>
             <Button
               type="text"
               size="small"
@@ -282,7 +288,7 @@ export function PluginsPage() {
               onClick={() => void openWithSystem(`https://www.npmjs.com/package/${plugin.name}`)}
             />
           </Tooltip>
-          <Tooltip title="卸载">
+          <Tooltip title={t('卸载')}>
             <Button
               type="text"
               size="small"
@@ -298,9 +304,11 @@ export function PluginsPage() {
 
   return (
     <PageContainer
-      title="插件管理"
+      title={t('插件管理')}
       description={
-        currentSite ? `${currentSite.name} · 共 ${plugins.length} 个插件` : '请先选择站点'
+        currentSite
+          ? t('{name} · 共 {count} 个插件', { name: currentSite.name, count: plugins.length })
+          : t('请先选择站点')
       }
       card={false}
       flush
@@ -312,7 +320,7 @@ export function PluginsPage() {
             onClick={() => setInstallOpen(true)}
             disabled={currentSiteId === null}
           >
-            安装插件
+            {t('安装插件')}
           </Button>
           <Button
             icon={<ReloadOutlined />}
@@ -320,7 +328,7 @@ export function PluginsPage() {
             loading={busy}
             disabled={currentSiteId === null}
           >
-            刷新
+            {t('刷新')}
           </Button>
         </Space>
       }
@@ -329,32 +337,32 @@ export function PluginsPage() {
         <div className="hm-surface">
           <EmptyState
             kind="articles"
-            title="请先选择站点"
-            description="在顶栏选择站点后管理其插件"
+            title={t('请先选择站点')}
+            description={t('在顶栏选择站点后管理其插件')}
           />
         </div>
       ) : (
         <div className="space-y-4">
           <StatGrid columns={4}>
-            <StatCard title="已安装插件" value={plugins.length} icon={<ApiOutlined />} />
+            <StatCard title={t('已安装插件')} value={plugins.length} icon={<ApiOutlined />} />
             <StatCard
-              title="已启用"
+              title={t('已启用')}
               value={plugins.filter((p) => p.isActive).length}
               icon={<CheckCircleOutlined />}
               iconColor="#52c41a"
             />
             <StatCard
-              title="已停用"
+              title={t('已停用')}
               value={plugins.filter((p) => !p.isActive).length}
               icon={<ApiOutlined />}
               iconColor="#8c8c8c"
             />
             <StatCard
-              title="推荐未安装"
+              title={t('推荐未安装')}
               value={RECOMMENDED_PLUGINS.filter((p) => !installedNames.has(p.name)).length}
               icon={<DownloadOutlined />}
               iconColor="#fa8c16"
-              tooltip="常用插件中尚未安装的数量"
+              tooltip={t('常用插件中尚未安装的数量')}
             />
           </StatGrid>
 
@@ -363,14 +371,14 @@ export function PluginsPage() {
             <Col xs={24} lg={15}>
               <Card
                 size="small"
-                title="已安装插件"
+                title={t('已安装插件')}
                 extra={
                   <Space size={8}>
                     <Input
                       size="small"
                       allowClear
                       prefix={<SearchOutlined className="opacity-50" />}
-                      placeholder="搜索插件"
+                      placeholder={t('搜索插件')}
                       value={keyword}
                       onChange={(e) => setKeyword(e.target.value)}
                       style={{ width: 160 }}
@@ -380,8 +388,8 @@ export function PluginsPage() {
                       value={viewMode}
                       onChange={(v) => setViewMode(v as 'table' | 'grid')}
                       options={[
-                        { label: '列表', value: 'table' },
-                        { label: '卡片', value: 'grid' },
+                        { label: t('列表'), value: 'table' },
+                        { label: t('卡片'), value: 'grid' },
                       ]}
                     />
                   </Space>
@@ -396,11 +404,13 @@ export function PluginsPage() {
                   <EmptyState
                     kind={keyword ? 'search' : 'articles'}
                     compact
-                    title={keyword ? '没有匹配的插件' : '还没有安装插件'}
+                    title={keyword ? t('没有匹配的插件') : t('还没有安装插件')}
                     description={
-                      keyword ? '换个关键词试试' : '从右侧推荐列表中选择常用插件快速安装'
+                      keyword
+                        ? t('换个关键词试试')
+                        : t('从右侧推荐列表中选择常用插件快速安装')
                     }
-                    actionText={keyword ? undefined : '安装插件'}
+                    actionText={keyword ? undefined : t('安装插件')}
                     onAction={keyword ? undefined : () => setInstallOpen(true)}
                     onRefresh={keyword ? () => setKeyword('') : undefined}
                   />
@@ -437,11 +447,11 @@ export function PluginsPage() {
                       >
                         <div className="space-y-1.5 text-xs">
                           <div className="flex justify-between">
-                            <span className="hm-text-secondary">版本</span>
+                            <span className="hm-text-secondary">{t('版本')}</span>
                             <span className="hm-mono">{plugin.version ?? '—'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="hm-text-secondary">安装时间</span>
+                            <span className="hm-text-secondary">{t('安装时间')}</span>
                             <span>{formatDateTime(plugin.createdAt)}</span>
                           </div>
                         </div>
@@ -480,9 +490,11 @@ export function PluginsPage() {
             <Col xs={24} lg={9}>
               <Card
                 size="small"
-                title="常用插件推荐"
+                title={t('常用插件推荐')}
                 extra={
-                  <span className="text-xs hm-text-secondary">{filteredRecommended.length} 项</span>
+                  <span className="text-xs hm-text-secondary">
+                    {t('{count} 项', { count: filteredRecommended.length })}
+                  </span>
                 }
                 styles={{ body: { padding: 0, maxHeight: 620, overflow: 'auto' } }}
               >
@@ -493,14 +505,14 @@ export function PluginsPage() {
                     value={categoryFilter}
                     onChange={(v) => setCategoryFilter(String(v))}
                     options={categories.map((c) => ({
-                      label: c === 'all' ? '全部' : c,
+                      label: c === 'all' ? t('全部') : t(c),
                       value: c,
                     }))}
                   />
                 </div>
 
                 {filteredRecommended.length === 0 ? (
-                  <EmptyState kind="search" compact title="没有匹配的插件" />
+                  <EmptyState kind="search" compact title={t('没有匹配的插件')} />
                 ) : (
                   <List
                     size="small"
@@ -511,9 +523,9 @@ export function PluginsPage() {
                         <List.Item className="px-3">
                           <div className="w-full">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-sm font-medium">{item.display}</span>
+                              <span className="text-sm font-medium">{t(item.display)}</span>
                               <Tag className="m-0" style={{ fontSize: 11 }}>
-                                {item.category}
+                                {t(item.category)}
                               </Tag>
                             </div>
 
@@ -522,7 +534,7 @@ export function PluginsPage() {
                             </div>
 
                             <p className="mt-1 mb-1.5 text-xs hm-text-secondary">
-                              {item.description}
+                              {t(item.description)}
                             </p>
 
                             <div className="flex items-center justify-end gap-2">
@@ -542,7 +554,7 @@ export function PluginsPage() {
                                 loading={installing && installName === item.name}
                                 onClick={() => void handleInstall(item.name)}
                               >
-                                {installed ? '已安装' : '安装'}
+                                {installed ? t('已安装') : t('安装')}
                               </Button>
                             </div>
                           </div>
@@ -557,12 +569,14 @@ export function PluginsPage() {
                 className="mt-4"
                 type="info"
                 showIcon
-                message="插件说明"
+                message={t('插件说明')}
                 description={
                   <ul className="mt-1 mb-0 list-disc pl-4 text-xs leading-relaxed">
-                    <li>插件通过 npm 安装到站点目录，卸载时会同步更新 package.json</li>
-                    <li>停用插件只是逻辑标记，如需完全移除请使用「卸载」</li>
-                    <li>安装或卸载后建议重新构建站点（hexo clean &amp;&amp; hexo generate）</li>
+                    <li>{t('插件通过 npm 安装到站点目录，卸载时会同步更新 package.json')}</li>
+                    <li>{t('停用插件只是逻辑标记，如需完全移除请使用「卸载」')}</li>
+                    <li>
+                      {t('安装或卸载后建议重新构建站点（hexo clean && hexo generate）')}
+                    </li>
                   </ul>
                 }
               />
@@ -574,23 +588,23 @@ export function PluginsPage() {
       {/* 安装插件弹窗 */}
       <Modal
         open={installOpen}
-        title="安装插件"
+        title={t('安装插件')}
         onCancel={() => setInstallOpen(false)}
         onOk={() => void handleInstall(installName)}
         confirmLoading={installing}
-        okText="开始安装"
-        cancelText="取消"
+        okText={t('开始安装')}
+        cancelText={t('取消')}
         width={560}
       >
         <div className="space-y-4 pt-2">
           <div>
-            <div className="mb-2 text-sm">npm 包名</div>
+            <div className="mb-2 text-sm">{t('npm 包名')}</div>
             <Input
               autoFocus
               value={installName}
               onChange={(e) => setInstallName(e.target.value)}
               onPressEnter={() => void handleInstall(installName)}
-              placeholder="如 hexo-generator-feed"
+              placeholder={t('如 hexo-generator-feed')}
               className="hm-mono"
               prefix={<ApiOutlined />}
               allowClear
@@ -600,10 +614,10 @@ export function PluginsPage() {
           <Alert
             type="info"
             showIcon
-            message="安装命令"
+            message={t('安装命令')}
             description={
               <CodeBlock
-                code={`cd "${currentSite?.path ?? '<站点目录>'}"\nnpm install ${installName || '<包名>'} --save`}
+                code={`cd "${currentSite?.path ?? t('<站点目录>')}"\nnpm install ${installName || t('<包名>')} --save`}
                 language="shell"
                 maxHeight={90}
               />
@@ -613,7 +627,7 @@ export function PluginsPage() {
           <Divider className="my-2" />
 
           <div>
-            <div className="mb-2 text-xs hm-text-secondary">快速选择常用插件</div>
+            <div className="mb-2 text-xs hm-text-secondary">{t('快速选择常用插件')}</div>
             <Space size={4} wrap>
               {RECOMMENDED_PLUGINS.filter((p) => !installedNames.has(p.name))
                 .slice(0, 10)
@@ -641,7 +655,7 @@ export function PluginsPage() {
         width={620}
         footer={
           <Space>
-            <Button onClick={() => setDetailPlugin(null)}>关闭</Button>
+            <Button onClick={() => setDetailPlugin(null)}>{t('关闭')}</Button>
             {detailPlugin ? (
               <Button
                 icon={<ExportOutlined />}
@@ -649,7 +663,7 @@ export function PluginsPage() {
                   void openWithSystem(`https://www.npmjs.com/package/${detailPlugin.name}`)
                 }
               >
-                npm 页面
+                {t('npm 页面')}
               </Button>
             ) : null}
             {detailPlugin ? (
@@ -661,7 +675,7 @@ export function PluginsPage() {
                   setDetailPlugin(null);
                 }}
               >
-                卸载
+                {t('卸载')}
               </Button>
             ) : null}
           </Space>
@@ -671,32 +685,32 @@ export function PluginsPage() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="hm-text-secondary">名称</span>
+                <span className="hm-text-secondary">{t('名称')}</span>
                 <span className="hm-mono text-xs">{detailPlugin.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="hm-text-secondary">版本</span>
-                <span className="hm-mono text-xs">{detailPlugin.version ?? '未知'}</span>
+                <span className="hm-text-secondary">{t('版本')}</span>
+                <span className="hm-mono text-xs">{detailPlugin.version ?? t('未知')}</span>
               </div>
               <div className="flex justify-between">
-                <span className="hm-text-secondary">状态</span>
+                <span className="hm-text-secondary">{t('状态')}</span>
                 <Tag color={detailPlugin.isActive ? 'green' : 'default'} className="m-0">
-                  {detailPlugin.isActive ? '已启用' : '已停用'}
+                  {detailPlugin.isActive ? t('已启用') : t('已停用')}
                 </Tag>
               </div>
               <div className="flex justify-between">
-                <span className="hm-text-secondary">安装时间</span>
+                <span className="hm-text-secondary">{t('安装时间')}</span>
                 <span className="text-xs">{formatDateTime(detailPlugin.createdAt)}</span>
               </div>
             </div>
 
             {detailPlugin.config ? (
               <div>
-                <div className="mb-1 text-xs hm-text-secondary">插件配置片段</div>
+                <div className="mb-1 text-xs hm-text-secondary">{t('插件配置片段')}</div>
                 <CodeBlock code={detailPlugin.config} language="yaml" maxHeight={200} lineNumbers />
               </div>
             ) : (
-              <Alert type="info" showIcon message="该插件没有独立的配置片段" />
+              <Alert type="info" showIcon message={t('该插件没有独立的配置片段')} />
             )}
           </div>
         ) : null}

@@ -46,12 +46,14 @@ import type { DeployLog } from '@/types';
 import { formatDateTime, formatDuration, formatRelative } from '@/utils/format';
 import { copyToClipboard, pickSavePath } from '@/utils/desktop';
 import { fileService } from '@/services';
+import { useI18n } from '@/i18n';
 
 type StatusFilter = 'all' | 'success' | 'failed' | 'running';
 
 /** 部署记录页面 */
 export function LogsPage() {
   const { message, modal } = AntdApp.useApp();
+  const { t } = useI18n();
 
   const currentSiteId = useSiteStore((s) => s.currentSiteId);
   const currentSite = useSiteStore((s) => s.sites.find((site) => site.id === s.currentSiteId));
@@ -109,30 +111,31 @@ export function LogsPage() {
 
   const handleRollback = (log: DeployLog) => {
     if (!log.commitHash) {
-      message.warning('该记录没有关联的提交哈希，无法回滚');
+      message.warning(t('该记录没有关联的提交哈希，无法回滚'));
       return;
     }
     modal.confirm({
-      title: '回滚到该次部署？',
+      title: t('回滚到该次部署？'),
       content: (
         <div className="pt-1 text-sm">
           <div>
-            提交：<span className="hm-mono">{log.commitHash.slice(0, 8)}</span>
+            {t('提交：')}
+            <span className="hm-mono">{log.commitHash.slice(0, 8)}</span>
           </div>
-          <div className="mt-1">时间：{formatDateTime(log.createdAt)}</div>
+          <div className="mt-1">{t('时间：{time}', { time: formatDateTime(log.createdAt) })}</div>
           <div className="mt-2 hm-text-secondary">
-            将执行 git reset --hard，该提交之后的改动都会被丢弃。
+            {t('将执行 git reset --hard，该提交之后的改动都会被丢弃。')}
           </div>
         </div>
       ),
-      okText: '确认回滚',
+      okText: t('确认回滚'),
       okButtonProps: { danger: true },
-      cancelText: '取消',
+      cancelText: t('取消'),
       onOk: async () => {
         if (currentSiteId === null) return;
         try {
           await rollback(currentSiteId, log.commitHash as string);
-          message.success('已回滚到指定提交');
+          message.success(t('已回滚到指定提交'));
           await reload();
         } catch (e) {
           message.error(e instanceof Error ? e.message : String(e));
@@ -143,30 +146,30 @@ export function LogsPage() {
 
   const handleExport = async (log: DeployLog) => {
     const target = await pickSavePath({
-      title: '导出部署日志',
+      title: t('导出部署日志'),
       defaultPath: `deploy-${log.id}-${(log.commitHash ?? 'na').slice(0, 7)}.log`,
-      filters: [{ name: '日志文件', extensions: ['log', 'txt'] }],
+      filters: [{ name: t('日志文件'), extensions: ['log', 'txt'] }],
     });
     if (!target) return;
 
     const lines = [
-      `# 部署记录 #${log.id}`,
-      `站点: ${currentSite?.name ?? '未知'} (${currentSite?.path ?? '-'})`,
-      `状态: ${log.status}`,
-      `提交: ${log.commitHash ?? '-'}`,
-      `分支: ${log.branch ?? '-'}`,
-      `提交信息: ${log.commitMessage ?? '-'}`,
-      `耗时: ${formatDuration(log.durationMs)}`,
-      `创建时间: ${formatDateTime(log.createdAt)}`,
-      log.errorMessage ? `错误: ${log.errorMessage}` : '',
+      `# ${t('部署记录 #{id}', { id: log.id })}`,
+      `${t('站点')}: ${currentSite?.name ?? t('未知')} (${currentSite?.path ?? '-'})`,
+      `${t('状态')}: ${log.status}`,
+      `${t('提交')}: ${log.commitHash ?? '-'}`,
+      `${t('分支')}: ${log.branch ?? '-'}`,
+      `${t('提交信息')}: ${log.commitMessage ?? '-'}`,
+      `${t('耗时')}: ${formatDuration(log.durationMs)}`,
+      `${t('创建时间')}: ${formatDateTime(log.createdAt)}`,
+      log.errorMessage ? `${t('错误')}: ${log.errorMessage}` : '',
       '',
-      '----- 输出 -----',
-      log.output ?? '(无输出)',
+      `----- ${t('输出')} -----`,
+      log.output ?? t('(无输出)'),
     ].filter((line) => line !== '');
 
     try {
       await fileService.write(target, lines.join('\n'));
-      message.success('日志已导出');
+      message.success(t('日志已导出'));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }
@@ -174,33 +177,33 @@ export function LogsPage() {
 
   const columns: ColumnsType<DeployLog> = [
     {
-      title: '状态',
+      title: t('状态'),
       dataIndex: 'status',
       key: 'status',
       width: 100,
       filters: [
-        { text: '成功', value: 'success' },
-        { text: '失败', value: 'failed' },
-        { text: '进行中', value: 'running' },
+        { text: t('成功'), value: 'success' },
+        { text: t('失败'), value: 'failed' },
+        { text: t('进行中'), value: 'running' },
       ],
       onFilter: (value, record) => record.status === value,
       render: (status: string) => <DeployStatusBadge status={status} asTag />,
     },
     {
-      title: '提交信息',
+      title: t('提交信息'),
       dataIndex: 'commitMessage',
       key: 'commitMessage',
       ellipsis: true,
       render: (text: string | null, log) => (
         <div className="min-w-0">
-          <div className="truncate text-sm">{text || '（无提交信息）'}</div>
+          <div className="truncate text-sm">{text || t('（无提交信息）')}</div>
           <div className="mt-0.5 flex items-center gap-2 text-xs hm-text-secondary">
             {log.commitHash ? (
               <span
                 className="hm-mono cursor-pointer hover:underline"
                 onClick={() =>
                   void copyToClipboard(log.commitHash as string).then((ok) =>
-                    ok ? message.success('提交哈希已复制') : undefined,
+                    ok ? message.success(t('提交哈希已复制')) : undefined,
                   )
                 }
               >
@@ -213,7 +216,7 @@ export function LogsPage() {
       ),
     },
     {
-      title: '耗时',
+      title: t('耗时'),
       dataIndex: 'durationMs',
       key: 'durationMs',
       width: 100,
@@ -223,7 +226,7 @@ export function LogsPage() {
       ),
     },
     {
-      title: '时间',
+      title: t('时间'),
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 170,
@@ -236,12 +239,12 @@ export function LogsPage() {
       ),
     },
     {
-      title: '操作',
+      title: t('操作'),
       key: 'actions',
       width: 150,
       render: (_v, log) => (
         <Space size={2}>
-          <Tooltip title="查看详情">
+          <Tooltip title={t('查看详情')}>
             <Button
               type="text"
               size="small"
@@ -249,7 +252,7 @@ export function LogsPage() {
               onClick={() => setDetail(log)}
             />
           </Tooltip>
-          <Tooltip title="导出日志">
+          <Tooltip title={t('导出日志')}>
             <Button
               type="text"
               size="small"
@@ -257,12 +260,12 @@ export function LogsPage() {
               onClick={() => void handleExport(log)}
             />
           </Tooltip>
-          <Tooltip title="回滚到该提交">
+          <Tooltip title={t('回滚到该提交')}>
             <Popconfirm
-              title="回滚到该次部署？"
-              description="该提交之后的改动都会被丢弃。"
-              okText="回滚"
-              cancelText="取消"
+              title={t('回滚到该次部署？')}
+              description={t('该提交之后的改动都会被丢弃。')}
+              okText={t('回滚')}
+              cancelText={t('取消')}
               okButtonProps={{ danger: true }}
               onConfirm={() => handleRollback(log)}
             >
@@ -282,14 +285,14 @@ export function LogsPage() {
 
   return (
     <PageContainer
-      title="部署记录"
+      title={t('部署记录')}
       description={
         currentSite ? (
           <span>
-            {currentSite.name} · 共 {logs.length} 条部署记录
+            {t('{name} · 共 {count} 条部署记录', { name: currentSite.name, count: logs.length })}
           </span>
         ) : (
-          '请先选择站点'
+          t('请先选择站点')
         )
       }
       card={false}
@@ -302,14 +305,14 @@ export function LogsPage() {
             onChange={setLimit}
             style={{ width: 120 }}
             options={[
-              { label: '最近 20 条', value: 20 },
-              { label: '最近 50 条', value: 50 },
-              { label: '最近 100 条', value: 100 },
-              { label: '最近 200 条', value: 200 },
+              { label: t('最近 20 条'), value: 20 },
+              { label: t('最近 50 条'), value: 50 },
+              { label: t('最近 100 条'), value: 100 },
+              { label: t('最近 200 条'), value: 200 },
             ]}
           />
           <Button icon={<ReloadOutlined />} onClick={() => void reload()} loading={loading}>
-            刷新
+            {t('刷新')}
           </Button>
         </Space>
       }
@@ -318,42 +321,50 @@ export function LogsPage() {
         <div className="hm-surface">
           <EmptyState
             kind="articles"
-            title="请先选择站点"
-            description="在顶栏选择站点后查看其部署历史"
+            title={t('请先选择站点')}
+            description={t('在顶栏选择站点后查看其部署历史')}
           />
         </div>
       ) : (
         <div className="space-y-4">
           <StatGrid columns={4}>
             <StatCard
-              title="部署总数"
+              title={t('部署总数')}
               value={logs.length}
               icon={<HistoryOutlined />}
               iconColor="#3366ff"
-              footer={logs[0] ? `最近一次 ${formatRelative(logs[0].createdAt)}` : '暂无部署'}
+              footer={
+                logs[0]
+                  ? t('最近一次 {time}', { time: formatRelative(logs[0].createdAt) })
+                  : t('暂无部署')
+              }
             />
             <StatCard
-              title="成功"
+              title={t('成功')}
               value={successCount}
               icon={<CheckCircleOutlined />}
               iconColor="#52c41a"
               footer={
-                logs.length > 0 ? `成功率 ${Math.round((successCount / logs.length) * 100)}%` : '—'
+                logs.length > 0
+                  ? t('成功率 {percent}%', {
+                      percent: Math.round((successCount / logs.length) * 100),
+                    })
+                  : '—'
               }
             />
             <StatCard
-              title="失败"
+              title={t('失败')}
               value={failedCount}
               icon={<CloseCircleOutlined />}
               iconColor="#ff4d4f"
-              footer={failedCount > 0 ? '建议查看日志定位问题' : '暂无失败记录'}
+              footer={failedCount > 0 ? t('建议查看日志定位问题') : t('暂无失败记录')}
             />
             <StatCard
-              title="平均耗时"
+              title={t('平均耗时')}
               value={avgDuration > 0 ? formatDuration(avgDuration) : '—'}
               icon={<ThunderboltOutlined />}
               iconColor="#fa8c16"
-              tooltip="仅统计耗时大于 0 的成功部署记录"
+              tooltip={t('仅统计耗时大于 0 的成功部署记录')}
             />
           </StatGrid>
 
@@ -361,14 +372,16 @@ export function LogsPage() {
             <Alert
               type="warning"
               showIcon
-              message={`有 ${failedCount} 次部署失败`}
-              description="常见原因：Hexo 构建报错、Git 凭据未配置、远程分支冲突。点击失败记录查看完整输出。"
+              message={t('有 {count} 次部署失败', { count: failedCount })}
+              description={t(
+                '常见原因：Hexo 构建报错、Git 凭据未配置、远程分支冲突。点击失败记录查看完整输出。',
+              )}
             />
           ) : null}
 
           <Card
             size="small"
-            title="历史记录"
+            title={t('历史记录')}
             extra={
               <Space>
                 <Segmented
@@ -376,17 +389,17 @@ export function LogsPage() {
                   value={statusFilter}
                   onChange={(value) => setStatusFilter(value as StatusFilter)}
                   options={[
-                    { label: '全部', value: 'all' },
-                    { label: '成功', value: 'success' },
-                    { label: '失败', value: 'failed' },
-                    { label: '进行中', value: 'running' },
+                    { label: t('全部'), value: 'all' },
+                    { label: t('成功'), value: 'success' },
+                    { label: t('失败'), value: 'failed' },
+                    { label: t('进行中'), value: 'running' },
                   ]}
                 />
                 <Input
                   allowClear
                   size="small"
                   prefix={<SearchOutlined />}
-                  placeholder="搜索提交信息或哈希"
+                  placeholder={t('搜索提交信息或哈希')}
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
                   style={{ width: 200 }}
@@ -407,11 +420,11 @@ export function LogsPage() {
                   <EmptyState
                     kind="logs"
                     compact
-                    title={logs.length === 0 ? '暂无部署记录' : '没有匹配的记录'}
+                    title={logs.length === 0 ? t('暂无部署记录') : t('没有匹配的记录')}
                     description={
                       logs.length === 0
-                        ? '在部署配置页执行一次部署后，这里会记录完整过程。'
-                        : '换个关键词或清空筛选条件试试。'
+                        ? t('在部署配置页执行一次部署后，这里会记录完整过程。')
+                        : t('换个关键词或清空筛选条件试试。')
                     }
                   />
                 ),
@@ -421,7 +434,7 @@ export function LogsPage() {
 
           <Row gutter={16}>
             <Col xs={24} lg={12}>
-              <Card size="small" title="最近一次成功部署">
+              <Card size="small" title={t('最近一次成功部署')}>
                 {lastSuccess ? (
                   <Descriptions
                     size="small"
@@ -429,12 +442,12 @@ export function LogsPage() {
                     items={[
                       {
                         key: 'time',
-                        label: '部署时间',
+                        label: t('部署时间'),
                         children: formatDateTime(lastSuccess.createdAt),
                       },
                       {
                         key: 'commit',
-                        label: '提交',
+                        label: t('提交'),
                         children: (
                           <span className="hm-mono text-xs">
                             {lastSuccess.commitHash?.slice(0, 12) ?? '—'}
@@ -443,31 +456,31 @@ export function LogsPage() {
                       },
                       {
                         key: 'message',
-                        label: '提交信息',
+                        label: t('提交信息'),
                         children: lastSuccess.commitMessage ?? '—',
                       },
                       {
                         key: 'branch',
-                        label: '分支',
+                        label: t('分支'),
                         children: <span className="hm-mono">{lastSuccess.branch ?? '—'}</span>,
                       },
                       {
                         key: 'duration',
-                        label: '耗时',
+                        label: t('耗时'),
                         children: formatDuration(lastSuccess.durationMs),
                       },
                     ]}
                   />
                 ) : (
-                  <EmptyState kind="logs" compact title="暂无成功部署记录" />
+                  <EmptyState kind="logs" compact title={t('暂无成功部署记录')} />
                 )}
               </Card>
             </Col>
 
             <Col xs={24} lg={12}>
-              <Card size="small" title="部署节奏">
+              <Card size="small" title={t('部署节奏')}>
                 <div className="space-y-2">
-                  <div className="text-xs hm-text-secondary">最近 8 次部署状态</div>
+                  <div className="text-xs hm-text-secondary">{t('最近 8 次部署状态')}</div>
                   <div className="flex flex-wrap gap-1">
                     {logs.slice(0, 8).map((log) => (
                       <Tooltip
@@ -492,17 +505,17 @@ export function LogsPage() {
                       </Tooltip>
                     ))}
                     {logs.length === 0 ? (
-                      <span className="text-xs hm-text-secondary">暂无数据</span>
+                      <span className="text-xs hm-text-secondary">{t('暂无数据')}</span>
                     ) : null}
                   </div>
                   <div className="pt-1 text-xs hm-text-secondary">
-                    点击色块可查看该次部署的完整日志
+                    {t('点击色块可查看该次部署的完整日志')}
                   </div>
                 </div>
 
                 {currentSite ? (
                   <>
-                    <div className="mt-4 text-xs hm-text-secondary">部署目标</div>
+                    <div className="mt-4 text-xs hm-text-secondary">{t('部署目标')}</div>
                     <div className="mt-1 flex flex-wrap gap-1">
                       <Tag className="m-0 hm-mono text-xs">{currentSite.path}</Tag>
                     </div>
@@ -516,12 +529,12 @@ export function LogsPage() {
             type="info"
             showIcon
             icon={<CloudUploadOutlined />}
-            message="部署记录说明"
+            message={t('部署记录说明')}
             description={
               <ul className="mt-1 mb-0 list-disc pl-4 text-xs leading-relaxed">
-                <li>每次执行部署都会记录构建输出、提交哈希与耗时，便于排查问题</li>
-                <li>回滚操作会重置工作区，未提交的改动将丢失，建议先提交或暂存</li>
-                <li>日志可通过右上角导出按钮保存为文本文件，便于分享与归档</li>
+                <li>{t('每次执行部署都会记录构建输出、提交哈希与耗时，便于排查问题')}</li>
+                <li>{t('回滚操作会重置工作区，未提交的改动将丢失，建议先提交或暂存')}</li>
+                <li>{t('日志可通过右上角导出按钮保存为文本文件，便于分享与归档')}</li>
               </ul>
             }
           />
@@ -531,7 +544,7 @@ export function LogsPage() {
       {/* 日志详情 */}
       <Drawer
         open={detail !== null}
-        title={detail ? `部署记录 #${detail.id}` : '部署记录'}
+        title={detail ? t('部署记录 #{id}', { id: detail.id }) : t('部署记录')}
         placement="right"
         width={780}
         onClose={() => setDetail(null)}
@@ -543,7 +556,7 @@ export function LogsPage() {
                 icon={<ExportOutlined />}
                 onClick={() => void handleExport(detail)}
               >
-                导出
+                {t('导出')}
               </Button>
               <Button
                 size="small"
@@ -552,7 +565,7 @@ export function LogsPage() {
                 disabled={!detail.commitHash}
                 onClick={() => handleRollback(detail)}
               >
-                回滚
+                {t('回滚')}
               </Button>
             </Space>
           ) : null
@@ -566,38 +579,38 @@ export function LogsPage() {
               items={[
                 {
                   key: 'status',
-                  label: '状态',
+                  label: t('状态'),
                   children: <DeployStatusBadge status={detail.status} asTag />,
                 },
                 {
                   key: 'time',
-                  label: '部署时间',
+                  label: t('部署时间'),
                   children: formatDateTime(detail.createdAt),
                 },
                 {
                   key: 'commit',
-                  label: '提交哈希',
+                  label: t('提交哈希'),
                   children: <span className="hm-mono text-xs">{detail.commitHash ?? '—'}</span>,
                 },
                 {
                   key: 'branch',
-                  label: '分支',
+                  label: t('分支'),
                   children: <span className="hm-mono">{detail.branch ?? '—'}</span>,
                 },
                 {
                   key: 'message',
-                  label: '提交信息',
+                  label: t('提交信息'),
                   span: 2,
                   children: detail.commitMessage ?? '—',
                 },
                 {
                   key: 'duration',
-                  label: '耗时',
+                  label: t('耗时'),
                   children: formatDuration(detail.durationMs),
                 },
                 {
                   key: 'site',
-                  label: '站点',
+                  label: t('站点'),
                   children: currentSite?.name ?? '—',
                 },
               ]}
@@ -607,13 +620,13 @@ export function LogsPage() {
               <Alert
                 type="error"
                 showIcon
-                message="部署失败"
+                message={t('部署失败')}
                 description={<span className="hm-mono text-xs">{detail.errorMessage}</span>}
               />
             ) : null}
 
             <div>
-              <div className="mb-2 text-sm font-medium">完整输出</div>
+              <div className="mb-2 text-sm font-medium">{t('完整输出')}</div>
               {detail.output ? (
                 <LogViewer
                   lines={detail.output.split('\n')}
@@ -621,7 +634,11 @@ export function LogsPage() {
                   exportFileName={`deploy-${detail.id}.log`}
                 />
               ) : (
-                <CodeBlock code="（本次部署没有输出内容）" language="plaintext" maxHeight={200} />
+                <CodeBlock
+                  code={t('（本次部署没有输出内容）')}
+                  language="plaintext"
+                  maxHeight={200}
+                />
               )}
             </div>
           </div>

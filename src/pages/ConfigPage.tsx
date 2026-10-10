@@ -38,141 +38,171 @@ import { useConfigStore, useSiteStore } from '@/stores';
 import type { SiteConfig } from '@/types';
 import { parseYaml } from '@/utils/yaml';
 import { pickSavePath, pickFile } from '@/utils/desktop';
+import { useI18n } from '@/i18n';
 
 /** 常用配置项定义（用于可视化分组表单） */
-const CONFIG_GROUPS = [
-  {
-    key: 'basic',
-    title: '基本信息',
-    description: '站点的标题、副标题与描述，会展示在页面与搜索引擎结果中',
-    fields: [
-      { key: 'title', label: '站点标题', type: 'string', required: true },
-      { key: 'subtitle', label: '副标题', type: 'string' },
-      { key: 'description', label: '站点描述', type: 'text' },
-      { key: 'keywords', label: '关键词', type: 'string', tooltip: '多个关键词用英文逗号分隔' },
-      { key: 'author', label: '作者', type: 'string' },
-      {
-        key: 'language',
-        label: '语言',
-        type: 'select',
-        options: ['zh-CN', 'zh-TW', 'en', 'ja', 'ko'],
-      },
-      { key: 'timezone', label: '时区', type: 'string', tooltip: '如 Asia/Shanghai' },
-    ],
-  },
-  {
-    key: 'url',
-    title: '网址与链接',
-    description: '站点地址与永久链接格式',
-    fields: [
-      { key: 'url', label: '站点网址', type: 'string', tooltip: '如 https://blog.example.com' },
-      {
-        key: 'root',
-        label: '根路径',
-        type: 'string',
-        tooltip: '站点部署在子目录时填写，如 /blog/',
-      },
-      {
-        key: 'permalink',
-        label: '永久链接格式',
-        type: 'string',
-        tooltip: '如 :year/:month/:day/:title/',
-      },
-      { key: 'permalink_defaults', label: '永久链接默认值', type: 'object' },
-      { key: 'pretty_urls', label: '美化 URL', type: 'object', tooltip: '去除链接中的 index.html' },
-    ],
-  },
-  {
-    key: 'dir',
-    title: '目录',
-    description: '各类内容的存放目录',
-    fields: [
-      { key: 'source_dir', label: '源文件目录', type: 'string' },
-      { key: 'public_dir', label: '生成目录', type: 'string' },
-      { key: 'tag_dir', label: '标签目录', type: 'string' },
-      { key: 'archive_dir', label: '归档目录', type: 'string' },
-      { key: 'category_dir', label: '分类目录', type: 'string' },
-      { key: 'code_dir', label: '代码目录', type: 'string' },
-      { key: 'i18n_dir', label: 'i18n 目录', type: 'string' },
-      {
-        key: 'skip_render',
-        label: '跳过渲染',
-        type: 'array',
-        tooltip: '不参与渲染的路径，支持通配符',
-      },
-    ],
-  },
-  {
-    key: 'writing',
-    title: '写作',
-    description: '新建文章的默认行为',
-    fields: [
-      { key: 'new_post_name', label: '新文章文件名', type: 'string', tooltip: '如 :title.md' },
-      {
-        key: 'default_layout',
-        label: '默认布局',
-        type: 'select',
-        options: ['post', 'page', 'draft'],
-      },
-      { key: 'titlecase', label: '标题式大写', type: 'boolean' },
-      { key: 'filename_case', label: '文件名大小写', type: 'select', options: ['0', '1', '2'] },
-      { key: 'render_drafts', label: '渲染草稿', type: 'boolean' },
-      {
-        key: 'post_asset_folder',
-        label: '文章资源文件夹',
-        type: 'boolean',
-        tooltip: '为每篇文章创建同名资源目录',
-      },
-      { key: 'relative_link', label: '相对链接', type: 'boolean' },
-      { key: 'future', label: '显示未来文章', type: 'boolean' },
-    ],
-  },
-  {
-    key: 'category_tag',
-    title: '分类与标签',
-    description: '默认分类、映射规则',
-    fields: [
-      { key: 'default_category', label: '默认分类', type: 'string' },
-      { key: 'category_map', label: '分类映射', type: 'object' },
-      { key: 'tag_map', label: '标签映射', type: 'object' },
-    ],
-  },
-  {
-    key: 'date_time',
-    title: '日期与时间',
-    description: '日期时间格式化',
-    fields: [
-      { key: 'date_format', label: '日期格式', type: 'string' },
-      { key: 'time_format', label: '时间格式', type: 'string' },
-      { key: 'per_page', label: '每页文章数', type: 'number' },
-      { key: 'pagination_dir', label: '分页目录', type: 'string' },
-    ],
-  },
-  {
-    key: 'extensions',
-    title: '扩展',
-    description: '主题与插件配置',
-    fields: [
-      { key: 'theme', label: '当前主题', type: 'string', required: true },
-      { key: 'theme_config', label: '主题配置', type: 'object' },
-      {
-        key: 'deploy',
-        label: '部署配置',
-        type: 'object',
-        tooltip: 'hexo deploy 的配置，通常由部署页面自动生成',
-      },
-      { key: 'feed', label: 'RSS 订阅', type: 'object' },
-      { key: 'sitemap', label: '站点地图', type: 'object' },
-      { key: 'search', label: '搜索', type: 'object' },
-    ],
-  },
-] as const;
+function buildConfigGroups(t: (zh: string) => string) {
+  return [
+    {
+      key: 'basic',
+      title: t('基本信息'),
+      description: t('站点的标题、副标题与描述，会展示在页面与搜索引擎结果中'),
+      fields: [
+        { key: 'title', label: t('站点标题'), type: 'string', required: true },
+        { key: 'subtitle', label: t('副标题'), type: 'string' },
+        { key: 'description', label: t('站点描述'), type: 'text' },
+        {
+          key: 'keywords',
+          label: t('关键词'),
+          type: 'string',
+          tooltip: t('多个关键词用英文逗号分隔'),
+        },
+        { key: 'author', label: t('作者'), type: 'string' },
+        {
+          key: 'language',
+          label: t('语言'),
+          type: 'select',
+          options: ['zh-CN', 'zh-TW', 'en', 'ja', 'ko'],
+        },
+        { key: 'timezone', label: t('时区'), type: 'string', tooltip: t('如 Asia/Shanghai') },
+      ],
+    },
+    {
+      key: 'url',
+      title: t('网址与链接'),
+      description: t('站点地址与永久链接格式'),
+      fields: [
+        {
+          key: 'url',
+          label: t('站点网址'),
+          type: 'string',
+          tooltip: t('如 https://blog.example.com'),
+        },
+        {
+          key: 'root',
+          label: t('根路径'),
+          type: 'string',
+          tooltip: t('站点部署在子目录时填写，如 /blog/'),
+        },
+        {
+          key: 'permalink',
+          label: t('永久链接格式'),
+          type: 'string',
+          tooltip: t('如 :year/:month/:day/:title/'),
+        },
+        { key: 'permalink_defaults', label: t('永久链接默认值'), type: 'object' },
+        {
+          key: 'pretty_urls',
+          label: t('美化 URL'),
+          type: 'object',
+          tooltip: t('去除链接中的 index.html'),
+        },
+      ],
+    },
+    {
+      key: 'dir',
+      title: t('目录'),
+      description: t('各类内容的存放目录'),
+      fields: [
+        { key: 'source_dir', label: t('源文件目录'), type: 'string' },
+        { key: 'public_dir', label: t('生成目录'), type: 'string' },
+        { key: 'tag_dir', label: t('标签目录'), type: 'string' },
+        { key: 'archive_dir', label: t('归档目录'), type: 'string' },
+        { key: 'category_dir', label: t('分类目录'), type: 'string' },
+        { key: 'code_dir', label: t('代码目录'), type: 'string' },
+        { key: 'i18n_dir', label: t('i18n 目录'), type: 'string' },
+        {
+          key: 'skip_render',
+          label: t('跳过渲染'),
+          type: 'array',
+          tooltip: t('不参与渲染的路径，支持通配符'),
+        },
+      ],
+    },
+    {
+      key: 'writing',
+      title: t('写作'),
+      description: t('新建文章的默认行为'),
+      fields: [
+        {
+          key: 'new_post_name',
+          label: t('新文章文件名'),
+          type: 'string',
+          tooltip: t('如 :title.md'),
+        },
+        {
+          key: 'default_layout',
+          label: t('默认布局'),
+          type: 'select',
+          options: ['post', 'page', 'draft'],
+        },
+        { key: 'titlecase', label: t('标题式大写'), type: 'boolean' },
+        {
+          key: 'filename_case',
+          label: t('文件名大小写'),
+          type: 'select',
+          options: ['0', '1', '2'],
+        },
+        { key: 'render_drafts', label: t('渲染草稿'), type: 'boolean' },
+        {
+          key: 'post_asset_folder',
+          label: t('文章资源文件夹'),
+          type: 'boolean',
+          tooltip: t('为每篇文章创建同名资源目录'),
+        },
+        { key: 'relative_link', label: t('相对链接'), type: 'boolean' },
+        { key: 'future', label: t('显示未来文章'), type: 'boolean' },
+      ],
+    },
+    {
+      key: 'category_tag',
+      title: t('分类与标签'),
+      description: t('默认分类、映射规则'),
+      fields: [
+        { key: 'default_category', label: t('默认分类'), type: 'string' },
+        { key: 'category_map', label: t('分类映射'), type: 'object' },
+        { key: 'tag_map', label: t('标签映射'), type: 'object' },
+      ],
+    },
+    {
+      key: 'date_time',
+      title: t('日期与时间'),
+      description: t('日期时间格式化'),
+      fields: [
+        { key: 'date_format', label: t('日期格式'), type: 'string' },
+        { key: 'time_format', label: t('时间格式'), type: 'string' },
+        { key: 'per_page', label: t('每页文章数'), type: 'number' },
+        { key: 'pagination_dir', label: t('分页目录'), type: 'string' },
+      ],
+    },
+    {
+      key: 'extensions',
+      title: t('扩展'),
+      description: t('主题与插件配置'),
+      fields: [
+        { key: 'theme', label: t('当前主题'), type: 'string', required: true },
+        { key: 'theme_config', label: t('主题配置'), type: 'object' },
+        {
+          key: 'deploy',
+          label: t('部署配置'),
+          type: 'object',
+          tooltip: t('hexo deploy 的配置，通常由部署页面自动生成'),
+        },
+        { key: 'feed', label: t('RSS 订阅'), type: 'object' },
+        { key: 'sitemap', label: t('站点地图'), type: 'object' },
+        { key: 'search', label: t('搜索'), type: 'object' },
+      ],
+    },
+  ] as const;
+}
 
-type ConfigGroupKey = (typeof CONFIG_GROUPS)[number]['key'];
+type ConfigGroups = ReturnType<typeof buildConfigGroups>;
+type ConfigGroupKey = ConfigGroups[number]['key'];
 
 /** 配置管理页面 */
 export function ConfigPage() {
   const { message, modal } = AntdApp.useApp();
+  const { t } = useI18n();
 
   const currentSiteId = useSiteStore((s) => s.currentSiteId);
   const currentSite = useSiteStore((s) => s.sites.find((site) => site.id === s.currentSiteId));
@@ -215,7 +245,7 @@ export function ConfigPage() {
 
   const handleSave = async () => {
     if (mode === 'raw' && yamlError) {
-      message.error('YAML 格式有误，请先修正后再保存');
+      message.error(t('YAML 格式有误，请先修正后再保存'));
       return;
     }
     await save();
@@ -224,7 +254,7 @@ export function ConfigPage() {
   const handleExport = async () => {
     if (currentSiteId === null) return;
     const target = await pickSavePath({
-      title: '导出站点配置',
+      title: t('导出站点配置'),
       defaultPath: '_config.yml',
       filters: [{ name: 'YAML', extensions: ['yml', 'yaml'] }],
     });
@@ -236,7 +266,7 @@ export function ConfigPage() {
       );
       const { fileService } = await import('@/services');
       await fileService.write(target, exported);
-      message.success(`配置已导出到 ${target}`);
+      message.success(t('配置已导出到 {path}', { path: target }));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }
@@ -245,7 +275,7 @@ export function ConfigPage() {
   const handleImport = async () => {
     if (currentSiteId === null) return;
     const source = await pickFile({
-      title: '选择要导入的配置文件',
+      title: t('选择要导入的配置文件'),
       filters: [{ name: 'YAML', extensions: ['yml', 'yaml'] }],
     });
     if (!source) return;
@@ -255,7 +285,7 @@ export function ConfigPage() {
       const content = await fileService.read(source);
       await configService.importConfig(currentSiteId, content);
       await refresh();
-      message.success('配置已导入');
+      message.success(t('配置已导入'));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }
@@ -263,17 +293,17 @@ export function ConfigPage() {
 
   const handleRestore = () => {
     modal.confirm({
-      title: '恢复配置备份？',
-      content: '将用最近一次备份覆盖当前 _config.yml，未保存的修改会丢失。',
-      okText: '确认恢复',
+      title: t('恢复配置备份？'),
+      content: t('将用最近一次备份覆盖当前 _config.yml，未保存的修改会丢失。'),
+      okText: t('确认恢复'),
       okButtonProps: { danger: true },
-      cancelText: '取消',
+      cancelText: t('取消'),
       onOk: () => restore(),
     });
   };
 
   /** 渲染单个字段控件 */
-  const renderField = (field: (typeof CONFIG_GROUPS)[number]['fields'][number]) => {
+  const renderField = (field: ConfigGroups[number]['fields'][number]) => {
     const value = config[field.key as keyof SiteConfig];
 
     if (field.type === 'boolean') {
@@ -281,8 +311,8 @@ export function ConfigPage() {
         <FormField
           key={field.key}
           name={field.key}
-          label={field.label}
-          tooltip={'tooltip' in field ? (field.tooltip as string | undefined) : undefined}
+          label={t(field.label)}
+          tooltip={'tooltip' in field ? t(field.tooltip as string) : undefined}
           valuePropName="checked"
         >
           <Switch
@@ -298,8 +328,8 @@ export function ConfigPage() {
         <FormField
           key={field.key}
           name={field.key}
-          label={field.label}
-          tooltip={'tooltip' in field ? (field.tooltip as string | undefined) : undefined}
+          label={t(field.label)}
+          tooltip={'tooltip' in field ? t(field.tooltip as string) : undefined}
         >
           <InputNumber
             value={typeof value === 'number' ? value : undefined}
@@ -317,8 +347,8 @@ export function ConfigPage() {
         <FormField
           key={field.key}
           name={field.key}
-          label={field.label}
-          tooltip={'tooltip' in field ? (field.tooltip as string | undefined) : undefined}
+          label={t(field.label)}
+          tooltip={'tooltip' in field ? t(field.tooltip as string) : undefined}
         >
           <Select
             value={value === undefined || value === null ? undefined : String(value)}
@@ -336,8 +366,8 @@ export function ConfigPage() {
         <FormField
           key={field.key}
           name={field.key}
-          label={field.label}
-          tooltip={'tooltip' in field ? (field.tooltip as string | undefined) : undefined}
+          label={t(field.label)}
+          tooltip={'tooltip' in field ? t(field.tooltip as string) : undefined}
           fullWidth
         >
           <Input.TextArea
@@ -363,12 +393,12 @@ export function ConfigPage() {
         <FormField
           key={field.key}
           name={field.key}
-          label={field.label}
-          tooltip={'tooltip' in field ? (field.tooltip as string | undefined) : undefined}
+          label={t(field.label)}
+          tooltip={'tooltip' in field ? t(field.tooltip as string) : undefined}
           fullWidth
           help={
             typeof value === 'object' && value !== null ? (
-              <span className="text-xs">当前为复杂结构，建议在「原始 YAML」模式下编辑</span>
+              <span className="text-xs">{t('当前为复杂结构，建议在「原始 YAML」模式下编辑')}</span>
             ) : undefined
           }
         >
@@ -394,24 +424,27 @@ export function ConfigPage() {
       <FormField
         key={field.key}
         name={field.key}
-        label={field.label}
+        label={t(field.label)}
         required={'required' in field ? Boolean(field.required) : false}
-        tooltip={'tooltip' in field ? (field.tooltip as string | undefined) : undefined}
+        tooltip={'tooltip' in field ? t(field.tooltip as string) : undefined}
       >
         <Input
           value={value === undefined || value === null ? '' : String(value)}
           onChange={(e) => patchConfig({ [field.key]: e.target.value } as Partial<SiteConfig>)}
           className="hm-mono"
-          placeholder={`请输入${field.label}`}
+          placeholder={t('请输入{label}', { label: t(field.label) })}
         />
       </FormField>
     );
   };
 
+  /** 常用配置项分组（随语言切换重建） */
+  const configGroups = useMemo(() => buildConfigGroups(t), [t]);
+
   /** 统计配置项数量 */
   const knownKeys = useMemo(
-    () => new Set(CONFIG_GROUPS.flatMap((g) => g.fields.map((f) => f.key as string))),
-    [],
+    () => new Set(configGroups.flatMap((g) => g.fields.map((f) => f.key as string))),
+    [configGroups],
   );
   const customKeys = useMemo(
     () => Object.keys(config).filter((key) => !knownKeys.has(key)),
@@ -420,11 +453,11 @@ export function ConfigPage() {
 
   if (currentSiteId === null) {
     return (
-      <PageContainer title="配置管理">
+      <PageContainer title={t('配置管理')}>
         <EmptyState
           kind="articles"
-          title="请先选择站点"
-          description="在顶栏的站点切换器中选择站点后即可编辑其 _config.yml"
+          title={t('请先选择站点')}
+          description={t('在顶栏的站点切换器中选择站点后即可编辑其 _config.yml')}
         />
       </PageContainer>
     );
@@ -432,7 +465,7 @@ export function ConfigPage() {
 
   return (
     <PageContainer
-      title="配置管理"
+      title={t('配置管理')}
       description={
         <span>
           {currentSite?.name} ·{' '}
@@ -444,11 +477,11 @@ export function ConfigPage() {
       badge={
         dirty ? (
           <Tag color="orange" className="m-0">
-            未保存
+            {t('未保存')}
           </Tag>
         ) : (
           <Tag color="green" className="m-0" icon={<CheckCircleOutlined />}>
-            已同步
+            {t('已同步')}
           </Tag>
         )
       }
@@ -458,16 +491,16 @@ export function ConfigPage() {
             value={mode}
             onChange={(v) => setMode(v as 'form' | 'raw')}
             options={[
-              { label: '可视化', value: 'form', icon: <FormOutlined /> },
-              { label: '原始 YAML', value: 'raw', icon: <CodeOutlined /> },
+              { label: t('可视化'), value: 'form', icon: <FormOutlined /> },
+              { label: t('原始 YAML'), value: 'raw', icon: <CodeOutlined /> },
             ]}
           />
-          <Tooltip title="查看与 Git 的差异">
+          <Tooltip title={t('查看与 Git 的差异')}>
             <Button icon={<DiffOutlined />} onClick={() => void showDiff()}>
-              差异
+              {t('差异')}
             </Button>
           </Tooltip>
-          <Tooltip title="重新加载">
+          <Tooltip title={t('重新加载')}>
             <Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading} />
           </Tooltip>
           <Button
@@ -477,7 +510,7 @@ export function ConfigPage() {
             loading={saving}
             disabled={!dirty}
           >
-            保存
+            {t('保存')}
           </Button>
         </Space>
       }
@@ -491,15 +524,15 @@ export function ConfigPage() {
                 activeKey={activeGroup}
                 onChange={(key) => setActiveGroup(key as ConfigGroupKey)}
                 items={[
-                  ...CONFIG_GROUPS.map((group) => ({
+                  ...configGroups.map((group) => ({
                     key: group.key,
-                    label: group.title,
+                    label: t(group.title),
                     children: (
                       <div
                         className="hm-scroll px-5 pb-5"
                         style={{ maxHeight: 'calc(100vh - 300px)' }}
                       >
-                        <FormSection title={group.title} description={group.description}>
+                        <FormSection title={t(group.title)} description={t(group.description)}>
                           <Form layout="vertical">
                             <Row gutter={16}>
                               {group.fields.map((field) => (
@@ -524,13 +557,17 @@ export function ConfigPage() {
                           <>
                             <Divider />
                             <FormSection
-                              title="配置模板"
+                              title={t('配置模板')}
                               sub
-                              description="快速应用一组预设配置（会与当前配置合并，同名键以当前值为准）"
+                              description={t(
+                                '快速应用一组预设配置（会与当前配置合并，同名键以当前值为准）',
+                              )}
                             >
                               <Space wrap>
                                 {templates.length === 0 ? (
-                                  <span className="text-xs hm-text-secondary">暂无可用模板</span>
+                                  <span className="text-xs hm-text-secondary">
+                                    {t('暂无可用模板')}
+                                  </span>
                                 ) : (
                                   templates.map((template) => (
                                     <Tooltip key={template.id} title={template.description}>
@@ -538,7 +575,9 @@ export function ConfigPage() {
                                         size="small"
                                         onClick={() => {
                                           applyTemplate(template.id);
-                                          message.success(`已应用模板「${template.name}」`);
+                                          message.success(
+                                            t('已应用模板「{name}」', { name: template.name }),
+                                          );
                                         }}
                                       >
                                         {template.name}
@@ -557,7 +596,9 @@ export function ConfigPage() {
                             <Alert
                               type="info"
                               showIcon
-                              message={`检测到 ${customKeys.length} 个自定义配置项`}
+                              message={t('检测到 {count} 个自定义配置项', {
+                                count: customKeys.length,
+                              })}
                               description={
                                 <div className="mt-1 flex flex-wrap gap-1">
                                   {customKeys.slice(0, 20).map((key) => (
@@ -566,7 +607,9 @@ export function ConfigPage() {
                                     </Tag>
                                   ))}
                                   {customKeys.length > 20 ? (
-                                    <span className="text-xs">…等 {customKeys.length} 项</span>
+                                    <span className="text-xs">
+                                      {t('…等 {count} 项', { count: customKeys.length })}
+                                    </span>
                                   ) : null}
                                 </div>
                               }
@@ -578,7 +621,7 @@ export function ConfigPage() {
                   })),
                   {
                     key: '__raw__',
-                    label: '原始视图',
+                    label: t('原始视图'),
                     children: (
                       <div className="p-4">
                         <CodeEditor
@@ -586,10 +629,10 @@ export function ConfigPage() {
                           language="yaml"
                           height={520}
                           readOnly
-                          title="_config.yml（只读预览）"
+                          title={t('_config.yml（只读预览）')}
                         />
                         <div className="mt-2 text-xs hm-text-secondary">
-                          需要在文本级别精确编辑时，请切换到上方的「原始 YAML」模式
+                          {t('需要在文本级别精确编辑时，请切换到上方的「原始 YAML」模式')}
                         </div>
                       </div>
                     ),
@@ -603,7 +646,7 @@ export function ConfigPage() {
                     className="mb-3"
                     type="error"
                     showIcon
-                    message="YAML 语法错误"
+                    message={t('YAML 语法错误')}
                     description={<span className="hm-mono text-xs break-all">{yamlError}</span>}
                   />
                 ) : (
@@ -611,8 +654,8 @@ export function ConfigPage() {
                     className="mb-3"
                     type="success"
                     showIcon
-                    message="YAML 格式正确"
-                    description="修改后点击「保存」写入 _config.yml（会自动创建备份）"
+                    message={t('YAML 格式正确')}
+                    description={t('修改后点击「保存」写入 _config.yml（会自动创建备份）')}
                   />
                 )}
 
@@ -630,19 +673,19 @@ export function ConfigPage() {
         {/* 右：工具与信息 */}
         <Col xs={24} lg={8}>
           <div className="space-y-4">
-            <Card size="small" title="配置操作">
+            <Card size="small" title={t('配置操作')}>
               <Space direction="vertical" className="w-full" size={8}>
                 <Button block icon={<CloudDownloadOutlined />} onClick={() => void handleExport()}>
-                  导出配置到文件
+                  {t('导出配置到文件')}
                 </Button>
                 <Button block icon={<CloudUploadOutlined />} onClick={() => void handleImport()}>
-                  从文件导入配置
+                  {t('从文件导入配置')}
                 </Button>
                 <Button block icon={<DiffOutlined />} onClick={() => void showDiff()}>
-                  查看 Git 差异
+                  {t('查看 Git 差异')}
                 </Button>
                 <Button block danger icon={<RollbackOutlined />} onClick={handleRestore}>
-                  恢复备份
+                  {t('恢复备份')}
                 </Button>
                 <Button
                   block
@@ -650,24 +693,24 @@ export function ConfigPage() {
                   onClick={() => void refresh()}
                   disabled={!dirty}
                 >
-                  放弃修改并重新加载
+                  {t('放弃修改并重新加载')}
                 </Button>
               </Space>
             </Card>
 
-            <Card size="small" title="当前配置摘要">
+            <Card size="small" title={t('当前配置摘要')}>
               <div className="space-y-2 text-xs">
                 {[
-                  ['站点标题', config.title],
-                  ['副标题', config.subtitle],
-                  ['作者', config.author],
-                  ['语言', config.language],
-                  ['站点网址', config.url],
-                  ['根路径', config.root || '/'],
-                  ['永久链接', config.permalink],
-                  ['当前主题', config.theme],
-                  ['每页文章数', config.per_page],
-                  ['默认分类', config.default_category],
+                  [t('站点标题'), config.title],
+                  [t('副标题'), config.subtitle],
+                  [t('作者'), config.author],
+                  [t('语言'), config.language],
+                  [t('站点网址'), config.url],
+                  [t('根路径'), config.root || '/'],
+                  [t('永久链接'), config.permalink],
+                  [t('当前主题'), config.theme],
+                  [t('每页文章数'), config.per_page],
+                  [t('默认分类'), config.default_category],
                 ].map(([label, value]) => (
                   <div key={String(label)} className="flex items-start justify-between gap-3">
                     <span className="shrink-0 hm-text-secondary">{label}</span>
@@ -682,12 +725,12 @@ export function ConfigPage() {
             <Alert
               type="info"
               showIcon
-              message="配置项说明"
+              message={t('配置项说明')}
               description={
                 <ul className="mt-1 mb-0 list-disc pl-4 text-xs leading-relaxed">
-                  <li>每次保存前会自动备份原文件，可通过「恢复备份」回退</li>
-                  <li>可视化模式只覆盖已展示的字段，未展示的自定义配置会原样保留</li>
-                  <li>复杂的嵌套配置（如 highlight、deploy）建议在原始 YAML 模式下编辑</li>
+                  <li>{t('每次保存前会自动备份原文件，可通过「恢复备份」回退')}</li>
+                  <li>{t('可视化模式只覆盖已展示的字段，未展示的自定义配置会原样保留')}</li>
+                  <li>{t('复杂的嵌套配置（如 highlight、deploy）建议在原始 YAML 模式下编辑')}</li>
                 </ul>
               }
             />

@@ -8,29 +8,31 @@ import {
   HomeOutlined,
   RocketOutlined,
 } from '@ant-design/icons';
+import { useI18n } from '@/i18n';
 
 /** 404 未找到页面 */
 export function NotFoundPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   return (
     <div className="flex h-full items-center justify-center">
       <Result
         status="404"
         title="404"
-        subTitle="抱歉，你访问的页面不存在或已被移除。"
+        subTitle={t('抱歉，你访问的页面不存在或已被移除。')}
         extra={
           <Space direction="vertical" size={12} className="items-center">
             <Space wrap>
               <Button type="primary" icon={<HomeOutlined />} onClick={() => navigate('/')}>
-                返回工作台
+                {t('返回工作台')}
               </Button>
               <Button icon={<CloudServerOutlined />} onClick={() => navigate('/sites')}>
-                站点管理
+                {t('站点管理')}
               </Button>
             </Space>
 
-            <div className="mt-2 text-xs hm-text-secondary">常用入口</div>
+            <div className="mt-2 text-xs hm-text-secondary">{t('常用入口')}</div>
             <Space wrap size={6}>
               <Button
                 size="small"
@@ -38,7 +40,7 @@ export function NotFoundPage() {
                 icon={<AppstoreOutlined />}
                 onClick={() => navigate('/articles')}
               >
-                文章管理
+                {t('文章管理')}
               </Button>
               <Button
                 size="small"
@@ -46,7 +48,7 @@ export function NotFoundPage() {
                 icon={<RocketOutlined />}
                 onClick={() => navigate('/deploy')}
               >
-                部署配置
+                {t('部署配置')}
               </Button>
             </Space>
           </Space>

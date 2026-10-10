@@ -2,6 +2,7 @@
 
 import { Badge, Tag } from 'antd';
 import { DEPLOY_STATUS_META, SITE_STATUS_META } from '@/constants';
+import { useI18n } from '@/i18n';
 
 interface SiteStatusBadgeProps {
   status?: string | null;
@@ -11,17 +12,18 @@ interface SiteStatusBadgeProps {
 
 /** 站点状态徽标 */
 export function SiteStatusBadge({ status, asTag = false }: SiteStatusBadgeProps) {
+  const { t } = useI18n();
   const meta = SITE_STATUS_META[status ?? 'active'] ?? SITE_STATUS_META.active;
 
   if (asTag) {
     return (
       <Tag color={meta.color} className="m-0">
-        {meta.label}
+        {t(meta.label)}
       </Tag>
     );
   }
 
-  return <Badge status={meta.badge} text={meta.label} />;
+  return <Badge status={meta.badge} text={t(meta.label)} />;
 }
 
 interface DeployStatusBadgeProps {
@@ -31,17 +33,18 @@ interface DeployStatusBadgeProps {
 
 /** 部署状态徽标 */
 export function DeployStatusBadge({ status, asTag = false }: DeployStatusBadgeProps) {
+  const { t } = useI18n();
   const meta = DEPLOY_STATUS_META[status] ?? DEPLOY_STATUS_META.pending;
 
   if (asTag) {
     return (
       <Tag color={meta.color} className="m-0">
-        {meta.label}
+        {t(meta.label)}
       </Tag>
     );
   }
 
-  return <Badge status={meta.badge} text={meta.label} />;
+  return <Badge status={meta.badge} text={t(meta.label)} />;
 }
 
 interface PlatformBadgeProps {

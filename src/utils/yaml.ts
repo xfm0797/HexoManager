@@ -1,6 +1,7 @@
 /** YAML 处理工具 */
 
 import yaml from 'js-yaml';
+import { t } from '@/i18n';
 
 /**
  * 解析 YAML 文本为对象。
@@ -29,7 +30,9 @@ export function stringifyYaml(data: unknown, options?: yaml.DumpOptions): string
       ...options,
     });
   } catch (e) {
-    return `# YAML 序列化失败：${e instanceof Error ? e.message : String(e)}`;
+    return t('# YAML 序列化失败：{error}', {
+      error: e instanceof Error ? e.message : String(e),
+    });
   }
 }
 

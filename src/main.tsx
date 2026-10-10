@@ -6,12 +6,13 @@ import '@/utils/monaco';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { t } from '@/i18n';
 import './styles/global.css';
 
 const container = document.getElementById('root');
 
 if (!container) {
-  throw new Error('未找到 #root 挂载节点');
+  throw new Error(t('未找到 #root 挂载节点'));
 }
 
 ReactDOM.createRoot(container).render(

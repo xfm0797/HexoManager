@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { App as AntdApp } from 'antd';
 import { hexoService } from '@/services';
 import { useUiStore } from '@/stores';
+import { t } from '@/i18n';
 import type { BuildResult, EnvCheck, PreviewServer } from '@/types';
 /** 构建 / 清理 / 生成 */
 export function useHexoBuild(siteId: number | null) {
@@ -19,7 +20,7 @@ export function useHexoBuild(siteId: number | null) {
       successText: string,
     ): Promise<BuildResult | null> => {
       if (siteId === null) {
-        message.warning('请先选择站点');
+        message.warning(t('请先选择站点'));
         return null;
       }
 
@@ -45,14 +46,19 @@ export function useHexoBuild(siteId: number | null) {
         setLastResult(result);
 
         if (result.success) {
-          message.success(`${successText}（耗时 ${(result.durationMs / 1000).toFixed(1)}s）`);
+          message.success(
+            t('{text}（耗时 {seconds}s）', {
+              text: successText,
+              seconds: (result.durationMs / 1000).toFixed(1),
+            }),
+          );
         } else {
-          message.error(result.error ?? `${successText}失败`);
+          message.error(result.error ?? t('{text}失败', { text: successText }));
         }
         return result;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        setLogLines((prev) => [...prev, `[错误] ${msg}`]);
+        setLogLines((prev) => [...prev, t('[错误] {msg}', { msg })]);
         message.error(msg);
         return null;
       } finally {
@@ -68,10 +74,10 @@ export function useHexoBuild(siteId: number | null) {
     action,
     lastResult,
     logLines,
-    build: () => run('build', '构建完成'),
-    clean: () => run('clean', '清理完成'),
-    generate: () => run('generate', '生成完成'),
-    deploy: () => run('deploy', '部署完成'),
+    build: () => run('build', t('构建完成')),
+    clean: () => run('clean', t('清理完成')),
+    generate: () => run('generate', t('生成完成')),
+    deploy: () => run('deploy', t('部署完成')),
   };
 }
 
@@ -93,13 +99,13 @@ export function useHexoServer(siteId: number | null) {
   const start = useCallback(
     async (port?: number): Promise<PreviewServer | null> => {
       if (siteId === null) {
-        message.warning('请先选择站点');
+        message.warning(t('请先选择站点'));
         return null;
       }
       setStarting(true);
       try {
         const server = await startServer(siteId, port);
-        message.success(`预览服务已启动：${server.url}`);
+        message.success(t('预览服务已启动：{url}', { url: server.url }));
         return server;
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
@@ -117,7 +123,7 @@ export function useHexoServer(siteId: number | null) {
       if (target === undefined) return;
       try {
         await stopServer(target);
-        message.success('预览服务已停止');
+        message.success(t('预览服务已停止'));
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
       }

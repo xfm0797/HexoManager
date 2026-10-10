@@ -12,6 +12,7 @@ import type {
   ThemeInfo,
 } from '@/types';
 import { parseYaml, stringifyYaml } from '@/utils/yaml';
+import { t } from '@/i18n';
 
 /** 配置编辑模式 */
 export type ConfigMode = 'form' | 'raw';
@@ -144,7 +145,7 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
       // 从原始文本切回表单：解析并同步
       const { data, error } = parseYaml<SiteConfig>(raw);
       if (error || !data) {
-        set({ error: `YAML 解析失败：${error ?? '内容为空'}` });
+        set({ error: t('YAML 解析失败：{error}', { error: error ?? t('内容为空') }) });
         return;
       }
       set({ config: data, mode, error: null });
@@ -175,8 +176,8 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
         // 保存前先校验，避免写坏 _config.yml
         const { error } = parseYaml(raw);
         if (error) {
-          set({ saving: false, error: `YAML 格式错误：${error}` });
-          throw new Error(`YAML 格式错误：${error}`);
+          set({ saving: false, error: t('YAML 格式错误：{error}', { error }) });
+          throw new Error(t('YAML 格式错误：{error}', { error }));
         }
         await configService.save(siteId, { raw });
       } else {
@@ -283,8 +284,8 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
     try {
       const { error } = parseYaml(raw);
       if (error) {
-        set({ saving: false, error: `YAML 格式错误：${error}` });
-        throw new Error(`YAML 格式错误：${error}`);
+      set({ saving: false, error: t('YAML 格式错误：{error}', { error }) });
+      throw new Error(t('YAML 格式错误：{error}', { error }));
       }
       await themeService.updateConfig(siteId, theme, { raw });
       set({ saving: false, dirty: false });

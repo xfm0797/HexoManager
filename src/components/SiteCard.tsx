@@ -17,6 +17,7 @@ import type { MenuProps } from 'antd';
 import { useMemo } from 'react';
 import type { Site } from '@/types';
 import { formatRelative, gradientFromString, initialsOf, truncate } from '@/utils/format';
+import { useI18n } from '@/i18n';
 import { SiteStatusBadge } from './StatusBadge';
 
 interface SiteCardProps {
@@ -43,24 +44,25 @@ export function SiteCard({
   onExport,
   onDelete,
 }: SiteCardProps) {
+  const { t } = useI18n();
   const [from, to] = useMemo(() => gradientFromString(site.name), [site.name]);
 
   const menuItems: MenuProps['items'] = [
-    { key: 'edit', label: '编辑信息', icon: <EditOutlined />, disabled: !onEdit },
+    { key: 'edit', label: t('编辑信息'), icon: <EditOutlined />, disabled: !onEdit },
     {
       key: 'folder',
-      label: '打开目录',
+      label: t('打开目录'),
       icon: <FolderOpenOutlined />,
       disabled: !onOpenFolder,
     },
     { type: 'divider' },
-    { key: 'deploy', label: '立即部署', icon: <RocketOutlined />, disabled: !onDeploy },
-    { key: 'duplicate', label: '复制站点', icon: <CopyOutlined />, disabled: !onDuplicate },
-    { key: 'export', label: '备份导出', icon: <ExportOutlined />, disabled: !onExport },
+    { key: 'deploy', label: t('立即部署'), icon: <RocketOutlined />, disabled: !onDeploy },
+    { key: 'duplicate', label: t('复制站点'), icon: <CopyOutlined />, disabled: !onDuplicate },
+    { key: 'export', label: t('备份导出'), icon: <ExportOutlined />, disabled: !onExport },
     { type: 'divider' },
     {
       key: 'delete',
-      label: '删除站点',
+      label: t('删除站点'),
       icon: <DeleteOutlined />,
       danger: true,
       disabled: !onDelete,
@@ -116,9 +118,9 @@ export function SiteCard({
 
         <div className="flex items-center gap-1">
           {active ? (
-            <Tooltip title="当前站点">
+            <Tooltip title={t('当前站点')}>
               <span className="inline-flex h-6 items-center gap-1 rounded-full bg-white/25 px-2 text-xs text-white backdrop-blur">
-                <CheckOutlined /> 当前
+                <CheckOutlined /> {t('当前')}
               </span>
             </Tooltip>
           ) : null}
@@ -158,15 +160,15 @@ export function SiteCard({
         {/* 统计信息 */}
         <div className="mt-3 flex items-center gap-4 text-xs hm-text-secondary">
           <span className="inline-flex items-center gap-1">
-            <FileTextOutlined /> {site.articleCount} 篇
+            <FileTextOutlined /> {t('{count} 篇', { count: site.articleCount })}
           </span>
           <span className="inline-flex items-center gap-1">
-            <EditOutlined /> {site.draftCount} 草稿
+            <EditOutlined /> {t('{count} 草稿', { count: site.draftCount })}
           </span>
           <span className="inline-flex items-center gap-1 truncate">
             <CloudServerOutlined />
-            <span className="truncate" title={site.theme ?? '未指定主题'}>
-              {site.theme ?? '未指定主题'}
+            <span className="truncate" title={site.theme ?? t('未指定主题')}>
+              {site.theme ?? t('未指定主题')}
             </span>
           </span>
         </div>
@@ -182,7 +184,9 @@ export function SiteCard({
             </span>
           </Tooltip>
           <span>
-            {site.lastDeployAt ? `部署于 ${formatRelative(site.lastDeployAt)}` : '尚未部署'}
+            {site.lastDeployAt
+              ? t('部署于 {time}', { time: formatRelative(site.lastDeployAt) })
+              : t('尚未部署')}
           </span>
         </div>
       </div>

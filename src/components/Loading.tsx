@@ -1,6 +1,7 @@
 /** 加载状态与骨架屏 */
 
 import { Spin, Skeleton } from 'antd';
+import { useI18n } from '@/i18n';
 
 interface LoadingProps {
   /** 提示文案 */
@@ -14,16 +15,13 @@ interface LoadingProps {
 }
 
 /** 居中加载指示器 */
-export function Loading({
-  tip = '加载中…',
-  size = 'default',
-  full = false,
-  overlay = false,
-}: LoadingProps) {
+export function Loading({ tip, size = 'default', full = false, overlay = false }: LoadingProps) {
+  const { t } = useI18n();
+  const text = tip ?? t('加载中…');
   const content = (
     <div className={`flex flex-col items-center justify-center gap-3 ${full ? 'h-full' : 'py-16'}`}>
       <Spin size={size} />
-      {tip ? <span className="text-sm hm-text-secondary">{tip}</span> : null}
+      {text ? <span className="text-sm hm-text-secondary">{text}</span> : null}
     </div>
   );
 

@@ -14,6 +14,7 @@ import { pickDirectory } from '@/utils/desktop';
 import { copyToClipboard } from '@/utils/desktop';
 import { fileService } from '@/services';
 import { joinPath } from '@/utils/slug';
+import { useI18n } from '@/i18n';
 
 interface ConfigPreviewModalProps {
   open: boolean;
@@ -50,11 +51,12 @@ export function ConfigPreviewModal({
   onClose,
   files,
   sitePath,
-  title = '配置预览',
+  title,
   allowWrite = true,
   onWritten,
 }: ConfigPreviewModalProps) {
   const { message } = AntdApp.useApp();
+  const { t } = useI18n();
   const [activeKey, setActiveKey] = useState<string>('');
   const [writing, setWriting] = useState(false);
 
@@ -65,12 +67,12 @@ export function ConfigPreviewModal({
 
   const handleCopy = async (file: GeneratedFile) => {
     const ok = await copyToClipboard(file.content);
-    if (ok) message.success('已复制文件内容');
-    else message.error('复制失败');
+    if (ok) message.success(t('已复制文件内容'));
+    else message.error(t('复制失败'));
   };
 
   const handleWrite = async () => {
-    const targetDir = sitePath ?? (await pickDirectory('选择写入位置'));
+    const targetDir = sitePath ?? (await pickDirectory(t('选择写入位置')));
     if (!targetDir) return;
 
     setWriting(true);
@@ -84,14 +86,12 @@ export function ConfigPreviewModal({
           for (const segment of segments.slice(0, -1)) {
             dir = joinPath(dir, segment);
             // mkdir 已存在时不报错（后端实现幂等）
-            // eslint-disable-next-line no-await-in-loop
             await fileService.mkdir(dir).catch(() => undefined);
           }
         }
-        // eslint-disable-next-line no-await-in-loop
         await fileService.write(target, file.content);
       }
-      message.success(`已写入 ${files.length} 个文件`);
+      message.success(t('已写入 {count} 个文件', { count: files.length }));
       onWritten?.(files);
       onClose();
     } catch (e) {
@@ -105,24 +105,26 @@ export function ConfigPreviewModal({
     <Modal
       open={open}
       onCancel={onClose}
-      title={title}
+      title={title ?? t('配置预览')}
       width={900}
       destroyOnClose
       footer={
         <div className="flex items-center justify-between">
           <span className="text-xs hm-text-secondary">
-            共 {files.length} 个文件
+            {t('共 {count} 个文件', { count: files.length })}
             {sitePath ? (
               <>
-                {' · '}写入位置：<span className="hm-mono">{sitePath}</span>
+                {' · '}
+                {t('写入位置：')}
+                <span className="hm-mono">{sitePath}</span>
               </>
             ) : null}
           </span>
           <Space>
-            <Button onClick={onClose}>关闭</Button>
+            <Button onClick={onClose}>{t('关闭')}</Button>
             {current ? (
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(current)}>
-                复制当前
+                {t('复制当前')}
               </Button>
             ) : null}
             {allowWrite ? (
@@ -133,7 +135,7 @@ export function ConfigPreviewModal({
                 disabled={files.length === 0}
                 onClick={handleWrite}
               >
-                {sitePath ? '写入站点目录' : '选择目录并写入'}
+                {sitePath ? t('写入站点目录') : t('选择目录并写入')}
               </Button>
             ) : null}
           </Space>
@@ -141,7 +143,7 @@ export function ConfigPreviewModal({
       }
     >
       {files.length === 0 ? (
-        <Alert type="info" showIcon message="没有可预览的配置文件" />
+        <Alert type="info" showIcon message={t('没有可预览的配置文件')} />
       ) : (
         <Tabs
           activeKey={current?.path}
@@ -160,7 +162,7 @@ export function ConfigPreviewModal({
               <div>
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-xs hm-text-secondary">{file.description}</span>
-                  <Tooltip title="复制内容">
+                  <Tooltip title={t('复制内容')}>
                     <Button
                       size="small"
                       type="text"
@@ -192,6 +194,7 @@ interface FileCheckListProps {
 
 /** 已存在文件检查结果列表 */
 export function FileCheckList({ items }: FileCheckListProps) {
+  const { t } = useI18n();
   if (items.length === 0) return null;
 
   const existing = items.filter(([, exists]) => exists);
@@ -202,8 +205,8 @@ export function FileCheckList({ items }: FileCheckListProps) {
       showIcon
       message={
         existing.length > 0
-          ? `检测到 ${existing.length} 个已有文件将被覆盖`
-          : '目标目录中没有同名文件，可安全生成'
+          ? t('检测到 {count} 个已有文件将被覆盖', { count: existing.length })
+          : t('目标目录中没有同名文件，可安全生成')
       }
       description={
         existing.length > 0 ? (
@@ -216,7 +219,9 @@ export function FileCheckList({ items }: FileCheckListProps) {
                   <CheckCircleOutlined className="text-green-500" />
                 )}
                 <span className="hm-mono">{path}</span>
-                <span className="hm-text-secondary">{exists ? '已存在，将被覆盖' : '新建'}</span>
+                <span className="hm-text-secondary">
+                  {exists ? t('已存在，将被覆盖') : t('新建')}
+                </span>
               </li>
             ))}
           </ul>

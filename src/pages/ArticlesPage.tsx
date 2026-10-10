@@ -56,6 +56,7 @@ import {
 import { useArticleEditor, useArticleHistory, useArticles } from '@/hooks';
 import { useArticleStore, useSiteStore, useTemplateStore } from '@/stores';
 import { articleService } from '@/services';
+import { useI18n } from '@/i18n';
 import type { Article, TemplateBodyMode, UpdateArticleInput } from '@/types';
 import { formatDateTime, formatRelative, truncate } from '@/utils/format';
 import { countWords, extractExcerpt } from '@/utils/markdown';
@@ -89,6 +90,7 @@ function writeLastTemplateId(id: number | null) {
 /** 文章管理页面 */
 export function ArticlesPage() {
   const { message, modal } = AntdApp.useApp();
+  const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const currentSiteId = useSiteStore((s) => s.currentSiteId);
@@ -222,14 +224,14 @@ export function ArticlesPage() {
         await saveArticle(editingId, updates, { silent });
         lastSavedRef.current = updates.content ?? '';
         if (!silent) {
-          message.success('文章已保存');
+          message.success(t('文章已保存'));
           await fetchTaxonomies(currentSiteId as number);
         }
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
       }
     },
-    [editingId, metaForm, draft, saveArticle, message, fetchTaxonomies, currentSiteId],
+    [editingId, metaForm, draft, saveArticle, message, fetchTaxonomies, currentSiteId, t],
   );
 
   // 自动保存
@@ -270,11 +272,11 @@ export function ArticlesPage() {
 
   const handleCreate = async () => {
     if (currentSiteId === null) {
-      message.warning('请先选择站点');
+      message.warning(t('请先选择站点'));
       return;
     }
     if (!newTitle.trim()) {
-      message.warning('请输入文章标题');
+      message.warning(t('请输入文章标题'));
       return;
     }
 
@@ -284,7 +286,7 @@ export function ArticlesPage() {
       });
       if (newTemplateId !== null) markTemplateUsed(newTemplateId);
       writeLastTemplateId(newTemplateId);
-      message.success(newTemplateId ? '文章已创建并套用模板' : '文章已创建');
+      message.success(newTemplateId ? t('文章已创建并套用模板') : t('文章已创建'));
       setCreating(false);
       setNewTitle('');
       setEditingId(article.id);
@@ -298,7 +300,7 @@ export function ArticlesPage() {
   const handleCreateDraft = async () => {
     if (currentSiteId === null) return;
     if (!newTitle.trim()) {
-      message.warning('请输入文章标题');
+      message.warning(t('请输入文章标题'));
       return;
     }
 
@@ -309,7 +311,7 @@ export function ArticlesPage() {
       });
       if (newTemplateId !== null) markTemplateUsed(newTemplateId);
       writeLastTemplateId(newTemplateId);
-      message.success(newTemplateId ? '草稿已创建并套用模板' : '草稿已创建');
+      message.success(newTemplateId ? t('草稿已创建并套用模板') : t('草稿已创建'));
       setCreating(false);
       setNewTitle('');
       setEditingId(article.id);
@@ -331,7 +333,7 @@ export function ArticlesPage() {
   const handleApplyTemplate = async () => {
     if (editingId === null) return;
     if (applyTemplateId === null) {
-      message.warning('请选择要套用的模板');
+      message.warning(t('请选择要套用的模板'));
       return;
     }
 
@@ -350,14 +352,14 @@ export function ArticlesPage() {
 
       const parts: string[] = [];
       if (result.appliedFields.length > 0) {
-        parts.push(`字段 ${result.appliedFields.map((f) => f).join('、')}`);
+        parts.push(t('字段 {fields}', { fields: result.appliedFields.map((f) => f).join('、') }));
       }
-      if (result.bodyChanged) parts.push('正文骨架');
+      if (result.bodyChanged) parts.push(t('正文骨架'));
 
       if (parts.length === 0) {
-        message.info('模板已套用，但所有字段都已存在且正文未改动');
+        message.info(t('模板已套用，但所有字段都已存在且正文未改动'));
       } else {
-        message.success(`已套用模板：写入${parts.join('，')}`);
+        message.success(t('已套用模板：写入 {parts}', { parts: parts.join('，') }));
       }
       await fetchTaxonomies(currentSiteId as number);
     } catch (e) {
@@ -369,15 +371,17 @@ export function ArticlesPage() {
 
   const handleDelete = (article: Article) => {
     modal.confirm({
-      title: '删除文章？',
-      content: `「${truncate(article.title, 30)}」将被永久删除，此操作不可撤销。`,
-      okText: '删除',
+      title: t('删除文章？'),
+      content: t('「{title}」将被永久删除，此操作不可撤销。', {
+        title: truncate(article.title, 30),
+      }),
+      okText: t('删除'),
       okButtonProps: { danger: true },
-      cancelText: '取消',
+      cancelText: t('取消'),
       onOk: async () => {
         try {
           await deleteArticle(article.id);
-          message.success('文章已删除');
+          message.success(t('文章已删除'));
           if (editingId === article.id) {
             setEditorOpen(false);
             setEditingId(null);
@@ -392,7 +396,7 @@ export function ArticlesPage() {
   const handlePublish = async (article: Article) => {
     try {
       await publishArticle(article.id);
-      message.success('文章已发布');
+      message.success(t('文章已发布'));
       await fetchTaxonomies(currentSiteId as number);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
@@ -402,7 +406,7 @@ export function ArticlesPage() {
   const handleUnpublish = async (article: Article) => {
     try {
       await unpublishArticle(article.id);
-      message.success('已转为草稿');
+      message.success(t('已转为草稿'));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }
@@ -411,14 +415,17 @@ export function ArticlesPage() {
   const handleDuplicate = async (article: Article) => {
     if (currentSiteId === null) return;
     try {
-      const created = await articleService.create(currentSiteId, `${article.title} 副本`);
+      const created = await articleService.create(
+        currentSiteId,
+        t('{name} 副本', { name: article.title }),
+      );
       await articleService.update(created.id, {
         content: article.content ?? '',
         categories: article.categories,
         tags: article.tags,
         status: 'draft',
       });
-      message.success('文章副本已创建（草稿状态）');
+      message.success(t('文章副本已创建（草稿状态）'));
       await refresh();
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
@@ -427,12 +434,12 @@ export function ArticlesPage() {
 
   const handleImport = async () => {
     if (currentSiteId === null) {
-      message.warning('请先选择站点');
+      message.warning(t('请先选择站点'));
       return;
     }
 
     const files = await pickFiles({
-      title: '选择要导入的 Markdown 文件',
+      title: t('选择要导入的 Markdown 文件'),
       filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mkd'] }],
     });
     if (files.length === 0) return;
@@ -440,7 +447,7 @@ export function ArticlesPage() {
     setImporting(true);
     try {
       const count = await importArticles(currentSiteId, files);
-      message.success(`成功导入 ${count} 篇文章`);
+      message.success(t('成功导入 {count} 篇文章', { count }));
       await fetchTaxonomies(currentSiteId);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
@@ -452,11 +459,11 @@ export function ArticlesPage() {
   const handleCloseEditor = () => {
     if (dirty) {
       modal.confirm({
-        title: '有未保存的修改',
-        content: '关闭编辑器将丢失未保存的内容，确定继续吗？',
-        okText: '放弃修改',
+        title: t('有未保存的修改'),
+        content: t('关闭编辑器将丢失未保存的内容，确定继续吗？'),
+        okText: t('放弃修改'),
         okButtonProps: { danger: true },
-        cancelText: '继续编辑',
+        cancelText: t('继续编辑'),
         onOk: () => {
           setEditorOpen(false);
           setEditingId(null);
@@ -469,31 +476,29 @@ export function ArticlesPage() {
   };
 
   const subMenu: MenuProps['items'] = [
-    { key: 'post', label: '新建文章', icon: <FileAddOutlined /> },
-    { key: 'draft', label: '新建草稿', icon: <EditOutlined /> },
+    { key: 'post', label: t('新建文章'), icon: <FileAddOutlined /> },
+    { key: 'draft', label: t('新建草稿'), icon: <EditOutlined /> },
   ];
 
   const statusFilter = query.status ?? 'all';
 
   return (
     <PageContainer
-      title="文章管理"
+      title={t('文章管理')}
       description={
         currentSiteId === null
-          ? '请先在顶栏选择站点'
-          : `共 ${total} 篇${
-              query.status === 'draft'
-                ? '草稿'
-                : query.status === 'published'
-                  ? '已发布文章'
-                  : '文章'
-            }`
+          ? t('请先在顶栏选择站点')
+          : query.status === 'draft'
+            ? t('共 {count} 篇草稿', { count: total })
+            : query.status === 'published'
+              ? t('共 {count} 篇已发布文章', { count: total })
+              : t('共 {count} 篇文章', { count: total })
       }
       card={false}
       flush
       extra={
         <Space>
-          <Tooltip title="维护写新文章时常用的 Front Matter 字段">
+          <Tooltip title={t('维护写新文章时常用的 Front Matter 字段')}>
             <Button
               icon={<ThunderboltOutlined />}
               onClick={() => {
@@ -501,7 +506,7 @@ export function ArticlesPage() {
                 void fetchTemplates({ force: true });
               }}
             >
-              写作模板
+              {t('写作模板')}
             </Button>
           </Tooltip>
           <Button
@@ -510,7 +515,7 @@ export function ArticlesPage() {
             loading={importing}
             disabled={currentSiteId === null}
           >
-            导入 Markdown
+            {t('导入 Markdown')}
           </Button>
           <Dropdown.Button
             type="primary"
@@ -525,7 +530,7 @@ export function ArticlesPage() {
             onClick={() => setCreating(true)}
             disabled={currentSiteId === null}
           >
-            新建文章
+            {t('新建文章')}
           </Dropdown.Button>
         </Space>
       }
@@ -537,7 +542,7 @@ export function ArticlesPage() {
           <div className="space-y-3 border-b p-4" style={{ borderColor: 'var(--hm-border)' }}>
             <Input
               allowClear
-              placeholder="搜索标题、内容"
+              placeholder={t('搜索标题、内容')}
               prefix={<SearchOutlined className="opacity-50" />}
               value={query.query ?? ''}
               onChange={(e) => void setQuery({ query: e.target.value })}
@@ -549,9 +554,9 @@ export function ArticlesPage() {
               value={statusFilter}
               onChange={(v) => void setQuery({ status: v === 'all' ? undefined : String(v) })}
               options={[
-                { label: '全部', value: 'all' },
-                { label: '已发布', value: 'published' },
-                { label: '草稿', value: 'draft' },
+                { label: t('全部'), value: 'all' },
+                { label: t('已发布'), value: 'published' },
+                { label: t('草稿'), value: 'draft' },
               ]}
             />
 
@@ -559,7 +564,7 @@ export function ArticlesPage() {
               <Select
                 size="small"
                 allowClear
-                placeholder="全部分类"
+                placeholder={t('全部分类')}
                 style={{ width: 140 }}
                 value={query.category}
                 onChange={(v) => void setQuery({ category: v })}
@@ -571,13 +576,13 @@ export function ArticlesPage() {
               <Select
                 size="small"
                 allowClear
-                placeholder="全部标签"
+                placeholder={t('全部标签')}
                 style={{ width: 140 }}
                 value={query.tag}
                 onChange={(v) => void setQuery({ tag: v })}
                 options={tags.map((t) => ({ label: `${t.name} (${t.count})`, value: t.name }))}
               />
-              <Tooltip title="刷新">
+              <Tooltip title={t('刷新')}>
                 <Button
                   size="small"
                   type="text"
@@ -594,8 +599,8 @@ export function ArticlesPage() {
               <EmptyState
                 kind="articles"
                 compact
-                title="请先选择站点"
-                description="在顶栏切换站点后查看其文章"
+                title={t('请先选择站点')}
+                description={t('在顶栏切换站点后查看其文章')}
               />
             ) : loading && articles.length === 0 ? (
               <div className="p-4">
@@ -609,7 +614,7 @@ export function ArticlesPage() {
               <EmptyState
                 kind={query.query || query.category || query.tag ? 'search' : 'articles'}
                 compact
-                actionText={query.query ? undefined : '新建文章'}
+                actionText={query.query ? undefined : t('新建文章')}
                 onAction={query.query ? undefined : () => setCreating(true)}
               />
             ) : (
@@ -636,7 +641,7 @@ export function ArticlesPage() {
               style={{ borderColor: 'var(--hm-border)' }}
             >
               <span>
-                第 {page} 页 · 共 {Math.ceil(total / limit)} 页
+                {t('第 {page} 页 · 共 {pages} 页', { page, pages: Math.ceil(total / limit) })}
               </span>
               <Space size={4}>
                 <Button
@@ -645,7 +650,7 @@ export function ArticlesPage() {
                   disabled={page <= 1}
                   onClick={() => void paginate(page - 1)}
                 >
-                  上一页
+                  {t('上一页')}
                 </Button>
                 <Button
                   size="small"
@@ -653,7 +658,7 @@ export function ArticlesPage() {
                   disabled={page >= Math.ceil(total / limit)}
                   onClick={() => void paginate(page + 1)}
                 >
-                  下一页
+                  {t('下一页')}
                 </Button>
               </Space>
             </div>
@@ -668,9 +673,9 @@ export function ArticlesPage() {
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description={
                   <div>
-                    <div className="text-base">选择一篇文章开始编辑</div>
+                    <div className="text-base">{t('选择一篇文章开始编辑')}</div>
                     <div className="mt-1 text-xs hm-text-secondary">
-                      支持实时 Markdown 预览、自动保存（Ctrl/Cmd + S 手动保存）
+                      {t('支持实时 Markdown 预览、自动保存（Ctrl/Cmd + S 手动保存）')}
                     </div>
                   </div>
                 }
@@ -682,14 +687,14 @@ export function ArticlesPage() {
                     onClick={() => setCreating(true)}
                     disabled={currentSiteId === null}
                   >
-                    新建文章
+                    {t('新建文章')}
                   </Button>
                   <Button
                     icon={<ImportOutlined />}
                     onClick={() => void handleImport()}
                     disabled={currentSiteId === null}
                   >
-                    导入
+                    {t('导入')}
                   </Button>
                 </Space>
               </Empty>
@@ -706,17 +711,17 @@ export function ArticlesPage() {
                     variant="borderless"
                     value={draft.title ?? ''}
                     onChange={(e) => patch({ title: e.target.value })}
-                    placeholder="文章标题"
+                    placeholder={t('文章标题')}
                     className="!px-0 text-base font-medium"
                     style={{ width: 260 }}
                   />
                   {dirty ? (
                     <Tag color="orange" className="m-0" style={{ fontSize: 11 }}>
-                      未保存
+                      {t('未保存')}
                     </Tag>
                   ) : (
                     <Tag color="green" className="m-0" style={{ fontSize: 11 }}>
-                      已保存
+                      {t('已保存')}
                     </Tag>
                   )}
                 </div>
@@ -727,13 +732,13 @@ export function ArticlesPage() {
                     value={layout}
                     onChange={(v) => setLayout(v as EditorLayout)}
                     options={[
-                      { label: '编辑', value: 'edit', icon: <EditOutlined /> },
-                      { label: '分栏', value: 'split', icon: <SplitCellsOutlined /> },
-                      { label: '预览', value: 'preview', icon: <EyeOutlined /> },
+                      { label: t('编辑'), value: 'edit', icon: <EditOutlined /> },
+                      { label: t('分栏'), value: 'split', icon: <SplitCellsOutlined /> },
+                      { label: t('预览'), value: 'preview', icon: <EyeOutlined /> },
                     ]}
                   />
 
-                  <Tooltip title="套用 Front Matter 模板">
+                  <Tooltip title={t('套用 Front Matter 模板')}>
                     <Button
                       size="small"
                       icon={<ThunderboltOutlined />}
@@ -741,32 +746,32 @@ export function ArticlesPage() {
                       disabled={templates.length === 0}
                     />
                   </Tooltip>
-                  <Tooltip title="文章元信息">
+                  <Tooltip title={t('文章元信息')}>
                     <Button
                       size="small"
                       icon={<LayoutOutlined />}
                       onClick={() => setMetaOpen(true)}
                     />
                   </Tooltip>
-                  <Tooltip title="历史版本">
+                  <Tooltip title={t('历史版本')}>
                     <Button
                       size="small"
                       icon={<HistoryOutlined />}
                       onClick={() => setHistoryOpen(true)}
                     />
                   </Tooltip>
-                  <Tooltip title="重新加载（丢弃未保存修改）">
+                  <Tooltip title={t('重新加载（丢弃未保存修改）')}>
                     <Button
                       size="small"
                       icon={<UndoOutlined />}
                       onClick={() => {
                         reset();
-                        message.info('已恢复到上次保存的版本');
+                        message.info(t('已恢复到上次保存的版本'));
                       }}
                       disabled={!dirty}
                     />
                   </Tooltip>
-                  <Tooltip title={autoSave ? '自动保存已开启' : '自动保存已关闭'}>
+                  <Tooltip title={autoSave ? t('自动保存已开启') : t('自动保存已关闭')}>
                     <Button
                       size="small"
                       type={autoSave ? 'primary' : 'default'}
@@ -774,7 +779,7 @@ export function ArticlesPage() {
                       icon={<ClockCircleOutlined />}
                       onClick={() => {
                         setAutoSave((v) => !v);
-                        message.info(autoSave ? '已关闭自动保存' : '已开启自动保存（30 秒）');
+                        message.info(autoSave ? t('已关闭自动保存') : t('已开启自动保存（30 秒）'));
                       }}
                     />
                   </Tooltip>
@@ -785,10 +790,10 @@ export function ArticlesPage() {
                     loading={saving}
                     onClick={() => void doSave(false)}
                   >
-                    保存
+                    {t('保存')}
                   </Button>
                   <Button size="small" onClick={handleCloseEditor}>
-                    关闭
+                    {t('关闭')}
                   </Button>
                 </Space>
               </div>
@@ -826,14 +831,14 @@ export function ArticlesPage() {
                 style={{ borderColor: 'var(--hm-border)' }}
               >
                 <Space size={12}>
-                  <span>{wordCount} 字</span>
-                  <span>{fullContent.length} 字符</span>
-                  <span>{fullContent.split('\n').length} 行</span>
+                  <span>{t('{count} 字', { count: wordCount })}</span>
+                  <span>{t('{count} 字符', { count: fullContent.length })}</span>
+                  <span>{t('{count} 行', { count: fullContent.split('\n').length })}</span>
                   {draft.slug ? <span className="hm-mono">{draft.slug}</span> : null}
                 </Space>
                 <Space size={12}>
-                  <span>{draft.status === 'draft' ? '草稿' : '已发布'}</span>
-                  <span>更新于 {formatRelative(draft.updatedAt)}</span>
+                  <span>{draft.status === 'draft' ? t('草稿') : t('已发布')}</span>
+                  <span>{t('更新于 {time}', { time: formatRelative(draft.updatedAt) })}</span>
                 </Space>
               </div>
             </>
@@ -844,7 +849,7 @@ export function ArticlesPage() {
       {/* 新建文章弹窗 */}
       <Modal
         open={creating}
-        title="新建文章"
+        title={t('新建文章')}
         onCancel={() => {
           setCreating(false);
           setNewTitle('');
@@ -858,24 +863,24 @@ export function ArticlesPage() {
                 setNewTitle('');
               }}
             >
-              取消
+              {t('取消')}
             </Button>
-            <Button onClick={() => void handleCreateDraft()}>创建草稿</Button>
+            <Button onClick={() => void handleCreateDraft()}>{t('创建草稿')}</Button>
             <Button type="primary" onClick={() => void handleCreate()}>
-              创建并编辑
+              {t('创建并编辑')}
             </Button>
           </Space>
         }
       >
         <div className="space-y-3 pt-2">
           <div>
-            <div className="mb-1.5 text-sm">文章标题</div>
+            <div className="mb-1.5 text-sm">{t('文章标题')}</div>
             <Input
               autoFocus
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
               onPressEnter={() => void handleCreate()}
-              placeholder="如：React 18 并发特性实践"
+              placeholder={t('如：React 18 并发特性实践')}
               maxLength={120}
               showCount
             />
@@ -883,20 +888,20 @@ export function ArticlesPage() {
 
           <div>
             <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-sm">Front Matter 模板</span>
+              <span className="text-sm">{t('Front Matter 模板')}</span>
               <Button
                 type="link"
                 size="small"
                 className="!px-0"
                 onClick={() => setTemplateManageOpen(true)}
               >
-                管理模板
+                {t('管理模板')}
               </Button>
             </div>
             <Select
               allowClear
               className="w-full"
-              placeholder="不使用模板（只写入标题、日期、分类、标签）"
+              placeholder={t('不使用模板（只写入标题、日期、分类、标签）')}
               value={newTemplateId ?? undefined}
               onChange={(v) => {
                 setNewTemplateId(v ?? null);
@@ -922,7 +927,7 @@ export function ArticlesPage() {
               return (
                 <div className="mt-2 flex flex-wrap items-center gap-1">
                   {keys.length === 0 ? (
-                    <span className="text-xs hm-text-secondary">该模板没有自定义字段</span>
+                    <span className="text-xs hm-text-secondary">{t('该模板没有自定义字段')}</span>
                   ) : (
                     keys.map((k) => (
                       <Tag key={k} className="m-0 hm-mono" style={{ fontSize: 11 }}>
@@ -932,7 +937,7 @@ export function ArticlesPage() {
                   )}
                   {selected.body ? (
                     <Tag color="blue" className="m-0" style={{ fontSize: 11 }}>
-                      含正文骨架
+                      {t('含正文骨架')}
                     </Tag>
                   ) : null}
                 </div>
@@ -943,13 +948,15 @@ export function ArticlesPage() {
           <Alert
             type="info"
             showIcon
-            message="文件将创建在 source/_posts 目录下"
-            description="标题会自动转换为 URL 友好的文件名（保留中文）。创建后可在编辑器中补充分类、标签与正文。"
+            message={t('文件将创建在 source/_posts 目录下')}
+            description={t(
+              '标题会自动转换为 URL 友好的文件名（保留中文）。创建后可在编辑器中补充分类、标签与正文。',
+            )}
           />
 
           {categories.length > 0 ? (
             <div>
-              <div className="mb-1.5 text-xs hm-text-secondary">已有分类（仅供参考）</div>
+              <div className="mb-1.5 text-xs hm-text-secondary">{t('已有分类（仅供参考）')}</div>
               <Space size={4} wrap>
                 {categories.slice(0, 10).map((c) => (
                   <Tag key={c.name} className="m-0" style={{ fontSize: 11 }}>
@@ -965,12 +972,12 @@ export function ArticlesPage() {
       {/* 套用模板对话框 */}
       <Modal
         open={applyOpen}
-        title="套用 Front Matter 模板"
+        title={t('套用 Front Matter 模板')}
         width={560}
         onCancel={() => setApplyOpen(false)}
         footer={
           <Space>
-            <Button onClick={() => setApplyOpen(false)}>取消</Button>
+            <Button onClick={() => setApplyOpen(false)}>{t('取消')}</Button>
             <Button
               type="primary"
               icon={<ThunderboltOutlined />}
@@ -978,17 +985,17 @@ export function ArticlesPage() {
               disabled={applyTemplateId === null}
               onClick={() => void handleApplyTemplate()}
             >
-              套用
+              {t('套用')}
             </Button>
           </Space>
         }
       >
         <div className="space-y-4 pt-2">
           <div>
-            <div className="mb-1.5 text-sm">选择模板</div>
+            <div className="mb-1.5 text-sm">{t('选择模板')}</div>
             <Select
               className="w-full"
-              placeholder="请选择模板"
+              placeholder={t('请选择模板')}
               value={applyTemplateId ?? undefined}
               onChange={(v) => setApplyTemplateId(v)}
               options={templates.map((t) => ({
@@ -1004,9 +1011,9 @@ export function ArticlesPage() {
             const entries = Object.entries(selected.fields ?? {});
             return (
               <div>
-                <div className="mb-1.5 text-sm">将写入的字段</div>
+                <div className="mb-1.5 text-sm">{t('将写入的字段')}</div>
                 {entries.length === 0 ? (
-                  <div className="text-xs hm-text-secondary">该模板没有自定义字段</div>
+                  <div className="text-xs hm-text-secondary">{t('该模板没有自定义字段')}</div>
                 ) : (
                   <div className="max-h-40 space-y-1 overflow-auto rounded border p-2" style={{ borderColor: 'var(--hm-border)' }}>
                     {entries.map(([k, v]) => (
@@ -1027,29 +1034,29 @@ export function ArticlesPage() {
             checked={applyOverwrite}
             onChange={(e) => setApplyOverwrite(e.target.checked)}
           >
-            <span className="text-sm">覆盖已有同名字段</span>
+            <span className="text-sm">{t('覆盖已有同名字段')}</span>
             <div className="text-xs hm-text-secondary">
-              不勾选时只补齐缺失或为空的字段，已有内容一律保留
+              {t('不勾选时只补齐缺失或为空的字段，已有内容一律保留')}
             </div>
           </Checkbox>
 
           <div>
-            <div className="mb-1.5 text-sm">正文处理</div>
+            <div className="mb-1.5 text-sm">{t('正文处理')}</div>
             <Radio.Group
               value={applyBodyMode}
               onChange={(e) => setApplyBodyMode(e.target.value as TemplateBodyMode)}
             >
               <Space direction="vertical" size={4}>
                 <Radio value="none">
-                  <span className="text-sm">保持正文不变</span>
-                  <span className="ml-2 text-xs hm-text-secondary">推荐</span>
+                  <span className="text-sm">{t('保持正文不变')}</span>
+                  <span className="ml-2 text-xs hm-text-secondary">{t('推荐')}</span>
                 </Radio>
                 <Radio value="append">
-                  <span className="text-sm">在正文末尾追加骨架</span>
+                  <span className="text-sm">{t('在正文末尾追加骨架')}</span>
                 </Radio>
                 <Radio value="replace">
-                  <span className="text-sm">用骨架替换正文</span>
-                  <span className="ml-2 text-xs text-orange-500">会丢失现有内容</span>
+                  <span className="text-sm">{t('用骨架替换正文')}</span>
+                  <span className="ml-2 text-xs text-orange-500">{t('会丢失现有内容')}</span>
                 </Radio>
               </Space>
             </Radio.Group>
@@ -1059,8 +1066,10 @@ export function ArticlesPage() {
             <Alert
               type="warning"
               showIcon
-              message="当前有未保存的改动"
-              description="套用模板会直接改写磁盘文件并重新载入编辑器，未保存的正文修改将丢失。建议先保存。"
+              message={t('当前有未保存的改动')}
+              description={t(
+                '套用模板会直接改写磁盘文件并重新载入编辑器，未保存的正文修改将丢失。建议先保存。',
+              )}
             />
           ) : null}
         </div>
@@ -1070,7 +1079,7 @@ export function ArticlesPage() {
       <Drawer
         open={templateManageOpen}
         onClose={() => setTemplateManageOpen(false)}
-        title="写作模板"
+        title={t('写作模板')}
         width={760}
         destroyOnClose
       >
@@ -1081,7 +1090,7 @@ export function ArticlesPage() {
       <Drawer
         open={metaOpen}
         onClose={() => setMetaOpen(false)}
-        title="文章元信息"
+        title={t('文章元信息')}
         width={440}
         extra={
           <Button
@@ -1092,32 +1101,32 @@ export function ArticlesPage() {
               setMetaOpen(false);
             }}
           >
-            保存
+            {t('保存')}
           </Button>
         }
       >
         <Form form={metaForm} layout="vertical">
-          <Form.Item name="title" label="标题">
+          <Form.Item name="title" label={t('标题')}>
             <Input onChange={(e) => patch({ title: e.target.value })} />
           </Form.Item>
 
-          <Form.Item name="excerpt" label="摘要" extra="留空时将自动从正文首段提取">
+          <Form.Item name="excerpt" label={t('摘要')} extra={t('留空时将自动从正文首段提取')}>
             <Input.TextArea rows={3} maxLength={300} showCount />
           </Form.Item>
 
           <Form.Item
             name="categories"
-            label="分类"
-            extra="按住 Ctrl 可多选；也可直接输入新分类后回车"
+            label={t('分类')}
+            extra={t('按住 Ctrl 可多选；也可直接输入新分类后回车')}
           >
-            <TagInput options={categories} color="purple" placeholder="选择或输入分类" />
+            <TagInput options={categories} color="purple" placeholder={t('选择或输入分类')} />
           </Form.Item>
 
-          <Form.Item name="tags" label="标签">
-            <TagInput options={tags} color="blue" placeholder="选择或输入标签" />
+          <Form.Item name="tags" label={t('标签')}>
+            <TagInput options={tags} color="blue" placeholder={t('选择或输入标签')} />
           </Form.Item>
 
-          <Form.Item name="coverImage" label="封面图" extra="图片路径或外链 URL">
+          <Form.Item name="coverImage" label={t('封面图')} extra={t('图片路径或外链 URL')}>
             <Input
               placeholder="/images/cover.jpg"
               className="hm-mono"
@@ -1127,28 +1136,28 @@ export function ArticlesPage() {
 
           <Divider className="my-3" />
 
-          <Form.Item name="status" label="文章状态">
+          <Form.Item name="status" label={t('文章状态')}>
             <Select
               options={[
-                { label: '已发布', value: 'published' },
-                { label: '草稿', value: 'draft' },
+                { label: t('已发布'), value: 'published' },
+                { label: t('草稿'), value: 'draft' },
               ]}
             />
           </Form.Item>
 
-          <Form.Item name="isTop" label="置顶" valuePropName="checked">
-            <Switch checkedChildren="置顶" unCheckedChildren="普通" />
+          <Form.Item name="isTop" label={t('置顶')} valuePropName="checked">
+            <Switch checkedChildren={t('置顶')} unCheckedChildren={t('普通')} />
           </Form.Item>
 
-          <Form.Item name="allowComment" label="允许评论" valuePropName="checked">
-            <Switch checkedChildren="允许" unCheckedChildren="关闭" />
+          <Form.Item name="allowComment" label={t('允许评论')} valuePropName="checked">
+            <Switch checkedChildren={t('允许')} unCheckedChildren={t('关闭')} />
           </Form.Item>
 
           <Divider className="my-3" />
 
           <div className="space-y-2 text-xs hm-text-secondary">
             <div className="flex justify-between">
-              <span>文件名</span>
+              <span>{t('文件名')}</span>
               <span className="hm-mono">{draft.filePath?.split('/').pop() ?? '—'}</span>
             </div>
             <div className="flex justify-between">
@@ -1156,15 +1165,15 @@ export function ArticlesPage() {
               <span className="hm-mono">{draft.slug ?? '—'}</span>
             </div>
             <div className="flex justify-between">
-              <span>创建时间</span>
+              <span>{t('创建时间')}</span>
               <span>{formatDateTime(draft.createdAt)}</span>
             </div>
             <div className="flex justify-between">
-              <span>更新时间</span>
+              <span>{t('更新时间')}</span>
               <span>{formatDateTime(draft.updatedAt)}</span>
             </div>
             <div className="flex justify-between">
-              <span>字数</span>
+              <span>{t('字数')}</span>
               <span>{wordCount}</span>
             </div>
           </div>
@@ -1175,7 +1184,7 @@ export function ArticlesPage() {
       <Drawer
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
-        title="历史版本（基于 Git）"
+        title={t('历史版本（基于 Git）')}
         width={480}
       >
         {historyLoading ? (
@@ -1187,8 +1196,10 @@ export function ArticlesPage() {
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={
               <div className="text-sm hm-text-secondary">
-                暂无历史记录
-                <div className="mt-1 text-xs">文章所在目录需要是一个 Git 仓库，且有提交记录</div>
+                {t('暂无历史记录')}
+                <div className="mt-1 text-xs">
+                  {t('文章所在目录需要是一个 Git 仓库，且有提交记录')}
+                </div>
               </div>
             }
           />
@@ -1214,14 +1225,16 @@ export function ArticlesPage() {
                       try {
                         const content = await articleService.atCommit(editingId, commit.hash);
                         patch({ content });
-                        message.success(`已载入 ${commit.shortHash} 版本内容，保存后生效`);
+                        message.success(
+                          t('已载入 {hash} 版本内容，保存后生效', { hash: commit.shortHash }),
+                        );
                         setHistoryOpen(false);
                       } catch (e) {
                         message.error(e instanceof Error ? e.message : String(e));
                       }
                     }}
                   >
-                    载入此版本
+                    {t('载入此版本')}
                   </Button>
                 </div>
               ),

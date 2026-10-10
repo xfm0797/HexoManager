@@ -3,9 +3,10 @@
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/zh-cn';
+import { getLocale } from '@/i18n';
 
 dayjs.extend(relativeTime);
-dayjs.locale('zh-cn');
+// dayjs 的当前语言由 src/i18n 统一切换，这里不再固定为中文
 
 /** 格式化日期时间 */
 export function formatDateTime(value: string | number | Date | null | undefined): string {
@@ -40,15 +41,21 @@ export function formatFileSize(bytes: number): string {
 /** 格式化大数字（如 12345 → 12,345） */
 export function formatNumber(value: number): string {
   if (!Number.isFinite(value)) return '0';
-  return value.toLocaleString('zh-CN');
+  return value.toLocaleString(getLocale());
 }
 
-/** 格式化数字为紧凑形式（如 12345 → 1.2万） */
+/** 格式化数字为紧凑形式（中文 12345 → 1.2万，英文 12345 → 12.3K） */
 export function formatCompactNumber(value: number): string {
   if (!Number.isFinite(value)) return '0';
-  if (Math.abs(value) >= 100000000) return `${(value / 100000000).toFixed(1)}亿`;
-  if (Math.abs(value) >= 10000) return `${(value / 10000).toFixed(1)}万`;
-  return value.toLocaleString('zh-CN');
+  if (getLocale() === 'zh-CN') {
+    if (Math.abs(value) >= 100000000) return `${(value / 100000000).toFixed(1)}亿`;
+    if (Math.abs(value) >= 10000) return `${(value / 10000).toFixed(1)}万`;
+    return value.toLocaleString('zh-CN');
+  }
+  if (Math.abs(value) >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
+  if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(1)}K`;
+  return value.toLocaleString('en-US');
 }
 
 /** 格式化耗时（毫秒） */
@@ -58,7 +65,7 @@ export function formatDuration(ms: number | null | undefined): string {
   if (ms < 60000) return `${(ms / 1000).toFixed(1)} s`;
   const minutes = Math.floor(ms / 60000);
   const seconds = Math.round((ms % 60000) / 1000);
-  return `${minutes} 分 ${seconds} 秒`;
+  return getLocale() === 'zh-CN' ? `${minutes} 分 ${seconds} 秒` : `${minutes}m ${seconds}s`;
 }
 
 /** 截断文本 */

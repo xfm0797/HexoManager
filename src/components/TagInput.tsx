@@ -2,6 +2,7 @@
 
 import { Select, Tag } from 'antd';
 import type { SelectProps } from 'antd';
+import { useI18n } from '@/i18n';
 
 interface TagInputProps {
   value?: string[];
@@ -27,13 +28,16 @@ export function TagInput({
   value = [],
   onChange,
   options = [],
-  placeholder = '输入后回车创建',
+  placeholder,
   maxCount,
   color = 'blue',
   disabled = false,
   single = false,
   status,
 }: TagInputProps) {
+  const { t } = useI18n();
+  const hint = placeholder ?? t('输入后回车创建');
+
   const selectOptions = options.map((item) => ({
     label:
       item.count !== undefined ? (
@@ -61,7 +65,7 @@ export function TagInput({
       value={single ? (value[0] as unknown as string) : value}
       onChange={(next) => handleChange(Array.isArray(next) ? next : next ? [next] : [])}
       options={selectOptions}
-      placeholder={placeholder}
+      placeholder={hint}
       disabled={disabled}
       status={status}
       style={{ width: '100%' }}

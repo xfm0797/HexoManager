@@ -13,6 +13,7 @@ import { App as AntdApp } from 'antd';
 import { copyToClipboard } from '@/utils/desktop';
 import { pickSavePath } from '@/utils/desktop';
 import { fileService } from '@/services';
+import { useI18n, getLocale } from '@/i18n';
 
 interface LogViewerProps {
   /** 日志行 */
@@ -68,7 +69,7 @@ const LEVEL_COLOR: Record<ReturnType<typeof lineLevel>, string> = {
 export function LogViewer({
   lines,
   height = 420,
-  emptyText = '暂无日志输出',
+  emptyText,
   toolbar = true,
   title,
   autoScroll = true,
@@ -76,10 +77,13 @@ export function LogViewer({
   exportFileName = 'build-log.txt',
 }: LogViewerProps) {
   const { message } = AntdApp.useApp();
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [level, setLevel] = useState<LevelFilter>('all');
   const [keyword, setKeyword] = useState('');
   const [follow, setFollow] = useState(true);
+
+  const emptyTextContent = emptyText ?? t('暂无日志输出');
 
   const filtered = useMemo(() => {
     return lines.filter((line) => {
@@ -108,28 +112,28 @@ export function LogViewer({
 
   const handleCopy = async () => {
     const ok = await copyToClipboard(lines.join('\n'));
-    if (ok) message.success('日志已复制');
-    else message.error('复制失败');
+    if (ok) message.success(t('日志已复制'));
+    else message.error(t('复制失败'));
   };
 
   const handleExport = async () => {
     try {
       const target = await pickSavePath({
-        title: '导出日志',
+        title: t('导出日志'),
         defaultPath: exportFileName,
-        filters: [{ name: '文本文件', extensions: ['txt', 'log'] }],
+        filters: [{ name: t('文本文件'), extensions: ['txt', 'log'] }],
       });
       if (!target) return;
 
       const header = [
-        `# HexoManager 日志导出`,
-        `# 时间：${new Date().toLocaleString('zh-CN')}`,
-        `# 行数：${lines.length}`,
+        `# ${t('HexoManager 日志导出')}`,
+        `# ${t('时间')}：${new Date().toLocaleString(getLocale())}`,
+        `# ${t('行数')}：${lines.length}`,
         '',
       ].join('\n');
 
       await fileService.write(target, `${header}${lines.join('\n')}\n`);
-      message.success('日志已导出');
+      message.success(t('日志已导出'));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }
@@ -151,17 +155,19 @@ export function LogViewer({
           style={{ borderColor: 'var(--hm-border)' }}
         >
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">{title ?? '运行日志'}</span>
+            <span className="text-sm font-medium">{title ?? t('运行日志')}</span>
             <span className="text-xs hm-text-secondary">
-              {lines.length} 行
+              {t('{count} 行', { count: lines.length })}
               {errorCount > 0 ? (
-                <span className="ml-1 text-red-500">· {errorCount} 处错误</span>
+                <span className="ml-1 text-red-500">
+                  {t('· {count} 处错误', { count: errorCount })}
+                </span>
               ) : null}
             </span>
             {running ? (
               <span className="inline-flex items-center gap-1 text-xs text-brand-500">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />
-                执行中
+                {t('执行中')}
               </span>
             ) : null}
           </div>
@@ -172,27 +178,27 @@ export function LogViewer({
               value={level}
               onChange={(v) => setLevel(v as LevelFilter)}
               options={[
-                { label: '全部', value: 'all' },
-                { label: '警告+', value: 'warn' },
-                { label: '仅错误', value: 'error' },
+                { label: t('全部'), value: 'all' },
+                { label: t('警告+'), value: 'warn' },
+                { label: t('仅错误'), value: 'error' },
               ]}
             />
             <Input
               size="small"
               allowClear
               prefix={<SearchOutlined className="opacity-50" />}
-              placeholder="搜索日志"
+              placeholder={t('搜索日志')}
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               style={{ width: 150 }}
             />
-            <Tooltip title="复制全部">
+            <Tooltip title={t('复制全部')}>
               <Button size="small" type="text" icon={<CopyOutlined />} onClick={handleCopy} />
             </Tooltip>
-            <Tooltip title="导出为文件">
+            <Tooltip title={t('导出为文件')}>
               <Button size="small" type="text" icon={<DownloadOutlined />} onClick={handleExport} />
             </Tooltip>
-            <Tooltip title="清空视图">
+            <Tooltip title={t('清空视图')}>
               <Button
                 size="small"
                 type="text"
@@ -214,7 +220,9 @@ export function LogViewer({
         style={{ height, background: '#1e1e1e' }}
       >
         {filtered.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-gray-500">{emptyText}</div>
+          <div className="flex h-full items-center justify-center text-gray-500">
+            {emptyTextContent}
+          </div>
         ) : (
           filtered.map((line, index) => (
             <div
@@ -239,7 +247,7 @@ export function LogViewer({
           className="flex items-center justify-center gap-1 border-t py-1 text-xs hm-text-secondary transition hover:text-brand-500"
           style={{ borderColor: 'var(--hm-border)' }}
         >
-          <ArrowDownOutlined /> 回到底部
+          <ArrowDownOutlined /> {t('回到底部')}
         </button>
       ) : null}
     </div>

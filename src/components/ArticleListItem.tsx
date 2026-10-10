@@ -17,6 +17,7 @@ import {
 import type { Article } from '@/types';
 import { formatRelative, truncate } from '@/utils/format';
 import { estimateReadingTime } from '@/utils/markdown';
+import { useI18n } from '@/i18n';
 import { TagList } from './TagInput';
 
 interface ArticleListItemProps {
@@ -42,24 +43,30 @@ export function ArticleListItem({
   onDelete,
   dirty = false,
 }: ArticleListItemProps) {
+  const { t } = useI18n();
   const isDraft = article.status === 'draft';
 
   const menuItems: MenuProps['items'] = [
-    { key: 'open', label: isDraft ? '编辑草稿' : '编辑文章', icon: <EditOutlined /> },
+    { key: 'open', label: isDraft ? t('编辑草稿') : t('编辑文章'), icon: <EditOutlined /> },
     { type: 'divider' },
     isDraft
-      ? { key: 'publish', label: '发布文章', icon: <CheckCircleOutlined />, disabled: !onPublish }
+      ? {
+          key: 'publish',
+          label: t('发布文章'),
+          icon: <CheckCircleOutlined />,
+          disabled: !onPublish,
+        }
       : {
           key: 'unpublish',
-          label: '转为草稿',
+          label: t('转为草稿'),
           icon: <UndoOutlined />,
           disabled: !onUnpublish,
         },
-    { key: 'duplicate', label: '复制文章', icon: <CopyOutlined />, disabled: !onDuplicate },
+    { key: 'duplicate', label: t('复制文章'), icon: <CopyOutlined />, disabled: !onDuplicate },
     { type: 'divider' },
     {
       key: 'delete',
-      label: '删除文章',
+      label: t('删除文章'),
       icon: <DeleteOutlined />,
       danger: true,
       disabled: !onDelete,
@@ -107,7 +114,7 @@ export function ArticleListItem({
           {/* 标题行 */}
           <div className="flex items-center gap-2">
             {article.isTop ? (
-              <Tooltip title="置顶">
+              <Tooltip title={t('置顶')}>
                 <PushpinOutlined className="shrink-0 text-orange-500" />
               </Tooltip>
             ) : null}
@@ -116,15 +123,15 @@ export function ArticleListItem({
             </span>
             {isDraft ? (
               <Tag color="default" className="m-0 shrink-0" style={{ fontSize: 11 }}>
-                草稿
+                {t('草稿')}
               </Tag>
             ) : (
               <Tag color="green" className="m-0 shrink-0" style={{ fontSize: 11 }}>
-                已发布
+                {t('已发布')}
               </Tag>
             )}
             {dirty ? (
-              <Tooltip title="有未保存的修改">
+              <Tooltip title={t('有未保存的修改')}>
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400" />
               </Tooltip>
             ) : null}
@@ -140,8 +147,8 @@ export function ArticleListItem({
           {/* 元信息 */}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs hm-text-secondary">
             <span>{formatRelative(article.updatedAt ?? article.createdAt)}</span>
-            <span>{article.wordCount} 字</span>
-            <span>约 {estimateReadingTime(article.content ?? '')} 分钟</span>
+            <span>{t('{count} 字', { count: article.wordCount })}</span>
+            <span>{t('约 {min} 分钟', { min: estimateReadingTime(article.content ?? '') })}</span>
             {article.categories.length > 0 ? (
               <TagList values={article.categories} color="purple" max={2} />
             ) : null}
@@ -153,7 +160,7 @@ export function ArticleListItem({
 
         {/* 操作区 */}
         <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-          <Tooltip title="编辑">
+          <Tooltip title={t('编辑')}>
             <span
               role="button"
               tabIndex={-1}
@@ -167,7 +174,7 @@ export function ArticleListItem({
             </span>
           </Tooltip>
 
-          <Tooltip title={isDraft ? '发布' : '查看'}>
+          <Tooltip title={isDraft ? t('发布') : t('查看')}>
             <span
               role="button"
               tabIndex={-1}
@@ -204,8 +211,10 @@ export function ArticleListItem({
         {isDraft ? <ClockCircleOutlined /> : <FireOutlined />}
         <span>
           {isDraft
-            ? `创建于 ${formatRelative(article.createdAt)}`
-            : `发布于 ${formatRelative(article.publishedAt ?? article.createdAt)}`}
+            ? t('创建于 {time}', { time: formatRelative(article.createdAt) })
+            : t('发布于 {time}', {
+                time: formatRelative(article.publishedAt ?? article.createdAt),
+              })}
         </span>
       </div>
     </div>

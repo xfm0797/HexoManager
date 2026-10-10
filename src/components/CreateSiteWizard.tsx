@@ -30,6 +30,7 @@ import {
   isValidRepoUrl,
 } from '@/utils/validator';
 import { basenameOfPath } from '@/utils/slug';
+import { useI18n } from '@/i18n';
 import { WizardSteps } from './WizardSteps';
 import { FormField, FormSection } from './FormField';
 import { PathPicker } from './PathPicker';
@@ -68,6 +69,7 @@ const INITIAL_VALUES: WizardForm = {
  * 四步：基本信息 → 存放位置 → 仓库与部署 → 确认创建。
  */
 export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardProps) {
+  const { t } = useI18n();
   const [form] = Form.useForm<WizardForm>();
   const { message } = AntdApp.useApp();
   const createSite = useSiteStore((s) => s.createSite);
@@ -135,7 +137,7 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
     const values = form.getFieldsValue();
 
     if (pathTaken) {
-      message.error('该目录已被其他站点占用，请更换目录');
+      message.error(t('该目录已被其他站点占用，请更换目录'));
       setStep(1);
       return;
     }
@@ -154,7 +156,7 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
       };
 
       const site = await createSite(input);
-      message.success(`站点「${site.name}」创建成功`);
+      message.success(t('站点「{name}」创建成功', { name: site.name }));
       onCreated?.(site.id);
       onClose();
     } catch (e) {
@@ -192,18 +194,20 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
       open={open}
       onCancel={onClose}
       width={720}
-      title="创建 Hexo 站点"
+      title={t('创建 Hexo 站点')}
       destroyOnClose
       maskClosable={false}
       footer={
         <div className="flex items-center justify-between">
-          <span className="text-xs hm-text-secondary">第 {step + 1} / 4 步</span>
+          <span className="text-xs hm-text-secondary">
+            {t('第 {current} / {total} 步', { current: step + 1, total: 4 })}
+          </span>
           <Space>
-            {step > 0 ? <Button onClick={handlePrev}>上一步</Button> : null}
-            <Button onClick={onClose}>取消</Button>
+            {step > 0 ? <Button onClick={handlePrev}>{t('上一步')}</Button> : null}
+            <Button onClick={onClose}>{t('取消')}</Button>
             {step < 3 ? (
               <Button type="primary" onClick={handleNext}>
-                下一步
+                {t('下一步')}
               </Button>
             ) : (
               <Button
@@ -212,7 +216,7 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
                 loading={submitting}
                 onClick={handleSubmit}
               >
-                确认创建
+                {t('确认创建')}
               </Button>
             )}
           </Space>
@@ -226,12 +230,15 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
       <Form form={form} layout="vertical" initialValues={INITIAL_VALUES} requiredMark={false}>
         {/* 第一步：基本信息 */}
         <div style={{ display: step === 0 ? 'block' : 'none' }}>
-          <FormSection title="站点基本信息" description="用于在管理工具中标识这个站点">
+          <FormSection
+            title={t('站点基本信息')}
+            description={t('用于在管理工具中标识这个站点')}
+          >
             <FormField
               name="name"
-              label="站点名称"
+              label={t('站点名称')}
               required
-              tooltip="展示在站点列表与顶栏切换器中，可随时修改"
+              tooltip={t('展示在站点列表与顶栏切换器中，可随时修改')}
               rules={[
                 {
                   validator: (_rule, value: string) =>
@@ -241,17 +248,17 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
                 },
               ]}
             >
-              <Input placeholder="如：我的技术博客" maxLength={60} showCount autoFocus />
+              <Input placeholder={t('如：我的技术博客')} maxLength={60} showCount autoFocus />
             </FormField>
 
             <FormField
               name="description"
-              label="站点描述"
-              tooltip="可选，记录站点用途便于日后识别"
-              rules={[{ max: 200, message: '描述不能超过 200 个字符' }]}
+              label={t('站点描述')}
+              tooltip={t('可选，记录站点用途便于日后识别')}
+              rules={[{ max: 200, message: t('描述不能超过 200 个字符') }]}
             >
               <Input.TextArea
-                placeholder="如：记录前端与云原生相关的技术笔记"
+                placeholder={t('如：记录前端与云原生相关的技术笔记')}
                 rows={3}
                 maxLength={200}
                 showCount
@@ -263,14 +270,14 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
         {/* 第二步：存放位置 */}
         <div style={{ display: step === 1 ? 'block' : 'none' }}>
           <FormSection
-            title="站点存放位置"
-            description="站点将创建在该目录下，请确保选择空目录或新建目录"
+            title={t('站点存放位置')}
+            description={t('站点将创建在该目录下，请确保选择空目录或新建目录')}
           >
             <FormField
               name="path"
-              label="站点目录"
+              label={t('站点目录')}
               required
-              tooltip="Hexo 站点的根目录，会在此目录执行 hexo init"
+              tooltip={t('Hexo 站点的根目录，会在此目录执行 hexo init')}
               rules={[
                 {
                   validator: (_rule, value: string) => {
@@ -282,15 +289,15 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
             >
               <PathPicker
                 mode="directory"
-                placeholder="选择或输入站点目录的绝对路径"
+                placeholder={t('选择或输入站点目录的绝对路径')}
                 onPicked={handlePathPicked}
               />
             </FormField>
 
             <FormField
               name="nodeVersion"
-              label="Node 版本"
-              tooltip="留空使用系统默认版本；如选择具体版本，部署配置中会写入对应版本号"
+              label={t('Node 版本')}
+              tooltip={t('留空使用系统默认版本；如选择具体版本，部署配置中会写入对应版本号')}
               rules={[
                 {
                   validator: (_rule, value: string) =>
@@ -301,11 +308,11 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
               ]}
             >
               <Select
-                placeholder="使用系统默认版本"
+                placeholder={t('使用系统默认版本')}
                 allowClear
                 showSearch
                 options={[
-                  { label: '使用系统默认版本', value: 'system' },
+                  { label: t('使用系统默认版本'), value: 'system' },
                   { label: 'Node 18 LTS', value: '18' },
                   { label: 'Node 20 LTS', value: '20' },
                   { label: 'Node 22 LTS', value: '22' },
@@ -315,10 +322,10 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
 
             <FormField
               name="theme"
-              label="初始主题"
-              tooltip="可选，创建后自动安装并启用该主题（需网络可用）"
+              label={t('初始主题')}
+              tooltip={t('可选，创建后自动安装并启用该主题（需网络可用）')}
             >
-              <Input placeholder="如：fluid、next、butterfly" />
+              <Input placeholder={t('如：fluid、next、butterfly')} />
             </FormField>
 
             {/* 环境检测结果 */}
@@ -328,7 +335,7 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
                   <Alert
                     type="info"
                     showIcon
-                    message="正在检测环境…"
+                    message={t('正在检测环境…')}
                     icon={<CloudServerOutlined />}
                   />
                 ) : env ? (
@@ -337,14 +344,14 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
                     style={{ borderColor: 'var(--hm-border)' }}
                   >
                     <div className="mb-2 flex items-center justify-between">
-                      <span className="text-sm font-medium">环境检测结果</span>
+                      <span className="text-sm font-medium">{t('环境检测结果')}</span>
                       {env.ready ? (
                         <Tag color="green" className="m-0">
-                          环境就绪
+                          {t('环境就绪')}
                         </Tag>
                       ) : (
                         <Tag color="orange" className="m-0">
-                          存在待处理项
+                          {t('存在待处理项')}
                         </Tag>
                       )}
                     </div>
@@ -352,32 +359,32 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
                       <div className="flex items-center justify-between">
                         <span className="hm-text-secondary">Node.js</span>
-                        <span className="hm-mono">{env.nodeVersion ?? '未安装'}</span>
+                        <span className="hm-mono">{env.nodeVersion ?? t('未安装')}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="hm-text-secondary">npm</span>
-                        <span className="hm-mono">{env.npmVersion ?? '未安装'}</span>
+                        <span className="hm-mono">{env.npmVersion ?? t('未安装')}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="hm-text-secondary">Git</span>
-                        <span className="hm-mono">{env.gitVersion ?? '未安装'}</span>
+                        <span className="hm-mono">{env.gitVersion ?? t('未安装')}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="hm-text-secondary">Hexo CLI</span>
-                        <span className="hm-mono">{env.hexoVersion ?? '未全局安装'}</span>
+                        <span className="hm-mono">{env.hexoVersion ?? t('未全局安装')}</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="hm-text-secondary">已有 Hexo 站点</span>
+                        <span className="hm-text-secondary">{t('已有 Hexo 站点')}</span>
                         <StatusDot
                           color={env.isHexoSite ? '#52c41a' : '#d9d9d9'}
-                          text={env.isHexoSite ? '是' : '否'}
+                          text={env.isHexoSite ? t('是') : t('否')}
                         />
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="hm-text-secondary">依赖已安装</span>
+                        <span className="hm-text-secondary">{t('依赖已安装')}</span>
                         <StatusDot
                           color={env.hasNodeModules ? '#52c41a' : '#faad14'}
-                          text={env.hasNodeModules ? '是' : '否'}
+                          text={env.hasNodeModules ? t('是') : t('否')}
                         />
                       </div>
                     </div>
@@ -394,7 +401,7 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
                     ) : null}
                   </div>
                 ) : (
-                  <Alert type="warning" showIcon message="环境检测失败，请确认目录可访问" />
+                  <Alert type="warning" showIcon message={t('环境检测失败，请确认目录可访问')} />
                 )}
               </div>
             ) : null}
@@ -405,7 +412,7 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
               checked={pathTaken}
             >
               <span className="text-xs hm-text-secondary">
-                该目录已被其他站点占用（如确认无冲突可不勾选）
+                {t('该目录已被其他站点占用（如确认无冲突可不勾选）')}
               </span>
             </Checkbox>
           </FormSection>
@@ -413,22 +420,25 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
 
         {/* 第三步：仓库与部署 */}
         <div style={{ display: step === 2 ? 'block' : 'none' }}>
-          <FormSection title="仓库与部署" description="可选配置，创建后也可在「部署配置」页面补充">
-            <FormField name="initGit" label="初始化 Git 仓库" valuePropName="checked">
-              <Checkbox>在站点目录中执行 git init 并关联远程仓库</Checkbox>
+          <FormSection
+            title={t('仓库与部署')}
+            description={t('可选配置，创建后也可在「部署配置」页面补充')}
+          >
+            <FormField name="initGit" label={t('初始化 Git 仓库')} valuePropName="checked">
+              <Checkbox>{t('在站点目录中执行 git init 并关联远程仓库')}</Checkbox>
             </FormField>
 
             <FormField
               name="domain"
-              label="站点域名"
-              tooltip="用于生成部署配置中的域名与 CNAME 文件"
+              label={t('站点域名')}
+              tooltip={t('用于生成部署配置中的域名与 CNAME 文件')}
             >
-              <Input placeholder="如：blog.example.com" className="hm-mono" />
+              <Input placeholder={t('如：blog.example.com')} className="hm-mono" />
             </FormField>
 
             {initGit ? (
               <>
-                <Form.Item label="仓库平台">
+                <Form.Item label={t('仓库平台')}>
                   <Radio.Group
                     value={repoPlatform}
                     onChange={(e) => setRepoPlatform(e.target.value as string)}
@@ -440,15 +450,15 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
 
                 <FormField
                   name="repoUrl"
-                  label="远程仓库地址"
-                  tooltip="支持 HTTPS 与 SSH 格式"
+                  label={t('远程仓库地址')}
+                  tooltip={t('支持 HTTPS 与 SSH 格式')}
                   rules={[
                     {
                       validator: (_rule, value: string) => {
                         if (!value) return Promise.resolve();
                         return isValidRepoUrl(value)
                           ? Promise.resolve()
-                          : Promise.reject(new Error('请输入有效的仓库地址'));
+                          : Promise.reject(new Error(t('请输入有效的仓库地址')));
                       },
                     },
                   ]}
@@ -456,7 +466,7 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
                   <Input placeholder="git@github.com:username/blog.git" className="hm-mono" />
                 </FormField>
 
-                <FormField name="branch" label="默认分支">
+                <FormField name="branch" label={t('默认分支')}>
                   <Input placeholder="main" className="hm-mono" />
                 </FormField>
               </>
@@ -466,25 +476,28 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
 
         {/* 第四步：确认 */}
         <div style={{ display: step === 3 ? 'block' : 'none' }}>
-          <FormSection title="确认信息" description="请核对以下内容，确认无误后点击「确认创建」">
+          <FormSection
+            title={t('确认信息')}
+            description={t('请核对以下内容，确认无误后点击「确认创建」')}
+          >
             <div className="rounded-lg border" style={{ borderColor: 'var(--hm-border)' }}>
               <table className="w-full border-collapse text-sm">
                 <tbody>
                   {[
-                    ['站点名称', name || '—'],
-                    ['站点目录', path || '—'],
-                    ['站点描述', form.getFieldValue('description') || '—'],
+                    [t('站点名称'), name || '—'],
+                    [t('站点目录'), path || '—'],
+                    [t('站点描述'), form.getFieldValue('description') || '—'],
                     [
-                      'Node 版本',
-                      nodeVersion && nodeVersion !== 'system' ? nodeVersion : '系统默认',
+                      t('Node 版本'),
+                      nodeVersion && nodeVersion !== 'system' ? nodeVersion : t('系统默认'),
                     ],
-                    ['初始主题', form.getFieldValue('theme') || '默认主题'],
-                    ['站点域名', form.getFieldValue('domain') || '—'],
+                    [t('初始主题'), form.getFieldValue('theme') || t('默认主题')],
+                    [t('站点域名'), form.getFieldValue('domain') || '—'],
                     [
-                      'Git 仓库',
+                      t('Git 仓库'),
                       initGit
-                        ? `${repoUrl || '未填写'}（${form.getFieldValue('branch') || 'main'}）`
-                        : '不初始化',
+                        ? `${repoUrl || t('未填写')}（${form.getFieldValue('branch') || 'main'}）`
+                        : t('不初始化'),
                     ],
                   ].map(([label, value]) => (
                     <tr
@@ -505,8 +518,8 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
                 className="mt-3"
                 type="warning"
                 showIcon
-                message="环境未完全就绪"
-                description="仍可创建站点，但建议先安装缺失的依赖（如 Node.js、Hexo CLI）"
+                message={t('环境未完全就绪')}
+                description={t('仍可创建站点，但建议先安装缺失的依赖（如 Node.js、Hexo CLI）')}
               />
             ) : null}
 
@@ -515,8 +528,8 @@ export function CreateSiteWizard({ open, onClose, onCreated }: CreateSiteWizardP
                 className="mt-3"
                 type="error"
                 showIcon
-                message="目录冲突"
-                description="该目录已被其他站点使用，请返回上一步更换目录"
+                message={t('目录冲突')}
+                description={t('该目录已被其他站点使用，请返回上一步更换目录')}
               />
             ) : null}
           </FormSection>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { App as AntdApp } from 'antd';
 import { useConfigStore } from '@/stores';
+import { t } from '@/i18n';
 import type { Theme } from '@/types';
 
 /** 主题列表与操作 */
@@ -35,7 +36,7 @@ export function useThemes(siteId: number | null) {
       setBusy(true);
       try {
         await switchTheme(siteId, theme.name);
-        message.success(`已切换到主题「${theme.name}」`);
+        message.success(t('已切换到主题「{name}」', { name: theme.name }));
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
       } finally {
@@ -51,7 +52,7 @@ export function useThemes(siteId: number | null) {
       setBusy(true);
       try {
         await installTheme(siteId, name, source);
-        message.success(`主题「${name}」安装完成`);
+        message.success(t('主题「{name}」安装完成', { name }));
         return name;
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
@@ -69,22 +70,22 @@ export function useThemes(siteId: number | null) {
 
       await new Promise<void>((resolve, reject) => {
         modal.confirm({
-          title: `卸载主题「${theme.name}」？`,
-          content: '主题目录及其配置将被删除，此操作不可撤销。',
-          okText: '卸载',
+          title: t('卸载主题「{name}」？', { name: theme.name }),
+          content: t('主题目录及其配置将被删除，此操作不可撤销。'),
+          okText: t('卸载'),
           okButtonProps: { danger: true },
-          cancelText: '取消',
+          cancelText: t('取消'),
           onOk: () => resolve(),
-          onCancel: () => reject(new Error('已取消')),
+          onCancel: () => reject(new Error(t('已取消'))),
         });
       }).catch(() => {
-        throw new Error('已取消');
+        throw new Error(t('已取消'));
       });
 
       setBusy(true);
       try {
         await uninstallTheme(siteId, theme.name);
-        message.success('主题已卸载');
+        message.success(t('主题已卸载'));
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
       } finally {
@@ -100,7 +101,7 @@ export function useThemes(siteId: number | null) {
       setBusy(true);
       try {
         await updateTheme(siteId, theme.name);
-        message.success(`主题「${theme.name}」已更新`);
+        message.success(t('主题「{name}」已更新', { name: theme.name }));
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
       } finally {
@@ -148,7 +149,7 @@ export function usePlugins(siteId: number | null) {
       setBusy(true);
       try {
         await installPlugin(siteId, name);
-        message.success(`插件「${name}」安装完成`);
+        message.success(t('插件「{name}」安装完成', { name }));
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
       } finally {
@@ -164,7 +165,7 @@ export function usePlugins(siteId: number | null) {
       setBusy(true);
       try {
         await uninstallPlugin(siteId, name);
-        message.success(`插件「${name}」已卸载`);
+        message.success(t('插件「{name}」已卸载', { name }));
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
       } finally {
@@ -227,7 +228,7 @@ export function useThemeConfig(siteId: number | null, themeName?: string | null)
       if (siteId === null || theme === null) return;
       try {
         await saveThemeConfig(siteId, theme, raw);
-        message.success('主题配置已保存');
+        message.success(t('主题配置已保存'));
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
       }

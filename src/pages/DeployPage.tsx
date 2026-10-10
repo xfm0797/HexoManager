@@ -62,6 +62,7 @@ import {
 } from '@/constants';
 import { isValidDomain, isValidRepoUrl } from '@/utils/validator';
 import { copyToClipboard, openWithSystem } from '@/utils/desktop';
+import { useI18n } from '@/i18n';
 
 /** 生成配置所需的表单数据 */
 interface DeployFormValues {
@@ -79,6 +80,7 @@ interface DeployFormValues {
 
 /** 部署配置页面 */
 export function DeployPage() {
+  const { t } = useI18n();
   const { message, modal } = AntdApp.useApp();
 
   const currentSiteId = useSiteStore((s) => s.currentSiteId);
@@ -158,7 +160,7 @@ export function DeployPage() {
 
   const handlePreview = async () => {
     if (selectedPlatforms.length === 0 && !edgeEnabled) {
-      message.warning('请至少选择一个部署平台或启用边缘层');
+      message.warning(t('请至少选择一个部署平台或启用边缘层'));
       return;
     }
 
@@ -169,14 +171,14 @@ export function DeployPage() {
       const check = await checkFiles(buildInput);
       setFileCheck(check);
     } else {
-      message.info('没有生成任何配置文件，请检查平台选择');
+      message.info(t('没有生成任何配置文件，请检查平台选择'));
     }
   };
 
   const handleGenerate = async () => {
     if (currentSiteId === null) return;
     if (selectedPlatforms.length === 0 && !edgeEnabled) {
-      message.warning('请至少选择一个部署平台或启用边缘层');
+      message.warning(t('请至少选择一个部署平台或启用边缘层'));
       return;
     }
 
@@ -186,10 +188,10 @@ export function DeployPage() {
     if (existing.length > 0) {
       const confirmed = await new Promise<boolean>((resolve) => {
         modal.confirm({
-          title: `有 ${existing.length} 个文件已存在`,
+          title: t('有 {count} 个文件已存在', { count: existing.length }),
           content: (
             <div className="pt-2">
-              <p className="mb-2 text-sm">生成会覆盖以下文件，请确认：</p>
+              <p className="mb-2 text-sm">{t('生成会覆盖以下文件，请确认：')}</p>
               <ul className="mb-0 max-h-52 list-none overflow-auto p-0 text-xs">
                 {existing.map(([path]) => (
                   <li key={path} className="hm-mono">
@@ -199,9 +201,9 @@ export function DeployPage() {
               </ul>
             </div>
           ),
-          okText: '覆盖生成',
+          okText: t('覆盖生成'),
           okButtonProps: { danger: true },
-          cancelText: '取消',
+          cancelText: t('取消'),
           onOk: () => resolve(true),
           onCancel: () => resolve(false),
         });
@@ -230,7 +232,7 @@ export function DeployPage() {
         originStrategy: buildInput.originStrategy ?? 'failover',
       });
 
-      message.success('配置文件已生成并保存到站点目录');
+      message.success(t('配置文件已生成并保存到站点目录'));
       await refresh();
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
@@ -252,11 +254,11 @@ export function DeployPage() {
 
   if (currentSiteId === null) {
     return (
-      <PageContainer title="部署配置">
+      <PageContainer title={t('部署配置')}>
         <EmptyState
           kind="articles"
-          title="请先选择站点"
-          description="在顶栏选择站点后，即可生成各平台的 CI/CD 配置文件"
+          title={t('请先选择站点')}
+          description={t('在顶栏选择站点后，即可生成各平台的 CI/CD 配置文件')}
         />
       </PageContainer>
     );
@@ -264,11 +266,11 @@ export function DeployPage() {
 
   return (
     <PageContainer
-      title="部署配置"
+      title={t('部署配置')}
       description={
         <span>
-          {currentSite?.name} · <span className="hm-mono text-xs">{currentSite?.path}</span> · 已选{' '}
-          {selectedPlatforms.length} 个平台
+          {currentSite?.name} · <span className="hm-mono text-xs">{currentSite?.path}</span> ·{' '}
+          {t('已选 {count} 个平台', { count: selectedPlatforms.length })}
         </span>
       }
       card={false}
@@ -276,9 +278,9 @@ export function DeployPage() {
       extra={
         <Space>
           <Button icon={<EyeOutlined />} onClick={() => void handlePreview()} loading={generating}>
-            生成预览
+            {t('生成预览')}
           </Button>
-          <Tooltip title="重新加载配置">
+          <Tooltip title={t('重新加载配置')}>
             <Button icon={<ReloadOutlined />} onClick={() => void refresh()} />
           </Tooltip>
           <Button
@@ -288,7 +290,7 @@ export function DeployPage() {
             loading={writing}
             disabled={selectedPlatforms.length === 0 && !edgeEnabled}
           >
-            生成并写入站点
+            {t('生成并写入站点')}
           </Button>
         </Space>
       }
@@ -297,30 +299,30 @@ export function DeployPage() {
         {/* 概览指标 */}
         <StatGrid columns={4}>
           <StatCard
-            title="已选部署平台"
+            title={t('已选部署平台')}
             value={selectedPlatforms.length}
             icon={<DeploymentUnitOutlined />}
             iconColor="#3366ff"
           />
           <StatCard
-            title="边缘层"
-            value={edgeEnabled ? '已启用' : '未启用'}
+            title={t('边缘层')}
+            value={edgeEnabled ? t('已启用') : t('未启用')}
             icon={<GlobalOutlined />}
             iconColor={edgeEnabled ? '#52c41a' : '#8c8c8c'}
-            tooltip="边缘层可提供回源控制、故障转移与全球加速"
+            tooltip={t('边缘层可提供回源控制、故障转移与全球加速')}
           />
           <StatCard
-            title="可用模板"
+            title={t('可用模板')}
             value={templates.length}
             icon={<FileProtectOutlined />}
             iconColor="#722ed1"
           />
           <StatCard
-            title="待生成文件"
+            title={t('待生成文件')}
             value={generatedPreview.length}
             icon={<CodeOutlined />}
             iconColor="#fa8c16"
-            tooltip="最近一次预览生成的文件数量"
+            tooltip={t('最近一次预览生成的文件数量')}
           />
         </StatGrid>
 
@@ -332,7 +334,7 @@ export function DeployPage() {
               key: 'platforms',
               label: (
                 <span>
-                  <DeploymentUnitOutlined /> 部署平台
+                  <DeploymentUnitOutlined /> {t('部署平台')}
                 </span>
               ),
               children: (
@@ -340,8 +342,10 @@ export function DeployPage() {
                   <Alert
                     type="info"
                     showIcon
-                    message="选择要部署到的平台"
-                    description="可以同时选择多个平台。生成配置后，推送到代码仓库即可触发对应平台的自动构建与部署。"
+                    message={t('选择要部署到的平台')}
+                    description={t(
+                      '可以同时选择多个平台。生成配置后，推送到代码仓库即可触发对应平台的自动构建与部署。',
+                    )}
                   />
 
                   <div
@@ -373,7 +377,7 @@ export function DeployPage() {
               key: 'config',
               label: (
                 <span>
-                  <SettingOutlined /> 构建与仓库
+                  <SettingOutlined /> {t('构建与仓库')}
                 </span>
               ),
               children: (
@@ -381,10 +385,13 @@ export function DeployPage() {
                   <Col xs={24} lg={14}>
                     <Card size="small">
                       <Form form={form} layout="vertical">
-                        <FormSection title="代码仓库" description="配置文件中的仓库地址与平台信息">
+                        <FormSection
+                          title={t('代码仓库')}
+                          description={t('配置文件中的仓库地址与平台信息')}
+                        >
                           <Row gutter={12}>
                             <Col span={12}>
-                              <FormField name="repoPlatform" label="仓库平台">
+                              <FormField name="repoPlatform" label={t('仓库平台')}>
                                 <Radio.Group
                                   optionType="button"
                                   buttonStyle="solid"
@@ -398,8 +405,8 @@ export function DeployPage() {
                             <Col span={12}>
                               <FormField
                                 name="domain"
-                                label="站点域名"
-                                tooltip="用于生成 CNAME 文件与配置文件中的域名"
+                                label={t('站点域名')}
+                                tooltip={t('用于生成 CNAME 文件与配置文件中的域名')}
                                 rules={[
                                   {
                                     validator: (_r, value: string) => {
@@ -407,7 +414,7 @@ export function DeployPage() {
                                       return isValidDomain(value)
                                         ? Promise.resolve()
                                         : Promise.reject(
-                                            new Error('域名格式不正确，如 blog.example.com'),
+                                            new Error(t('域名格式不正确，如 blog.example.com')),
                                           );
                                     },
                                   },
@@ -420,15 +427,17 @@ export function DeployPage() {
 
                           <FormField
                             name="repoUrl"
-                            label="远程仓库地址"
-                            tooltip="可选。填写后会在配置文件中使用该地址；留空则由各平台自行关联仓库"
+                            label={t('远程仓库地址')}
+                            tooltip={t(
+                              '可选。填写后会在配置文件中使用该地址；留空则由各平台自行关联仓库',
+                            )}
                             rules={[
                               {
                                 validator: (_r, value: string) => {
                                   if (!value) return Promise.resolve();
                                   return isValidRepoUrl(value)
                                     ? Promise.resolve()
-                                    : Promise.reject(new Error('仓库地址格式不正确'));
+                                    : Promise.reject(new Error(t('仓库地址格式不正确')));
                                 },
                               },
                             ]}
@@ -443,13 +452,16 @@ export function DeployPage() {
 
                         <Divider />
 
-                        <FormSection title="构建配置" description="CI 环境中的 Node 版本与构建命令">
+                        <FormSection
+                          title={t('构建配置')}
+                          description={t('CI 环境中的 Node 版本与构建命令')}
+                        >
                           <Row gutter={12}>
                             <Col span={10}>
-                              <FormField name="nodeVersion" label="Node 版本">
+                              <FormField name="nodeVersion" label={t('Node 版本')}>
                                 <Select
                                   options={NODE_VERSIONS.map((v) => ({
-                                    label: v === 'lts/*' ? 'LTS 最新版' : `Node ${v}`,
+                                    label: v === 'lts/*' ? t('LTS 最新版') : `Node ${v}`,
                                     value: v,
                                   }))}
                                 />
@@ -458,8 +470,8 @@ export function DeployPage() {
                             <Col span={14}>
                               <FormField
                                 name="buildCommand"
-                                label="构建命令"
-                                tooltip="在 CI 环境中执行的构建脚本"
+                                label={t('构建命令')}
+                                tooltip={t('在 CI 环境中执行的构建脚本')}
                               >
                                 <Select
                                   showSearch
@@ -472,7 +484,7 @@ export function DeployPage() {
                                       {menu}
                                       <Divider className="my-1" />
                                       <div className="px-2 pb-1 text-xs hm-text-secondary">
-                                        可直接在下方输入自定义命令
+                                        {t('可直接在下方输入自定义命令')}
                                       </div>
                                     </>
                                   )}
@@ -485,8 +497,8 @@ export function DeployPage() {
                         <Divider />
 
                         <FormSection
-                          title="环境变量"
-                          description="部署时注入 CI 环境，如部署 Token、统计代码 ID 等"
+                          title={t('环境变量')}
+                          description={t('部署时注入 CI 环境，如部署 Token、统计代码 ID 等')}
                         >
                           <Form.Item name="envVars" noStyle>
                             <EnvVarEditor />
@@ -496,44 +508,46 @@ export function DeployPage() {
                         <Alert
                           type="info"
                           showIcon
-                          message="安全提示"
-                          description="标记为密钥的环境变量会在生成的配置中引用 CI 平台的 Secrets（如 ${{ secrets.XXX }}），不会明文写入仓库。"
+                          message={t('安全提示')}
+                          description={t(
+                            '标记为密钥的环境变量会在生成的配置中引用 CI 平台的 Secrets（如 ${{ secrets.XXX }}），不会明文写入仓库。',
+                          )}
                         />
                       </Form>
                     </Card>
                   </Col>
 
                   <Col xs={24} lg={10}>
-                    <Card size="small" title="配置说明">
+                    <Card size="small" title={t('配置说明')}>
                       <Descriptions
                         size="small"
                         column={1}
                         items={[
                           {
                             key: 'domain',
-                            label: '自定义域名',
-                            children: '生成 CNAME 文件，部分平台还需在控制台绑定',
+                            label: t('自定义域名'),
+                            children: t('生成 CNAME 文件，部分平台还需在控制台绑定'),
                           },
                           {
                             key: 'node',
-                            label: 'Node 版本',
-                            children: '写入 workflow 的 setup-node 步骤',
+                            label: t('Node 版本'),
+                            children: t('写入 workflow 的 setup-node 步骤'),
                           },
                           {
                             key: 'build',
-                            label: '构建命令',
-                            children: 'CI 中执行的脚本，通常为 hexo clean && hexo generate',
+                            label: t('构建命令'),
+                            children: t('CI 中执行的脚本，通常为 hexo clean && hexo generate'),
                           },
                           {
                             key: 'env',
-                            label: '环境变量',
-                            children: '密钥类变量将引用平台的 Secrets 机制',
+                            label: t('环境变量'),
+                            children: t('密钥类变量将引用平台的 Secrets 机制'),
                           },
                         ]}
                       />
                     </Card>
 
-                    <Card size="small" title="支持的模板清单" className="mt-4">
+                    <Card size="small" title={t('支持的模板清单')} className="mt-4">
                       <Collapse
                         ghost
                         items={templates.map((template) => ({
@@ -557,7 +571,7 @@ export function DeployPage() {
                                     style={{ fontSize: 11 }}
                                     onClick={() =>
                                       void copyToClipboard(file).then((ok) =>
-                                        ok ? message.success('路径已复制') : undefined,
+                                        ok ? message.success(t('路径已复制')) : undefined,
                                       )
                                     }
                                   >
@@ -571,7 +585,7 @@ export function DeployPage() {
                                 className="!px-0"
                                 onClick={() => void openWithSystem(template.officialUrl)}
                               >
-                                查看官方文档
+                                {t('查看官方文档')}
                               </Button>
                             </div>
                           ),
@@ -586,7 +600,7 @@ export function DeployPage() {
               key: 'edge',
               label: (
                 <span>
-                  <GlobalOutlined /> 边缘层配置
+                  <GlobalOutlined /> {t('边缘层配置')}
                 </span>
               ),
               children: (
@@ -595,17 +609,17 @@ export function DeployPage() {
                     <Card size="small">
                       <Form form={form} layout="vertical">
                         <FormSection
-                          title="边缘层服务"
-                          description="通过边缘节点加速访问，并提供智能回源与故障转移能力"
+                          title={t('边缘层服务')}
+                          description={t('通过边缘节点加速访问，并提供智能回源与故障转移能力')}
                         >
                           <div
                             className="mb-4 flex items-center justify-between rounded-lg border p-3"
                             style={{ borderColor: 'var(--hm-border)' }}
                           >
                             <div>
-                              <div className="text-sm font-medium">启用边缘层配置</div>
+                              <div className="text-sm font-medium">{t('启用边缘层配置')}</div>
                               <div className="mt-0.5 text-xs hm-text-secondary">
-                                生成 EdgeOne 回源配置与 Cloudflare Worker 脚本
+                                {t('生成 EdgeOne 回源配置与 Cloudflare Worker 脚本')}
                               </div>
                             </div>
                             <Switch checked={edgeEnabled} onChange={setEdgeEnabled} />
@@ -613,7 +627,7 @@ export function DeployPage() {
 
                           {edgeEnabled ? (
                             <>
-                              <FormField name="edgeProvider" label="边缘服务商">
+                              <FormField name="edgeProvider" label={t('边缘服务商')}>
                                 <Radio.Group className="w-full">
                                   <div className="grid grid-cols-1 gap-2">
                                     {EDGE_PROVIDERS.map((provider) => (
@@ -623,9 +637,9 @@ export function DeployPage() {
                                         className="!mr-0"
                                       >
                                         <div className="ml-1">
-                                          <div className="text-sm">{provider.name}</div>
+                                          <div className="text-sm">{t(provider.name)}</div>
                                           <div className="text-xs hm-text-secondary">
-                                            {provider.description}
+                                            {t(provider.description)}
                                           </div>
                                         </div>
                                       </Radio>
@@ -636,20 +650,20 @@ export function DeployPage() {
 
                               <FormField
                                 name="edgeDomain"
-                                label="边缘加速域名"
-                                tooltip="用户在浏览器中访问的域名，需在边缘平台配置 CNAME"
+                                label={t('边缘加速域名')}
+                                tooltip={t('用户在浏览器中访问的域名，需在边缘平台配置 CNAME')}
                               >
                                 <Input placeholder="www.example.com" className="hm-mono" />
                               </FormField>
 
                               <FormField
                                 name="originStrategy"
-                                label="回源策略"
-                                tooltip="决定边缘节点如何访问源站"
+                                label={t('回源策略')}
+                                tooltip={t('决定边缘节点如何访问源站')}
                               >
                                 <Select
                                   options={ORIGIN_STRATEGIES.map((s) => ({
-                                    label: s.label,
+                                    label: t(s.label),
                                     value: s.value,
                                   }))}
                                 />
@@ -659,8 +673,10 @@ export function DeployPage() {
                             <Alert
                               type="info"
                               showIcon
-                              message="边缘层未启用"
-                              description="开启后可为国内海外用户分别配置加速域名与回源策略，提升访问速度与可用性。"
+                              message={t('边缘层未启用')}
+                              description={t(
+                                '开启后可为国内海外用户分别配置加速域名与回源策略，提升访问速度与可用性。',
+                              )}
                             />
                           )}
                         </FormSection>
@@ -669,7 +685,7 @@ export function DeployPage() {
                   </Col>
 
                   <Col xs={24} lg={10}>
-                    <Card size="small" title="回源策略说明">
+                    <Card size="small" title={t('回源策略说明')}>
                       <div className="space-y-3">
                         {ORIGIN_STRATEGIES.map((strategy) => (
                           <div
@@ -679,11 +695,11 @@ export function DeployPage() {
                           >
                             <div className="flex items-center gap-2">
                               <Tag color="blue" className="m-0">
-                                {strategy.label}
+                                {t(strategy.label)}
                               </Tag>
                             </div>
                             <div className="mt-1.5 text-xs hm-text-secondary">
-                              {strategy.description}
+                              {t(strategy.description)}
                             </div>
                           </div>
                         ))}
@@ -694,12 +710,12 @@ export function DeployPage() {
                       className="mt-4"
                       type="warning"
                       showIcon
-                      message="边缘层需要额外配置"
+                      message={t('边缘层需要额外配置')}
                       description={
                         <ul className="mt-1 mb-0 list-disc pl-4 text-xs leading-relaxed">
-                          <li>EdgeOne：在腾讯云控制台添加加速域名并配置 CNAME</li>
-                          <li>Cloudflare：Worker 需绑定 KV 命名空间用于健康状态记录</li>
-                          <li>生成的配置文件需配合平台控制台使用，仅生成文件不会自动生效</li>
+                          <li>{t('EdgeOne：在腾讯云控制台添加加速域名并配置 CNAME')}</li>
+                          <li>{t('Cloudflare：Worker 需绑定 KV 命名空间用于健康状态记录')}</li>
+                          <li>{t('生成的配置文件需配合平台控制台使用，仅生成文件不会自动生效')}</li>
                         </ul>
                       }
                     />
@@ -711,40 +727,40 @@ export function DeployPage() {
               key: 'steps',
               label: (
                 <span>
-                  <RocketOutlined /> 部署指南
+                  <RocketOutlined /> {t('部署指南')}
                 </span>
               ),
               children: (
                 <Row gutter={16}>
                   <Col xs={24} lg={14}>
-                    <Card size="small" title="部署流程">
+                    <Card size="small" title={t('部署流程')}>
                       <Steps
                         direction="vertical"
                         current={-1}
                         items={[
                           {
-                            title: '生成配置文件',
-                            description: '在「部署平台」中选择目标平台，点击「生成并写入站点」',
+                            title: t('生成配置文件'),
+                            description: t('在「部署平台」中选择目标平台，点击「生成并写入站点」'),
                             icon: <CodeOutlined />,
                           },
                           {
-                            title: '提交并推送到仓库',
-                            description: '在「Git 操作」页面提交改动并推送到远程仓库',
+                            title: t('提交并推送到仓库'),
+                            description: t('在「Git 操作」页面提交改动并推送到远程仓库'),
                             icon: <CloudUploadOutlined />,
                           },
                           {
-                            title: '平台自动构建',
-                            description: 'CI 平台检测到推送后自动执行构建命令',
+                            title: t('平台自动构建'),
+                            description: t('CI 平台检测到推送后自动执行构建命令'),
                             icon: <DatabaseOutlined />,
                           },
                           {
-                            title: '配置自定义域名',
-                            description: '构建成功后，在平台控制台绑定域名并配置 DNS',
+                            title: t('配置自定义域名'),
+                            description: t('构建成功后，在平台控制台绑定域名并配置 DNS'),
                             icon: <GlobalOutlined />,
                           },
                           {
-                            title: '验证访问',
-                            description: '通过线上域名访问站点，确认内容与样式正常',
+                            title: t('验证访问'),
+                            description: t('通过线上域名访问站点，确认内容与样式正常'),
                             icon: <CheckCircleOutlined />,
                           },
                         ]}
@@ -753,47 +769,51 @@ export function DeployPage() {
                   </Col>
 
                   <Col xs={24} lg={10}>
-                    <Card size="small" title="常见问题">
+                    <Card size="small" title={t('常见问题')}>
                       <Collapse
                         ghost
                         items={[
                           {
                             key: 'build-fail',
-                            label: '构建失败怎么办？',
+                            label: t('构建失败怎么办？'),
                             children: (
                               <div className="text-xs leading-relaxed hm-text-secondary">
-                                先确认本地 hexo generate 能成功。CI 环境通常需要先执行 npm install /
-                                npm ci 安装依赖，若使用了私有主题或插件，需要额外配置访问凭证。
+                                {t(
+                                  '先确认本地 hexo generate 能成功。CI 环境通常需要先执行 npm install / npm ci 安装依赖，若使用了私有主题或插件，需要额外配置访问凭证。',
+                                )}
                               </div>
                             ),
                           },
                           {
                             key: 'domain',
-                            label: '自定义域名不生效？',
+                            label: t('自定义域名不生效？'),
                             children: (
                               <div className="text-xs leading-relaxed hm-text-secondary">
-                                检查三点：1) CNAME 文件已生成在 public 目录；2) DNS 已添加 CNAME
-                                记录指向平台分配的域名；3) 平台控制台已绑定该域名并完成验证。
+                                {t(
+                                  '检查三点：1) CNAME 文件已生成在 public 目录；2) DNS 已添加 CNAME 记录指向平台分配的域名；3) 平台控制台已绑定该域名并完成验证。',
+                                )}
                               </div>
                             ),
                           },
                           {
                             key: '404',
-                            label: '页面 404 但首页正常？',
+                            label: t('页面 404 但首页正常？'),
                             children: (
                               <div className="text-xs leading-relaxed hm-text-secondary">
-                                通常是 root（子路径）配置不一致。若站点部署在子目录，需要在
-                                _config.yml 中将 root 设置为对应路径。
+                                {t(
+                                  '通常是 root（子路径）配置不一致。若站点部署在子目录，需要在 _config.yml 中将 root 设置为对应路径。',
+                                )}
                               </div>
                             ),
                           },
                           {
                             key: 'cache',
-                            label: '更新后样式没变化？',
+                            label: t('更新后样式没变化？'),
                             children: (
                               <div className="text-xs leading-relaxed hm-text-secondary">
-                                边缘节点与浏览器都有缓存。可先强制刷新（Ctrl/Cmd + Shift + R），
-                                若仍有问题则在边缘平台执行缓存刷新。
+                                {t(
+                                  '边缘节点与浏览器都有缓存。可先强制刷新（Ctrl/Cmd + Shift + R），若仍有问题则在边缘平台执行缓存刷新。',
+                                )}
                               </div>
                             ),
                           },
@@ -801,7 +821,7 @@ export function DeployPage() {
                       />
                     </Card>
 
-                    <Card size="small" title="平台文档" className="mt-4">
+                    <Card size="small" title={t('平台文档')} className="mt-4">
                       <Space direction="vertical" className="w-full" size={6}>
                         {DEPLOY_PLATFORMS.map((platform) => (
                           <Button
@@ -812,7 +832,7 @@ export function DeployPage() {
                             icon={<InfoCircleOutlined />}
                             onClick={() => void openWithSystem(platform.officialUrl)}
                           >
-                            {platform.name} 官方文档
+                            {t('{name} 官方文档', { name: platform.name })}
                           </Button>
                         ))}
                       </Space>
@@ -828,10 +848,10 @@ export function DeployPage() {
         {generatedPreview.length > 0 ? (
           <Card
             size="small"
-            title={`上次生成的文件（${generatedPreview.length}）`}
+            title={t('上次生成的文件（{count}）', { count: generatedPreview.length })}
             extra={
               <Button size="small" type="link" onClick={() => setPreviewOpen(true)}>
-                查看内容
+                {t('查看内容')}
               </Button>
             }
           >
@@ -868,7 +888,7 @@ export function DeployPage() {
         onClose={() => setPreviewOpen(false)}
         files={generatedPreview}
         sitePath={currentSite?.path}
-        title="生成的部署配置"
+        title={t('生成的部署配置')}
         allowWrite={false}
       />
     </PageContainer>

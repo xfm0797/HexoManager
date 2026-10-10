@@ -7,6 +7,7 @@ import {
   InfoCircleOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
+import { useI18n } from '@/i18n';
 
 /** 向导步骤定义 */
 export const WIZARD_STEPS = [
@@ -32,14 +33,16 @@ interface WizardStepsProps {
 
 /** 创建站点向导顶部步骤条 */
 export function WizardSteps({ current, onChange, completed = [] }: WizardStepsProps) {
+  const { t } = useI18n();
+
   return (
     <Steps
       current={current}
       size="small"
       onChange={onChange}
       items={WIZARD_STEPS.map((step, index) => ({
-        title: step.title,
-        description: step.description,
+        title: t(step.title),
+        description: t(step.description),
         icon: STEP_ICONS[index],
         status: completed.includes(index) && index !== current ? 'finish' : undefined,
       }))}

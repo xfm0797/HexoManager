@@ -19,6 +19,7 @@ import {
 import type { FileTreeNode } from '@/types';
 import { formatFileSize } from '@/utils/format';
 import { fileExtension } from '@/utils/slug';
+import { useI18n } from '@/i18n';
 
 interface FileTreeProps {
   /** 根节点 */
@@ -89,6 +90,7 @@ export function FileTree({
   defaultExpandDepth = 2,
   className = '',
 }: FileTreeProps) {
+  const { t } = useI18n();
   const [keyword, setKeyword] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   /** 是否已完成过至少一次数据加载（用于区分"首次加载"与"刷新"） */
@@ -206,23 +208,29 @@ export function FileTree({
   const contextMenu = (node: FileTreeNode | undefined) => ({
     items: [
       ...(node?.isDir
-        ? [{ key: 'create', label: '新建文件', icon: <PlusOutlined />, disabled: !onCreate }]
+        ? [{ key: 'create', label: t('新建文件'), icon: <PlusOutlined />, disabled: !onCreate }]
         : []),
       {
         key: 'open',
-        label: '在编辑器打开',
+        label: t('在编辑器打开'),
         icon: <EyeOutlined />,
         disabled: !onOpen || node?.isDir,
       },
       {
         key: 'reveal',
-        label: '在文件管理器中显示',
+        label: t('在文件管理器中显示'),
         icon: <FolderOpenOutlined />,
         disabled: !onReveal,
       },
       { type: 'divider' as const },
-      { key: 'rename', label: '重命名', icon: <EditOutlined />, disabled: !onRename },
-      { key: 'delete', label: '删除', icon: <DeleteOutlined />, danger: true, disabled: !onDelete },
+      { key: 'rename', label: t('重命名'), icon: <EditOutlined />, disabled: !onRename },
+      {
+        key: 'delete',
+        label: t('删除'),
+        icon: <DeleteOutlined />,
+        danger: true,
+        disabled: !onDelete,
+      },
     ],
     onClick: ({ key }: { key: string }) => {
       if (!node) return;
@@ -242,11 +250,11 @@ export function FileTree({
           size="small"
           allowClear
           prefix={<SearchOutlined className="opacity-50" />}
-          placeholder="搜索文件"
+          placeholder={t('搜索文件')}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
         />
-        <Tooltip title="刷新">
+        <Tooltip title={t('刷新')}>
           <Button
             size="small"
             type="text"
@@ -282,7 +290,7 @@ export function FileTree({
             ) : treeData.length === 0 ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={<span className="text-xs">没有匹配的文件</span>}
+                description={<span className="text-xs">{t('没有匹配的文件')}</span>}
               />
             ) : (
               <Dropdown menu={contextMenu(selectedNode)} trigger={['contextMenu']}>
@@ -308,13 +316,13 @@ export function FileTree({
       ) : (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={<span className="text-xs hm-text-secondary">目录为空或未加载</span>}
+          description={<span className="text-xs hm-text-secondary">{t('目录为空或未加载')}</span>}
           className="mt-8"
         />
       )}
 
       <div className="mt-2 text-[11px] hm-text-secondary opacity-70">
-        提示：双击文件可在编辑器中打开，右键查看更多操作
+        {t('提示：双击文件可在编辑器中打开，右键查看更多操作')}
       </div>
     </div>
   );

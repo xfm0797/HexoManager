@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { deployService, gitService, hexoService } from '@/services';
+import { t } from '@/i18n';
 import type {
   CommitLog,
   DeployConfig,
@@ -166,7 +167,7 @@ export const useDeployStore = create<DeployState>((set, get) => ({
           .forEach((line) => onLog?.(line));
 
         if (!build.success) {
-          throw new Error(build.error ?? '站点构建失败');
+          throw new Error(build.error ?? t('站点构建失败'));
         }
       }
 
@@ -185,7 +186,7 @@ export const useDeployStore = create<DeployState>((set, get) => ({
       ]);
 
       if (!result.success) {
-        throw new Error(result.error ?? '部署失败');
+        throw new Error(result.error ?? t('部署失败'));
       }
       return result;
     } catch (e) {

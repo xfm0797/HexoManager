@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { useMemo } from 'react';
 import { Empty } from 'antd';
 import { parseFrontMatter } from '@/utils/markdown';
+import { useI18n } from '@/i18n';
 
 interface MarkdownPreviewProps {
   /** 完整 Markdown 内容（含 Front Matter） */
@@ -57,6 +58,7 @@ export function MarkdownPreview({
   showFrontMatter = true,
   className = '',
 }: MarkdownPreviewProps) {
+  const { t } = useI18n();
   const { frontMatter, body, hasFrontMatter } = useMemo(() => parseFrontMatter(content), [content]);
 
   if (!body.trim()) {
@@ -65,7 +67,7 @@ export function MarkdownPreview({
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
-            <span className="text-sm hm-text-secondary">开始输入内容，这里会实时预览</span>
+            <span className="text-sm hm-text-secondary">{t('开始输入内容，这里会实时预览')}</span>
           }
         />
       </div>

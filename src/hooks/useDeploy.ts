@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { App as AntdApp } from 'antd';
 import { useDeployStore } from '@/stores';
+import { t } from '@/i18n';
 import type {
   DeployConfig,
   DeployLog,
@@ -42,7 +43,7 @@ export function useDeployConfig(siteId: number | null) {
     async (patch: Partial<DeployConfig>) => {
       if (siteId === null) return;
       await saveConfig(siteId, patch);
-      message.success('部署配置已保存');
+      message.success(t('部署配置已保存'));
     },
     [siteId, saveConfig, message],
   );
@@ -63,7 +64,7 @@ export function useDeployConfig(siteId: number | null) {
     async (input: GenerateConfigInput) => {
       try {
         const files = await generateConfig(input);
-        message.success(`已生成 ${files.length} 个配置文件`);
+        message.success(t('已生成 {count} 个配置文件', { count: files.length }));
         return files;
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
@@ -107,7 +108,7 @@ export function useDeploy(siteId: number | null) {
 
   const start = useCallback(
     async (commitMessage: string, options?: { skipBuild?: boolean }): Promise<DeployResult> => {
-      if (siteId === null) throw new Error('未选择站点');
+      if (siteId === null) throw new Error(t('未选择站点'));
       setLogLines([]);
 
       try {
@@ -115,7 +116,7 @@ export function useDeploy(siteId: number | null) {
           skipBuild: options?.skipBuild,
           onLog: (line) => setLogLines((prev) => [...prev, line]),
         });
-        message.success('部署完成');
+        message.success(t('部署完成'));
         return result;
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
@@ -131,18 +132,20 @@ export function useDeploy(siteId: number | null) {
 
       await new Promise<void>((resolve, reject) => {
         modal.confirm({
-          title: '确认回滚？',
-          content: `将把工作区重置到提交 ${commitHash.slice(0, 7)}，未提交的改动会丢失。`,
-          okText: '确认回滚',
+          title: t('确认回滚？'),
+          content: t('将把工作区重置到提交 {hash}，未提交的改动会丢失。', {
+            hash: commitHash.slice(0, 7),
+          }),
+          okText: t('确认回滚'),
           okButtonProps: { danger: true },
-          cancelText: '取消',
+          cancelText: t('取消'),
           onOk: () => resolve(),
-          onCancel: () => reject(new Error('已取消')),
+          onCancel: () => reject(new Error(t('已取消'))),
         });
       });
 
       const output = await rollback(siteId, commitHash);
-      message.success('回滚完成');
+      message.success(t('回滚完成'));
       return output;
     },
     [siteId, rollback, modal, message],

@@ -2,21 +2,24 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { errorMessage } from '@/utils/validator';
+import { translateBackendMessage } from '@/i18n/backendMessages';
 
 /**
  * 调用 Tauri 后端命令。
  *
  * - 统一把 Rust 侧错误字符串转为 Error 抛出
+ * - 英文界面下把后端的中文错误消息映射为英文（未收录的回退原文）
  * - 便于全局错误处理与调试
  */
 export async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
     return await invoke<T>(command, args);
   } catch (error) {
-    const message = errorMessage(error);
+    const raw = errorMessage(error);
+    const message = translateBackendMessage(raw);
     // 开发期保留原始日志，便于定位后端错误
     if (import.meta.env.DEV) {
-      console.error(`[invoke:${command}]`, message, args);
+      console.error(`[invoke:${command}]`, raw, args);
     }
     throw new Error(message);
   }

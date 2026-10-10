@@ -4,6 +4,7 @@ import { Button, Input, Space, Switch, Tooltip } from 'antd';
 import { DeleteOutlined, LockOutlined, PlusOutlined, UnlockOutlined } from '@ant-design/icons';
 import type { EnvVar } from '@/types';
 import { validateEnvKey } from '@/utils/validator';
+import { useI18n } from '@/i18n';
 import { FieldLabel } from './FormField';
 
 interface EnvVarEditorProps {
@@ -24,6 +25,8 @@ export function EnvVarEditor({
   disabled = false,
   allowSecret = true,
 }: EnvVarEditorProps) {
+  const { t } = useI18n();
+
   const update = (index: number, patch: Partial<EnvVar>) => {
     const next = value.map((item, i) => (i === index ? { ...item, ...patch } : item));
     onChange?.(next);
@@ -44,7 +47,7 @@ export function EnvVarEditor({
           className="mb-2 rounded-lg border border-dashed px-3 py-4 text-center text-sm hm-text-secondary"
           style={{ borderColor: 'var(--hm-border)' }}
         >
-          暂无环境变量，点击下方按钮添加
+          {t('暂无环境变量，点击下方按钮添加')}
         </div>
       ) : (
         <div className="mb-2 space-y-2">
@@ -56,7 +59,7 @@ export function EnvVarEditor({
                   <Input
                     value={item.key}
                     onChange={(e) => update(index, { key: e.target.value })}
-                    placeholder="变量名，如 ACCESS_TOKEN"
+                    placeholder={t('变量名，如 ACCESS_TOKEN')}
                     disabled={disabled}
                     status={keyError ? 'error' : undefined}
                     className="hm-mono"
@@ -67,14 +70,16 @@ export function EnvVarEditor({
                 <Input
                   value={item.value}
                   onChange={(e) => update(index, { value: e.target.value })}
-                  placeholder="变量值"
+                  placeholder={t('变量值')}
                   disabled={disabled}
                   className="hm-mono flex-1"
                   type={item.secret ? 'password' : 'text'}
                 />
 
                 {allowSecret ? (
-                  <Tooltip title={item.secret ? '已标记为密钥' : '标记为密钥（隐藏展示）'}>
+                  <Tooltip
+                    title={item.secret ? t('已标记为密钥') : t('标记为密钥（隐藏展示）')}
+                  >
                     <Button
                       type="text"
                       icon={item.secret ? <LockOutlined /> : <UnlockOutlined />}
@@ -98,7 +103,7 @@ export function EnvVarEditor({
       )}
 
       <Button type="dashed" icon={<PlusOutlined />} onClick={append} disabled={disabled} block>
-        添加环境变量
+        {t('添加环境变量')}
       </Button>
     </div>
   );
@@ -110,19 +115,25 @@ interface EnvVarLabelProps {
 
 /** 环境变量字段标签（供表单复用） */
 export function EnvVarLabel({ required }: EnvVarLabelProps) {
+  const { t } = useI18n();
+
   return (
     <FieldLabel
-      label="环境变量"
+      label={t('环境变量')}
       required={required}
-      tooltip="部署时注入的环境变量，如 Node 版本、部署 Token。标记为密钥的变量在界面中以密文展示"
+      tooltip={t(
+        '部署时注入的环境变量，如 Node 版本、部署 Token。标记为密钥的变量在界面中以密文展示',
+      )}
     />
   );
 }
 
 /** 只读环境变量展示（如配置预览） */
 export function EnvVarList({ value = [] }: { value?: EnvVar[] }) {
+  const { t } = useI18n();
+
   if (value.length === 0) {
-    return <span className="hm-text-secondary">未配置环境变量</span>;
+    return <span className="hm-text-secondary">{t('未配置环境变量')}</span>;
   }
 
   return (
@@ -145,8 +156,8 @@ export function FeatureSwitch({
   checked,
   onChange,
   disabled,
-  checkedChildren = '启用',
-  unCheckedChildren = '停用',
+  checkedChildren,
+  unCheckedChildren,
 }: {
   checked: boolean;
   onChange?: (checked: boolean) => void;
@@ -154,13 +165,15 @@ export function FeatureSwitch({
   checkedChildren?: string;
   unCheckedChildren?: string;
 }) {
+  const { t } = useI18n();
+
   return (
     <Switch
       checked={checked}
       onChange={onChange}
       disabled={disabled}
-      checkedChildren={checkedChildren}
-      unCheckedChildren={unCheckedChildren}
+      checkedChildren={checkedChildren ?? t('启用')}
+      unCheckedChildren={unCheckedChildren ?? t('停用')}
     />
   );
 }

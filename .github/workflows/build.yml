@@ -50,6 +50,10 @@ jobs:
         run: npm run lint
         continue-on-error: true
 
+      # 卡住「英文界面漏出中文」：缺译文或英文译文里残留中文都会让本步失败
+      - name: i18n 覆盖率检查
+        run: node scripts/i18n-coverage.mjs
+
       - name: 构建前端
         run: npm run build:only
 

@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { App as AntdApp, ConfigProvider, Spin, theme as antdTheme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
+import enUS from 'antd/locale/en_US';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom';
@@ -26,9 +27,11 @@ import {
 } from '@/pages';
 import { MainLayout } from '@/components';
 import { useUiStore } from '@/stores';
+import { APP_META } from '@/constants';
+import { useI18n } from '@/i18n';
 
-// 统一使用中文本地化
-dayjs.locale('zh-cn');
+// 初始本地化在 i18n 模块加载时按系统语言设定（中文环境 zh-cn，其余 en）
+void dayjs;
 
 /** 路由表：全部挂在主布局下 */
 const router = createHashRouter([
@@ -63,6 +66,7 @@ const router = createHashRouter([
 function App() {
   const isDark = useUiStore((s) => s.isDark);
   const bootstrap = useUiStore((s) => s.bootstrap);
+  const { t, locale } = useI18n();
 
   // 应用启动初始化：预览服务清理与更新检查
   useEffect(() => {
@@ -81,9 +85,14 @@ function App() {
     root.style.colorScheme = isDark ? 'dark' : 'light';
   }, [isDark]);
 
+  // 窗口标题跟随界面语言
+  useEffect(() => {
+    document.title = t('{app} —— 桌面端 Hexo 多站点管理工具', { app: APP_META.name });
+  }, [locale, t]);
+
   return (
     <ConfigProvider
-      locale={zhCN}
+      locale={locale === 'zh-CN' ? zhCN : enUS}
       theme={{
         algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
         token: {
@@ -117,7 +126,7 @@ function App() {
           router={router}
           fallbackElement={
             <div className="flex h-screen w-screen items-center justify-center">
-              <Spin size="large" tip="正在启动 HexoManager…" />
+              <Spin size="large" tip={t('正在启动 HexoManager…')} />
             </div>
           }
         />

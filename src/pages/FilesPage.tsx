@@ -54,6 +54,7 @@ import {
   relativePath,
 } from '@/utils/slug';
 import { openWithSystem, copyToClipboard } from '@/utils/desktop';
+import { useI18n } from '@/i18n';
 
 type ViewMode = 'list' | 'editor';
 
@@ -106,6 +107,7 @@ function isEditable(path: string): boolean {
 /** 文件管理页面 */
 export function FilesPage() {
   const { message, modal } = AntdApp.useApp();
+  const { t } = useI18n();
 
   const currentSiteId = useSiteStore((s) => s.currentSiteId);
   const currentSite = useSiteStore((s) => s.sites.find((site) => site.id === s.currentSiteId));
@@ -263,7 +265,7 @@ export function FilesPage() {
     try {
       await fileService.write(editingFile, fileContent);
       setOriginalContent(fileContent);
-      message.success('文件已保存');
+      message.success(t('文件已保存'));
       await loadDir(dirName(editingFile));
       await loadTree();
     } catch (e) {
@@ -278,14 +280,14 @@ export function FilesPage() {
     const nameRef = { value: '' };
 
     modal.confirm({
-      title: '新建文件',
+      title: t('新建文件'),
       width: 460,
       content: (
         <div className="pt-2">
-          <div className="mb-1 text-xs hm-text-secondary">文件路径</div>
+          <div className="mb-1 text-xs hm-text-secondary">{t('文件路径')}</div>
           <Input
             autoFocus
-            placeholder="如 about.md 或 posts/hello.md"
+            placeholder={t('如 about.md 或 posts/hello.md')}
             className="hm-mono"
             onChange={(e) => {
               nameRef.value = e.target.value;
@@ -293,18 +295,18 @@ export function FilesPage() {
           />
         </div>
       ),
-      okText: '创建',
-      cancelText: '取消',
+      okText: t('创建'),
+      cancelText: t('取消'),
       onOk: async () => {
         if (!nameRef.value.trim()) {
-          message.warning('请输入文件名');
-          throw new Error('未输入文件名');
+          message.warning(t('请输入文件名'));
+          throw new Error(t('未输入文件名'));
         }
 
         const target = joinPath(dirPath, nameRef.value.trim());
         try {
           await fileService.write(target, '');
-          message.success('文件已创建');
+          message.success(t('文件已创建'));
           await loadDir(dirPath);
           await loadTree();
           await openFile({
@@ -328,14 +330,14 @@ export function FilesPage() {
     const nameRef = { value: '' };
 
     modal.confirm({
-      title: '新建目录',
+      title: t('新建目录'),
       width: 460,
       content: (
         <div className="pt-2">
-          <div className="mb-1 text-xs hm-text-secondary">目录名称</div>
+          <div className="mb-1 text-xs hm-text-secondary">{t('目录名称')}</div>
           <Input
             autoFocus
-            placeholder="如 images"
+            placeholder={t('如 images')}
             className="hm-mono"
             onChange={(e) => {
               nameRef.value = e.target.value;
@@ -343,17 +345,17 @@ export function FilesPage() {
           />
         </div>
       ),
-      okText: '创建',
-      cancelText: '取消',
+      okText: t('创建'),
+      cancelText: t('取消'),
       onOk: async () => {
         if (!nameRef.value.trim()) {
-          message.warning('请输入目录名称');
-          throw new Error('未输入目录名称');
+          message.warning(t('请输入目录名称'));
+          throw new Error(t('未输入目录名称'));
         }
 
         try {
           await fileService.mkdir(joinPath(dirPath, nameRef.value.trim()));
-          message.success('目录已创建');
+          message.success(t('目录已创建'));
           await loadDir(dirPath);
           await loadTree();
         } catch (e) {
@@ -369,7 +371,7 @@ export function FilesPage() {
     const nameRef = { value: info.name };
 
     modal.confirm({
-      title: `重命名「${info.name}」`,
+      title: t('重命名「{name}」', { name: info.name }),
       width: 460,
       content: (
         <div className="pt-2">
@@ -383,15 +385,15 @@ export function FilesPage() {
           />
         </div>
       ),
-      okText: '重命名',
-      cancelText: '取消',
+      okText: t('重命名'),
+      cancelText: t('取消'),
       onOk: async () => {
         const nextName = nameRef.value.trim();
         if (!nextName || nextName === info.name) return;
 
         try {
           await fileService.rename(info.path, joinPath(dirName(info.path), nextName));
-          message.success('已重命名');
+          message.success(t('已重命名'));
           await loadDir(dirName(info.path));
           await loadTree();
         } catch (e) {
@@ -405,17 +407,17 @@ export function FilesPage() {
   /** 删除 */
   const handleDelete = (info: FileInfo) => {
     modal.confirm({
-      title: `删除「${info.name}」？`,
+      title: t('删除「{name}」？', { name: info.name }),
       content: info.isDir
-        ? '目录必须为空才能删除，其中的文件请先单独处理。'
-        : '删除后不可恢复，请确认已提交到 Git 或已备份。',
-      okText: '删除',
+        ? t('目录必须为空才能删除，其中的文件请先单独处理。')
+        : t('删除后不可恢复，请确认已提交到 Git 或已备份。'),
+      okText: t('删除'),
       okButtonProps: { danger: true },
-      cancelText: '取消',
+      cancelText: t('取消'),
       onOk: async () => {
         try {
           await fileService.remove(info.path);
-          message.success('已删除');
+          message.success(t('已删除'));
           if (editingFile === info.path) {
             setEditingFile(null);
             setViewMode('list');
@@ -432,7 +434,7 @@ export function FilesPage() {
 
   const columns: ColumnsType<FileInfo> = [
     {
-      title: '名称',
+      title: t('名称'),
       dataIndex: 'name',
       key: 'name',
       render: (name: string, info) => (
@@ -454,20 +456,20 @@ export function FilesPage() {
       ),
     },
     {
-      title: '类型',
+      title: t('类型'),
       key: 'type',
       width: 100,
       render: (_v, info) =>
         info.isDir ? (
-          <Tag className="m-0">目录</Tag>
+          <Tag className="m-0">{t('目录')}</Tag>
         ) : (
           <Tag className="m-0 hm-mono" style={{ fontSize: 11 }}>
-            {fileExtension(info.name) || '无扩展名'}
+            {fileExtension(info.name) || t('无扩展名')}
           </Tag>
         ),
     },
     {
-      title: '大小',
+      title: t('大小'),
       dataIndex: 'size',
       key: 'size',
       width: 100,
@@ -475,7 +477,7 @@ export function FilesPage() {
         info.isDir ? <span className="hm-text-secondary">—</span> : formatFileSize(size),
     },
     {
-      title: '修改时间',
+      title: t('修改时间'),
       dataIndex: 'modifiedAt',
       key: 'modifiedAt',
       width: 160,
@@ -484,13 +486,13 @@ export function FilesPage() {
       ),
     },
     {
-      title: '操作',
+      title: t('操作'),
       key: 'actions',
       width: 130,
       render: (_v, info) => (
         <Space size={2}>
           {isEditable(info.name) && !info.isDir ? (
-            <Tooltip title="编辑">
+            <Tooltip title={t('编辑')}>
               <Button
                 type="text"
                 size="small"
@@ -499,7 +501,7 @@ export function FilesPage() {
               />
             </Tooltip>
           ) : !info.isDir ? (
-            <Tooltip title="用系统程序打开">
+            <Tooltip title={t('用系统程序打开')}>
               <Button
                 type="text"
                 size="small"
@@ -508,7 +510,7 @@ export function FilesPage() {
               />
             </Tooltip>
           ) : null}
-          <Tooltip title="重命名">
+          <Tooltip title={t('重命名')}>
             <Button
               type="text"
               size="small"
@@ -522,22 +524,22 @@ export function FilesPage() {
               items: [
                 {
                   key: 'copy',
-                  label: '复制路径',
+                  label: t('复制路径'),
                   icon: <CopyOutlined />,
                 },
                 ...(info.isDir
                   ? [
-                      { key: 'newfile', label: '在此新建文件', icon: <FileAddOutlined /> },
-                      { key: 'newdir', label: '在此新建目录', icon: <FolderAddOutlined /> },
+                      { key: 'newfile', label: t('在此新建文件'), icon: <FileAddOutlined /> },
+                      { key: 'newdir', label: t('在此新建目录'), icon: <FolderAddOutlined /> },
                     ]
                   : []),
                 { type: 'divider' as const },
-                { key: 'delete', label: '删除', icon: <DeleteOutlined />, danger: true },
+                { key: 'delete', label: t('删除'), icon: <DeleteOutlined />, danger: true },
               ],
               onClick: ({ key }) => {
                 if (key === 'copy') {
                   void copyToClipboard(info.path).then((ok) =>
-                    ok ? message.success('路径已复制') : message.error('复制失败'),
+                    ok ? message.success(t('路径已复制')) : message.error(t('复制失败')),
                   );
                 } else if (key === 'newfile') {
                   void handleCreateFile(info.path);
@@ -557,17 +559,17 @@ export function FilesPage() {
   ];
 
   const treeContextMenu: MenuProps['items'] = [
-    { key: 'createFile', label: '新建文件', icon: <FileAddOutlined /> },
-    { key: 'createDir', label: '新建目录', icon: <FolderAddOutlined /> },
+    { key: 'createFile', label: t('新建文件'), icon: <FileAddOutlined /> },
+    { key: 'createDir', label: t('新建目录'), icon: <FolderAddOutlined /> },
   ];
 
   if (currentSiteId === null) {
     return (
-      <PageContainer title="文件管理">
+      <PageContainer title={t('文件管理')}>
         <EmptyState
           kind="files"
-          title="请先选择站点"
-          description="在顶栏选择站点后浏览其目录结构"
+          title={t('请先选择站点')}
+          description={t('在顶栏选择站点后浏览其目录结构')}
         />
       </PageContainer>
     );
@@ -575,7 +577,7 @@ export function FilesPage() {
 
   return (
     <PageContainer
-      title="文件管理"
+      title={t('文件管理')}
       description={
         <span>
           {currentSite?.name} · <span className="hm-mono text-xs">{rootPath}</span>
@@ -589,9 +591,9 @@ export function FilesPage() {
             value={viewMode}
             onChange={(v) => setViewMode(v as ViewMode)}
             options={[
-              { label: '列表', value: 'list', icon: <TableOutlined /> },
+              { label: t('列表'), value: 'list', icon: <TableOutlined /> },
               {
-                label: '编辑器',
+                label: t('编辑器'),
                 value: 'editor',
                 icon: <CodeOutlined />,
                 disabled: editingFile === null,
@@ -599,10 +601,10 @@ export function FilesPage() {
             ]}
           />
           <Button icon={<ReloadOutlined />} onClick={() => void loadTree()} loading={treeLoading}>
-            刷新
+            {t('刷新')}
           </Button>
           <Button icon={<FolderOpenOutlined />} onClick={() => void openWithSystem(rootPath)}>
-            打开目录
+            {t('打开目录')}
           </Button>
         </Space>
       }
@@ -622,7 +624,7 @@ export function FilesPage() {
               }}
             >
               <Button size="small" block className="mb-2" icon={<FolderAddOutlined />}>
-                当前目录下新建
+                {t('当前目录下新建')}
               </Button>
             </Dropdown>
 
@@ -712,25 +714,25 @@ export function FilesPage() {
                       size="small"
                       allowClear
                       prefix={<SearchOutlined className="opacity-50" />}
-                      placeholder="过滤文件"
+                      placeholder={t('过滤文件')}
                       value={keyword}
                       onChange={(e) => setKeyword(e.target.value)}
                       style={{ width: 160 }}
                     />
-                    <Tooltip title="显示隐藏文件">
+                    <Tooltip title={t('显示隐藏文件')}>
                       <Space size={4}>
                         <Switch size="small" checked={showHidden} onChange={setShowHidden} />
-                        <span className="text-xs hm-text-secondary">隐藏文件</span>
+                        <span className="text-xs hm-text-secondary">{t('隐藏文件')}</span>
                       </Space>
                     </Tooltip>
-                    <Tooltip title="新建文件">
+                    <Tooltip title={t('新建文件')}>
                       <Button
                         size="small"
                         icon={<FileAddOutlined />}
                         onClick={() => void handleCreateFile(selectedDir ?? rootPath)}
                       />
                     </Tooltip>
-                    <Tooltip title="新建目录">
+                    <Tooltip title={t('新建目录')}>
                       <Button
                         size="small"
                         icon={<FolderAddOutlined />}
@@ -764,8 +766,11 @@ export function FilesPage() {
                   className="border-t px-4 py-1.5 text-xs hm-text-secondary"
                   style={{ borderColor: 'var(--hm-border)' }}
                 >
-                  {visibleFiles.length} 项 · 目录 {visibleFiles.filter((f) => f.isDir).length} 个 ·
-                  文件 {visibleFiles.filter((f) => !f.isDir).length} 个
+                  {t('{total} 项 · 目录 {dirs} 个 · 文件 {files} 个', {
+                    total: visibleFiles.length,
+                    dirs: visibleFiles.filter((f) => f.isDir).length,
+                    files: visibleFiles.filter((f) => !f.isDir).length,
+                  })}
                 </div>
               </>
             ) : (
@@ -778,15 +783,15 @@ export function FilesPage() {
                   <div className="flex min-w-0 items-center gap-2">
                     <FileTextOutlined className="text-brand-500" />
                     <span className="hm-mono truncate text-xs" title={editingFile ?? ''}>
-                      {editingFile ? relativePath(editingFile, rootPath) : '未选择文件'}
+                      {editingFile ? relativePath(editingFile, rootPath) : t('未选择文件')}
                     </span>
                     {dirty ? (
                       <Tag color="orange" className="m-0" style={{ fontSize: 11 }}>
-                        未保存
+                        {t('未保存')}
                       </Tag>
                     ) : (
                       <Tag color="green" className="m-0" style={{ fontSize: 11 }}>
-                        已保存
+                        {t('已保存')}
                       </Tag>
                     )}
                   </div>
@@ -794,7 +799,7 @@ export function FilesPage() {
                   <Space size={6}>
                     {editingFile && isMarkdownFile(editingFile) ? (
                       <Button size="small" onClick={() => setViewMode('list')}>
-                        返回列表
+                        {t('返回列表')}
                       </Button>
                     ) : null}
                     <Button
@@ -803,7 +808,7 @@ export function FilesPage() {
                       disabled={!dirty}
                       onClick={() => setFileContent(originalContent)}
                     >
-                      撤销
+                      {t('撤销')}
                     </Button>
                     <Button
                       size="small"
@@ -813,10 +818,10 @@ export function FilesPage() {
                       disabled={!dirty}
                       onClick={() => void handleSave()}
                     >
-                      保存
+                      {t('保存')}
                     </Button>
                     <Button size="small" onClick={() => setViewMode('list')}>
-                      关闭
+                      {t('关闭')}
                     </Button>
                   </Space>
                 </div>
@@ -833,7 +838,7 @@ export function FilesPage() {
                   </div>
                 ) : (
                   <div className="flex flex-1 items-center justify-center">
-                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未选择文件" />
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('未选择文件')} />
                   </div>
                 )}
               </>
@@ -853,11 +858,11 @@ export function FilesPage() {
           className="mt-4"
           type="error"
           showIcon
-          message="文件树加载失败"
+          message={t('文件树加载失败')}
           description={<span className="hm-mono text-xs break-all">{treeError}</span>}
           action={
             <Button size="small" onClick={() => void loadTree()}>
-              重试
+              {t('重试')}
             </Button>
           }
         />
@@ -867,12 +872,12 @@ export function FilesPage() {
         className="mt-4"
         type="info"
         showIcon
-        message="文件操作提示"
+        message={t('文件操作提示')}
         description={
           <ul className="mt-1 mb-0 list-disc pl-4 text-xs leading-relaxed">
-            <li>双击文件树中的文件可直接在编辑器中打开；右键可执行重命名、删除等操作</li>
-            <li>非文本文件（图片、压缩包等）会使用系统默认程序打开</li>
-            <li>修改重要文件前建议先在「Git 操作」页面提交一次，便于回滚</li>
+            <li>{t('双击文件树中的文件可直接在编辑器中打开；右键可执行重命名、删除等操作')}</li>
+            <li>{t('非文本文件（图片、压缩包等）会使用系统默认程序打开')}</li>
+            <li>{t('修改重要文件前建议先在「Git 操作」页面提交一次，便于回滚')}</li>
           </ul>
         }
       />

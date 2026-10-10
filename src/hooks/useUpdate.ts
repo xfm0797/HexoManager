@@ -3,6 +3,7 @@
 import { useCallback, useEffect } from 'react';
 import { App as AntdApp } from 'antd';
 import { useUpdateStore } from '@/stores';
+import { t } from '@/i18n';
 import type { UpdateInfo } from '@/types';
 
 /** 检查更新、下载与安装 */
@@ -46,11 +47,11 @@ export function useUpdate(options?: { autoCheck?: boolean }) {
         const info = await checkUpdate(silent);
         if (!silent) {
           if (info.available) {
-            message.info(`发现新版本 ${info.latestVersion}`);
+            message.info(t('发现新版本 {version}', { version: info.latestVersion ?? '' }));
           } else if (info.error) {
-            message.warning(`检查更新失败：${info.error}`);
+            message.warning(t('检查更新失败：{error}', { error: info.error }));
           } else {
-            message.success('当前已是最新版本');
+            message.success(t('当前已是最新版本'));
           }
         }
         return info;
@@ -66,7 +67,7 @@ export function useUpdate(options?: { autoCheck?: boolean }) {
     async (url: string, targetDir?: string) => {
       try {
         const result = await downloadUpdate(url, targetDir);
-        message.success('更新包下载完成');
+        message.success(t('更新包下载完成'));
         return result;
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
@@ -80,15 +81,15 @@ export function useUpdate(options?: { autoCheck?: boolean }) {
     async (path: string) => {
       await new Promise<void>((resolve, reject) => {
         modal.confirm({
-          title: '安装更新？',
-          content: '应用将关闭并启动安装程序，请先保存正在编辑的内容。',
-          okText: '立即安装',
-          cancelText: '稍后',
+          title: t('安装更新？'),
+          content: t('应用将关闭并启动安装程序，请先保存正在编辑的内容。'),
+          okText: t('立即安装'),
+          cancelText: t('稍后'),
           onOk: () => resolve(),
-          onCancel: () => reject(new Error('已取消')),
+          onCancel: () => reject(new Error(t('已取消'))),
         });
       }).catch(() => {
-        throw new Error('已取消');
+        throw new Error(t('已取消'));
       });
 
       try {
@@ -103,7 +104,7 @@ export function useUpdate(options?: { autoCheck?: boolean }) {
   const toggleAutoCheck = useCallback(
     async (enabled: boolean) => {
       await saveSettings({ autoCheck: enabled });
-      message.success(enabled ? '已开启自动检查更新' : '已关闭自动检查更新');
+      message.success(enabled ? t('已开启自动检查更新') : t('已关闭自动检查更新'));
     },
     [saveSettings, message],
   );

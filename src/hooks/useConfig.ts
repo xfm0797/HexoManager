@@ -4,6 +4,7 @@ import { createElement, useCallback, useEffect, useMemo } from 'react';
 import { App as AntdApp, Modal } from 'antd';
 import { useConfigStore } from '@/stores';
 import { stringifyYaml } from '@/utils/yaml';
+import { t } from '@/i18n';
 
 /** 站点 _config.yml 编辑 */
 export function useSiteConfig(siteId: number | null) {
@@ -33,7 +34,7 @@ export function useSiteConfig(siteId: number | null) {
     if (siteId === null) return;
     try {
       await saveConfig(siteId);
-      message.success('配置已保存');
+      message.success(t('配置已保存'));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }
@@ -43,14 +44,14 @@ export function useSiteConfig(siteId: number | null) {
     if (siteId === null) return;
     const text = await diffConfig(siteId);
     Modal.info({
-      title: '配置差异（Git Diff）',
+      title: t('配置差异（Git Diff）'),
       width: 760,
       content: createElement(
         'pre',
         {
           className: 'max-h-[60vh] overflow-auto rounded bg-gray-50 p-3 text-xs leading-relaxed',
         },
-        text || '当前没有未提交的改动',
+        text || t('当前没有未提交的改动'),
       ),
     });
   }, [siteId, diffConfig]);
@@ -59,7 +60,7 @@ export function useSiteConfig(siteId: number | null) {
     if (siteId === null) return;
     try {
       await restoreConfig(siteId);
-      message.success('已恢复到备份版本');
+      message.success(t('已恢复到备份版本'));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }

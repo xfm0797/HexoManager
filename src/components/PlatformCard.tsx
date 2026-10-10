@@ -8,6 +8,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import type { DeployPlatformMeta } from '@/constants';
+import { useI18n } from '@/i18n';
 import { PlatformBadge } from './StatusBadge';
 
 interface PlatformCardProps {
@@ -34,6 +35,7 @@ export function PlatformCard({
   onGenerate,
   disabled = false,
 }: PlatformCardProps) {
+  const { t } = useI18n();
   return (
     <div
       className={`hm-surface flex flex-col p-4 transition-all ${
@@ -44,29 +46,29 @@ export function PlatformCard({
         <PlatformBadge badge={platform.badge} color={platform.color} name={platform.name} />
         {selected ? (
           <Tag color="blue" className="m-0" icon={<CheckCircleOutlined />}>
-            已选
+            {t('已选')}
           </Tag>
         ) : generatedCount > 0 ? (
           <Tag color="green" className="m-0">
-            已生成 {generatedCount}
+            {t('已生成 {count}', { count: generatedCount })}
           </Tag>
         ) : null}
       </div>
 
       <p className="mt-2 mb-0 flex-1 text-xs leading-relaxed hm-text-secondary">
-        {platform.description}
+        {t(platform.description)}
       </p>
 
       <div className="mt-2 flex items-center gap-2 text-[11px] hm-text-secondary">
         <Tag className="m-0" style={{ fontSize: 11 }}>
-          {platform.supportsCustomDomain ? '支持自定义域名' : '不支持自定义域名'}
+          {platform.supportsCustomDomain ? t('支持自定义域名') : t('不支持自定义域名')}
         </Tag>
       </div>
 
       <div className="mt-3 flex items-center justify-between">
         <Space size={4}>
           {onPreview ? (
-            <Tooltip title="预览生成的配置文件">
+            <Tooltip title={t('预览生成的配置文件')}>
               <Button
                 size="small"
                 type="text"
@@ -76,7 +78,7 @@ export function PlatformCard({
             </Tooltip>
           ) : null}
           {onOpenDocs ? (
-            <Tooltip title="打开官方文档">
+            <Tooltip title={t('打开官方文档')}>
               <Button
                 size="small"
                 type="text"
@@ -96,7 +98,7 @@ export function PlatformCard({
             onClick={() => onGenerate(platform)}
             disabled={disabled}
           >
-            生成配置
+            {t('生成配置')}
           </Button>
         ) : null}
 
@@ -107,7 +109,7 @@ export function PlatformCard({
             onClick={() => onSelect(platform)}
             disabled={disabled}
           >
-            {selected ? '已选择' : '选择'}
+            {selected ? t('已选择') : t('选择')}
           </Button>
         ) : null}
       </div>

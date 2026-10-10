@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { hexoService, updateService } from '@/services';
 import type { AppNotification, MessageType, PreviewServer, ThemeMode } from '@/types';
+import { t } from '@/i18n';
 
 const THEME_STORAGE_KEY = 'hexo-manager:theme';
 const SIDEBAR_STORAGE_KEY = 'hexo-manager:sidebar-collapsed';
@@ -192,7 +193,11 @@ export const useUiStore = create<UiState>((set, get) => ({
         const info = await updateService.check();
         set({ updateChecked: true });
         if (info.available && info.latestVersion !== settings.skipVersion) {
-          get().notify('info', `发现新版本 ${info.latestVersion}`, '前往「关于与更新」查看详情');
+          get().notify(
+            'info',
+            t('发现新版本 {version}', { version: info.latestVersion ?? '' }),
+            t('前往「关于与更新」查看详情'),
+          );
         }
       }
     } catch {

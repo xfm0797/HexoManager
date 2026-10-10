@@ -8,6 +8,7 @@ import {
   LoadingOutlined,
   RocketOutlined,
 } from '@ant-design/icons';
+import { useI18n } from '@/i18n';
 
 /** 部署阶段定义 */
 export const DEPLOY_PHASES = [
@@ -48,6 +49,7 @@ export function DeployProgress({
   variant = 'steps',
   percent = 0,
 }: DeployProgressProps) {
+  const { t } = useI18n();
   if (variant === 'progress') {
     return (
       <div className="space-y-2">
@@ -81,10 +83,10 @@ export function DeployProgress({
           const isDone = index < current || current >= DEPLOY_PHASES.length;
 
           return {
-            title: phase.title,
+            title: t(phase.title),
             description: (
               <span className="text-xs hm-text-secondary">
-                {isDone && !error ? '已完成' : phase.description}
+                {isDone && !error ? t('已完成') : phase.description}
               </span>
             ),
             icon: isCurrent ? <LoadingOutlined /> : PHASE_ICONS[phase.key],
@@ -98,7 +100,7 @@ export function DeployProgress({
           className="mt-3"
           type="error"
           showIcon
-          message="部署失败"
+          message={t('部署失败')}
           description={<span className="break-all text-xs">{error}</span>}
         />
       ) : null}

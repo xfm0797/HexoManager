@@ -4,6 +4,7 @@ import { Button, Empty } from 'antd';
 import type { ReactNode } from 'react';
 import { InboxOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import type { EmptyStateKind } from '@/types';
+import { useI18n } from '@/i18n';
 
 const PRESETS: Record<EmptyStateKind, { title: string; description: string; icon: ReactNode }> = {
   sites: {
@@ -67,6 +68,7 @@ export function EmptyState({
   icon,
   compact = false,
 }: EmptyStateProps) {
+  const { t } = useI18n();
   const preset = PRESETS[kind];
 
   return (
@@ -80,9 +82,9 @@ export function EmptyState({
         imageStyle={{ height: compact ? 48 : 64, fontSize: compact ? 40 : 56, opacity: 0.65 }}
         description={
           <div>
-            <div className="text-base font-medium">{title ?? preset.title}</div>
+            <div className="text-base font-medium">{title ?? t(preset.title)}</div>
             <div className="mt-1 max-w-sm text-sm hm-text-secondary">
-              {description ?? preset.description}
+              {description ?? t(preset.description)}
             </div>
           </div>
         }
@@ -95,7 +97,7 @@ export function EmptyState({
           ) : null}
           {onRefresh ? (
             <Button icon={<ReloadOutlined />} onClick={onRefresh}>
-              刷新
+              {t('刷新')}
             </Button>
           ) : null}
         </div>

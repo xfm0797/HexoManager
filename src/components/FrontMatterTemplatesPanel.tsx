@@ -35,6 +35,7 @@ import yaml from 'js-yaml';
 import { EmptyState } from './EmptyState';
 import { TagInput } from './TagInput';
 import { useTemplateStore } from '@/stores';
+import { t, useI18n } from '@/i18n';
 import { FRONT_MATTER_FIELD_PRESETS, TEMPLATE_BODY_PLACEHOLDERS } from '@/constants';
 import type { FrontMatterTemplate } from '@/types';
 
@@ -92,7 +93,7 @@ function rowsToFields(rows: FieldRow[]): { fields: Record<string, unknown>; erro
   for (const row of rows) {
     const key = row.key.trim();
     if (!key) continue;
-    if (key in fields) errors.push(`字段名「${key}」重复，后一个会覆盖前一个`);
+    if (key in fields) errors.push(t('字段名「{key}」重复，后一个会覆盖前一个', { key }));
 
     switch (row.type) {
       case 'boolean':
@@ -101,7 +102,7 @@ function rowsToFields(rows: FieldRow[]): { fields: Record<string, unknown>; erro
       case 'number': {
         const n = typeof row.value === 'number' ? row.value : Number(row.value);
         if (Number.isNaN(n)) {
-          errors.push(`字段「${key}」需要是数字`);
+          errors.push(t('字段「{key}」需要是数字', { key }));
           break;
         }
         fields[key] = n;
@@ -118,7 +119,7 @@ function rowsToFields(rows: FieldRow[]): { fields: Record<string, unknown>; erro
         try {
           fields[key] = JSON.parse(raw);
         } catch {
-          errors.push(`字段「${key}」的 JSON 无法解析`);
+          errors.push(t('字段「{key}」的 JSON 无法解析', { key }));
         }
         break;
       }
@@ -139,7 +140,7 @@ function fieldsToYaml(fields: Record<string, unknown>): string {
     const text = yaml.dump(fields, { indent: 2, lineWidth: 120, noRefs: true });
     return text.trimEnd();
   } catch {
-    return '# 当前字段无法序列化';
+    return t('# 当前字段无法序列化');
   }
 }
 
@@ -148,7 +149,7 @@ function keyOptions(rows: FieldRow[]) {
   const used = new Set(rows.map((r) => r.key));
   return FRONT_MATTER_FIELD_PRESETS.map((p) => ({
     value: p.name,
-    label: `${p.name}（${used.has(p.name) ? '已用' : p.label}）`,
+    label: `${p.name}（${used.has(p.name) ? t('已用') : p.label}）`,
   }));
 }
 
@@ -202,6 +203,7 @@ interface FrontMatterTemplatesPanelProps {
 /** 模板管理面板 */
 export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTemplatesPanelProps) {
   const { message } = AntdApp.useApp();
+  const { t } = useI18n();
   const templates = useTemplateStore((s) => s.templates);
   const loading = useTemplateStore((s) => s.loading);
   const saving = useTemplateStore((s) => s.saving);
@@ -231,15 +233,18 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
         const parsed = yaml.load(raw);
         if (parsed === null || parsed === undefined) return { fields: {}, errors: [] };
         if (typeof parsed !== 'object' || Array.isArray(parsed)) {
-          return { fields: {}, errors: ['YAML 顶层必须是键值对（对象）'] };
+          return { fields: {}, errors: [t('YAML 顶层必须是键值对（对象）')] };
         }
         return { fields: parsed as Record<string, unknown>, errors: [] };
       } catch (e) {
-        return { fields: {}, errors: [`YAML 解析失败：${(e as Error).message}`] };
+        return {
+          fields: {},
+          errors: [t('YAML 解析失败：{message}', { message: (e as Error).message })],
+        };
       }
     }
     return rowsToFields(editor.rows);
-  }, [editor.mode, editor.rows, editor.yamlText]);
+  }, [editor.mode, editor.rows, editor.yamlText, t]);
 
   const switchMode = (next: EditorMode) => {
     if (next === editor.mode) return;
@@ -249,7 +254,7 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
     }
     // 从 YAML 切回表格：先校验，解析失败不放行
     if (errors.length > 0) {
-      message.warning('当前 YAML 存在错误，修正后才能切换到表格模式');
+      message.warning(t('当前 YAML 存在错误，修正后才能切换到表格模式'));
       return;
     }
     setEditor((s) => ({ ...s, mode: 'table', rows: fieldsToRows(fields) }));
@@ -300,7 +305,7 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
   const handleSave = async () => {
     const name = editor.name.trim();
     if (!name) {
-      message.warning('请填写模板名称');
+      message.warning(t('请填写模板名称'));
       return;
     }
     if (errors.length > 0) {
@@ -317,26 +322,26 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
         fields,
         body: editor.body.trim() || undefined,
       });
-      message.success(editor.id ? '模板已更新' : '模板已创建');
+      message.success(editor.id ? t('模板已更新') : t('模板已创建'));
       setEditorOpen(false);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }
   };
 
-  const handleDelete = async (t: FrontMatterTemplate) => {
+  const handleDelete = async (tpl: FrontMatterTemplate) => {
     try {
-      await deleteTemplate(t.id);
-      message.success(`模板「${t.name}」已删除`);
+      await deleteTemplate(tpl.id);
+      message.success(t('模板「{name}」已删除', { name: tpl.name }));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }
   };
 
-  const handleDuplicate = async (t: FrontMatterTemplate) => {
+  const handleDuplicate = async (tpl: FrontMatterTemplate) => {
     try {
-      const created = await duplicateTemplate(t, `${t.name} 副本`);
-      message.success(`已复制为「${created.name}」`);
+      const created = await duplicateTemplate(tpl, t('{name} 副本', { name: tpl.name }));
+      message.success(t('已复制为「{name}」', { name: created.name }));
       setEditor(editorFromTemplate(created));
       setEditorOpen(true);
     } catch (e) {
@@ -348,10 +353,10 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm hm-text-secondary">
-          模板是全局的，所有站点共用。写新文章时选择模板即可一键写入常用字段与正文骨架。
+          {t('模板是全局的，所有站点共用。写新文章时选择模板即可一键写入常用字段与正文骨架。')}
         </div>
         <Space>
-          <Tooltip title="重新载入模板列表">
+          <Tooltip title={t('重新载入模板列表')}>
             <Button
               icon={<ReloadOutlined />}
               loading={loading}
@@ -366,12 +371,14 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
               setEditorOpen(true);
             }}
           >
-            新建模板
+            {t('新建模板')}
           </Button>
         </Space>
       </div>
 
-      {error ? <Alert type="error" showIcon message="模板加载失败" description={error} /> : null}
+      {error ? (
+        <Alert type="error" showIcon message={t('模板加载失败')} description={error} />
+      ) : null}
 
       {loading && templates.length === 0 ? (
         <div className="flex justify-center py-12">
@@ -380,9 +387,9 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
       ) : templates.length === 0 ? (
         <EmptyState
           kind="articles"
-          title="还没有任何模板"
-          description="新建一个模板，把 toc、comments、cover 这类常用字段存下来"
-          actionText="新建模板"
+          title={t('还没有任何模板')}
+          description={t('新建一个模板，把 toc、comments、cover 这类常用字段存下来')}
+          actionText={t('新建模板')}
           onAction={() => {
             setEditor(emptyEditor());
             setEditorOpen(true);
@@ -390,34 +397,34 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
         />
       ) : (
         <div className="space-y-2">
-          {templates.map((t) => (
-            <Card key={t.id} size="small" className="hm-surface">
+          {templates.map((tpl) => (
+            <Card key={tpl.id} size="small" className="hm-surface">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-base">{t.icon || '📄'}</span>
-                    <span className="font-medium">{t.name}</span>
-                    {t.isBuiltin ? (
+                    <span className="text-base">{tpl.icon || '📄'}</span>
+                    <span className="font-medium">{tpl.name}</span>
+                    {tpl.isBuiltin ? (
                       <Tag color="blue" className="m-0" style={{ fontSize: 11 }}>
-                        内置
+                        {t('内置')}
                       </Tag>
                     ) : null}
-                    {t.body ? (
-                      <Tooltip title="包含正文骨架">
+                    {tpl.body ? (
+                      <Tooltip title={t('包含正文骨架')}>
                         <Tag icon={<FileTextOutlined />} className="m-0" style={{ fontSize: 11 }}>
-                          骨架
+                          {t('骨架')}
                         </Tag>
                       </Tooltip>
                     ) : null}
                   </div>
-                  {t.description ? (
-                    <div className="mt-0.5 text-xs hm-text-secondary">{t.description}</div>
+                  {tpl.description ? (
+                    <div className="mt-0.5 text-xs hm-text-secondary">{tpl.description}</div>
                   ) : null}
                   <div className="mt-2 flex flex-wrap items-center gap-1">
-                    {Object.keys(t.fields ?? {}).length === 0 ? (
-                      <span className="text-xs hm-text-secondary">无自定义字段</span>
+                    {Object.keys(tpl.fields ?? {}).length === 0 ? (
+                      <span className="text-xs hm-text-secondary">{t('无自定义字段')}</span>
                     ) : (
-                      Object.entries(t.fields).map(([key, value]) => (
+                      Object.entries(tpl.fields).map(([key, value]) => (
                         <Tooltip key={key} title={`${key}: ${JSON.stringify(value)}`}>
                           <Tag className="m-0 hm-mono" style={{ fontSize: 11 }}>
                             {key}
@@ -433,31 +440,33 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
                     size="small"
                     icon={<EditOutlined />}
                     onClick={() => {
-                      setEditor(editorFromTemplate(t));
+                      setEditor(editorFromTemplate(tpl));
                       setEditorOpen(true);
                     }}
                   >
-                    编辑
+                    {t('编辑')}
                   </Button>
-                  <Tooltip title="另存为新模板">
+                  <Tooltip title={t('另存为新模板')}>
                     <Button
                       size="small"
                       icon={<CopyOutlined />}
-                      onClick={() => void handleDuplicate(t)}
+                      onClick={() => void handleDuplicate(tpl)}
                     />
                   </Tooltip>
-                  {t.isBuiltin ? (
-                    <Tooltip title="内置模板不可删除，可编辑或另存为新模板">
+                  {tpl.isBuiltin ? (
+                    <Tooltip title={t('内置模板不可删除，可编辑或另存为新模板')}>
                       <Button size="small" danger disabled icon={<DeleteOutlined />} />
                     </Tooltip>
                   ) : (
                     <Popconfirm
-                      title="删除模板？"
-                      description={`「${t.name}」将被删除，已套用该模板的文章不受影响。`}
-                      okText="删除"
+                      title={t('删除模板？')}
+                      description={t('「{name}」将被删除，已套用该模板的文章不受影响。', {
+                        name: tpl.name,
+                      })}
+                      okText={t('删除')}
                       okButtonProps={{ danger: true }}
-                      cancelText="取消"
-                      onConfirm={() => void handleDelete(t)}
+                      cancelText={t('取消')}
+                      onConfirm={() => void handleDelete(tpl)}
                     >
                       <Button size="small" danger icon={<DeleteOutlined />} />
                     </Popconfirm>
@@ -475,14 +484,20 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
         title={
           <Space>
             <ThunderboltOutlined />
-            <span>{editor.id ? `编辑模板${editor.isBuiltin ? '（内置）' : ''}` : '新建模板'}</span>
+            <span>
+              {editor.id
+                ? editor.isBuiltin
+                  ? t('编辑模板（内置）')
+                  : t('编辑模板')
+                : t('新建模板')}
+            </span>
           </Space>
         }
         width={880}
         onCancel={() => setEditorOpen(false)}
         footer={
           <Space>
-            <Button onClick={() => setEditorOpen(false)}>取消</Button>
+            <Button onClick={() => setEditorOpen(false)}>{t('取消')}</Button>
             <Button
               type="primary"
               icon={<SaveOutlined />}
@@ -490,7 +505,7 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
               disabled={errors.length > 0}
               onClick={() => void handleSave()}
             >
-              保存模板
+              {t('保存模板')}
             </Button>
           </Space>
         }
@@ -498,7 +513,7 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
         <div className="space-y-4 pt-1">
           <div className="grid grid-cols-[64px_1fr_1fr] gap-3">
             <div>
-              <div className="mb-1.5 text-xs hm-text-secondary">图标</div>
+              <div className="mb-1.5 text-xs hm-text-secondary">{t('图标')}</div>
               <Input
                 value={editor.icon}
                 onChange={(e) => setEditor((s) => ({ ...s, icon: e.target.value }))}
@@ -509,21 +524,21 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
             </div>
             <div>
               <div className="mb-1.5 text-xs hm-text-secondary">
-                模板名称 <span className="text-red-500">*</span>
+                {t('模板名称')} <span className="text-red-500">*</span>
               </div>
               <Input
                 value={editor.name}
                 onChange={(e) => setEditor((s) => ({ ...s, name: e.target.value }))}
-                placeholder="如：技术长文"
+                placeholder={t('如：技术长文')}
                 maxLength={40}
               />
             </div>
             <div>
-              <div className="mb-1.5 text-xs hm-text-secondary">说明</div>
+              <div className="mb-1.5 text-xs hm-text-secondary">{t('说明')}</div>
               <Input
                 value={editor.description}
                 onChange={(e) => setEditor((s) => ({ ...s, description: e.target.value }))}
-                placeholder="一句话说明模板用途"
+                placeholder={t('一句话说明模板用途')}
                 maxLength={60}
               />
             </div>
@@ -531,13 +546,13 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
 
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <div className="text-sm font-medium">Front Matter 字段</div>
+              <div className="text-sm font-medium">{t('Front Matter 字段')}</div>
               <Segmented
                 size="small"
                 value={editor.mode}
                 onChange={(v) => switchMode(v as EditorMode)}
                 options={[
-                  { label: '表格', value: 'table' },
+                  { label: t('表格'), value: 'table' },
                   { label: 'YAML', value: 'yaml' },
                 ]}
               />
@@ -548,7 +563,7 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
                 {editor.rows.length === 0 ? (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={<span className="text-xs">还没有字段</span>}
+                    description={<span className="text-xs">{t('还没有字段')}</span>}
                   />
                 ) : (
                   editor.rows.map((row) => (
@@ -557,7 +572,7 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
                         size="small"
                         style={{ width: 190 }}
                         value={row.key}
-                        placeholder="字段名"
+                        placeholder={t('字段名')}
                         options={keyOptions(editor.rows)}
                         onChange={(value) => patchRow(row.uid, { key: value })}
                         onSelect={(value) => {
@@ -587,10 +602,10 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
                           patchRow(row.uid, { type: next, value });
                         }}
                         options={[
-                          { label: '文本', value: 'text' },
-                          { label: '数字', value: 'number' },
-                          { label: '开关', value: 'boolean' },
-                          { label: '列表', value: 'list' },
+                          { label: t('文本'), value: 'text' },
+                          { label: t('数字'), value: 'number' },
+                          { label: t('开关'), value: 'boolean' },
+                          { label: t('列表'), value: 'list' },
                           { label: 'JSON', value: 'json' },
                         ]}
                       />
@@ -600,8 +615,8 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
                             size="small"
                             checked={Boolean(row.value)}
                             onChange={(checked) => patchRow(row.uid, { value: checked })}
-                            checkedChildren="是"
-                            unCheckedChildren="否"
+                            checkedChildren={t('是')}
+                            unCheckedChildren={t('否')}
                           />
                         ) : row.type === 'number' ? (
                           <InputNumber
@@ -614,7 +629,7 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
                           <TagInput
                             value={Array.isArray(row.value) ? row.value : []}
                             onChange={(v) => patchRow(row.uid, { value: v })}
-                            placeholder="输入后回车添加"
+                            placeholder={t('输入后回车添加')}
                             color="geekblue"
                           />
                         ) : row.type === 'json' ? (
@@ -631,11 +646,11 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
                             size="small"
                             value={String(row.value ?? '')}
                             onChange={(e) => patchRow(row.uid, { value: e.target.value })}
-                            placeholder="字段值，留空表示不设置"
+                            placeholder={t('字段值，留空表示不设置')}
                           />
                         )}
                       </div>
-                      <Tooltip title="删除该字段">
+                      <Tooltip title={t('删除该字段')}>
                         <Button
                           size="small"
                           type="text"
@@ -650,9 +665,9 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
 
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <Button size="small" icon={<PlusOutlined />} onClick={() => addRow()}>
-                    添加字段
+                    {t('添加字段')}
                   </Button>
-                  <span className="text-xs hm-text-secondary">常用字段：</span>
+                  <span className="text-xs hm-text-secondary">{t('常用字段：')}</span>
                   {FRONT_MATTER_FIELD_PRESETS.slice(0, 6).map((p) => (
                     <Tag
                       key={p.name}
@@ -671,7 +686,7 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
                 onChange={(e) => setEditor((s) => ({ ...s, yamlText: e.target.value }))}
                 autoSize={{ minRows: 8, maxRows: 18 }}
                 className="hm-mono"
-                placeholder={'categories:\n  - 技术\ntoc: true\nsticky: false'}
+                placeholder={t('categories:\n  - 技术\ntoc: true\nsticky: false')}
               />
             )}
 
@@ -697,7 +712,8 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm font-medium">
-                正文骨架 <span className="text-xs font-normal hm-text-secondary">可选</span>
+                {t('正文骨架')}{' '}
+                <span className="text-xs font-normal hm-text-secondary">{t('可选')}</span>
               </div>
               <Space size={4} wrap>
                 {TEMPLATE_BODY_PLACEHOLDERS.map((p) => (
@@ -719,26 +735,26 @@ export function FrontMatterTemplatesPanel({ autoLoad = true }: FrontMatterTempla
               onChange={(e) => setEditor((s) => ({ ...s, body: e.target.value }))}
               autoSize={{ minRows: 5, maxRows: 12 }}
               className="hm-mono"
-              placeholder={'## 背景\n\n\n## 方案\n\n\n## 小结\n'}
+              placeholder={t('## 背景\n\n\n## 方案\n\n\n## 小结\n')}
             />
             <div className="mt-1 text-xs hm-text-secondary">
-              新建文章时用它作为初始正文；套用到已有文章时默认不覆盖正文，可在套用对话框中选择追加。
+              {t('新建文章时用它作为初始正文；套用到已有文章时默认不覆盖正文，可在套用对话框中选择追加。')}
             </div>
           </div>
 
           <div>
             <div className="mb-1.5 flex items-center gap-2 text-sm font-medium">
-              <span>预览</span>
+              <span>{t('预览')}</span>
               <span className="text-xs font-normal hm-text-secondary">
-                实际写入文章文件的内容
+                {t('实际写入文章文件的内容')}
               </span>
             </div>
             <pre
               className="hm-mono max-h-56 overflow-auto rounded border p-3 text-xs leading-relaxed"
               style={{ borderColor: 'var(--hm-border)', margin: 0 }}
             >
-              {`---\ntitle: <文章标题>\ndate: <创建时间>\n${fieldsToYaml(fields)}\n---\n\n${
-                editor.body || '<正文>'
+              {`---\ntitle: ${t('<文章标题>')}\ndate: ${t('<创建时间>')}\n${fieldsToYaml(fields)}\n---\n\n${
+                editor.body || t('<正文>')
               }`}
             </pre>
           </div>

@@ -3,6 +3,7 @@
 import { Form, Tooltip } from 'antd';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import type { ReactNode } from 'react';
+import { t } from '@/i18n';
 
 interface FieldLabelProps {
   label: string;
@@ -77,7 +78,7 @@ export function FormField({
   trigger,
 }: FormFieldProps) {
   const mergedRules = required
-    ? [{ required: true, message: `请填写${label}` }, ...(rules ?? [])]
+    ? [{ required: true, message: t('请填写{label}', { label }) }, ...(rules ?? [])]
     : rules;
 
   return (

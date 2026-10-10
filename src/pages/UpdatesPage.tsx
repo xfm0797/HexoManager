@@ -41,20 +41,28 @@ import {
 import { CodeBlock, PageContainer } from '@/components';
 import { useUpdate, useUpdateConfig } from '@/hooks';
 import { APP_META } from '@/constants';
+import { useI18n } from '@/i18n';
 import type { Changelog, TechItem } from '@/types';
 import { formatDateTime } from '@/utils/format';
 
-/** 技术栈分组展示顺序 */
+/**
+ * 技术栈分组展示顺序。
+ * 必须与后端 `src-tauri/src/update/check.rs` 里的 `layer` 取值逐一对应，
+ * 否则 indexOf 返回 -1，该分组会被排到最前面且顺序错乱。
+ */
 const LAYER_ORDER = [
   '前端框架',
-  'UI 组件',
+  '前端路由',
+  'UI 组件库',
+  '样式方案',
   '构建工具',
   '状态管理',
-  '编辑器',
-  '后端框架',
-  '数据库',
+  '代码编辑器',
+  '桌面框架',
+  '开发语言',
+  '后端语言',
   '模板引擎',
-  '语言',
+  '本地数据库',
 ];
 
 /** 开源许可清单 */
@@ -83,6 +91,7 @@ const LICENSES = [
 /** 关于与更新页面 */
 export function UpdatesPage() {
   const { message } = AntdApp.useApp();
+  const { t } = useI18n();
   const { config } = useUpdateConfig();
 
   const {
@@ -131,7 +140,7 @@ export function UpdatesPage() {
 
   const techColumns: ColumnsType<TechItem> = [
     {
-      title: '组件',
+      title: t('组件'),
       dataIndex: 'name',
       key: 'name',
       render: (name: string, record) => (
@@ -144,25 +153,25 @@ export function UpdatesPage() {
       ),
     },
     {
-      title: '版本',
+      title: t('版本'),
       dataIndex: 'version',
       key: 'version',
       width: 110,
       render: (version: string) => <span className="hm-mono text-xs">{version}</span>,
     },
     {
-      title: '层级',
+      title: t('层级'),
       dataIndex: 'layer',
       key: 'layer',
       width: 110,
       render: (layer: string) => (
         <Tag className="m-0" color="blue">
-          {layer}
+          {t(layer)}
         </Tag>
       ),
     },
     {
-      title: '主页',
+      title: t('主页'),
       key: 'url',
       width: 80,
       render: (_v, record) => (
@@ -179,23 +188,23 @@ export function UpdatesPage() {
   ];
 
   const licenseColumns: ColumnsType<(typeof LICENSES)[number]> = [
-    { title: '依赖', dataIndex: 'name', key: 'name' },
+    { title: t('依赖'), dataIndex: 'name', key: 'name' },
     {
-      title: '版本',
+      title: t('版本'),
       dataIndex: 'version',
       key: 'version',
       width: 110,
       render: (version: string) => <span className="hm-mono text-xs">{version}</span>,
     },
     {
-      title: '许可协议',
+      title: t('许可协议'),
       dataIndex: 'license',
       key: 'license',
       width: 160,
       render: (license: string) => <Tag className="m-0">{license}</Tag>,
     },
     {
-      title: '仓库',
+      title: t('仓库'),
       key: 'url',
       width: 80,
       render: (_v, record) => (
@@ -217,10 +226,10 @@ export function UpdatesPage() {
 
   return (
     <PageContainer
-      title="关于与更新"
+      title={t('关于与更新')}
       description={
         <span>
-          {APP_META.name} v{version} · {APP_META.description}
+          {APP_META.name} v{version} · {t(APP_META.description)}
         </span>
       }
       card={false}
@@ -228,18 +237,18 @@ export function UpdatesPage() {
       badge={
         hasUpdate ? (
           <Tag color="orange" className="m-0" icon={<RocketOutlined />}>
-            有新版本
+            {t('有新版本')}
           </Tag>
         ) : (
           <Tag color="green" className="m-0">
-            已是最新
+            {t('已是最新')}
           </Tag>
         )
       }
       extra={
         <Space>
           <Button icon={<ReloadOutlined />} loading={checking} onClick={() => void check(false)}>
-            检查更新
+            {t('检查更新')}
           </Button>
           {hasUpdate && updateInfo?.downloadUrl ? (
             <Button
@@ -248,7 +257,7 @@ export function UpdatesPage() {
               loading={downloading}
               onClick={() => void download(updateInfo.downloadUrl as string)}
             >
-              下载更新
+              {t('下载更新')}
             </Button>
           ) : null}
         </Space>
@@ -274,12 +283,16 @@ export function UpdatesPage() {
                 <Tag className="m-0">{appInfo?.license ?? APP_META.license}</Tag>
               </div>
               <div className="mt-1 text-sm hm-text-secondary">
-                {appInfo?.description ?? APP_META.description}
+                {t(appInfo?.description ?? APP_META.description)}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs hm-text-secondary">
-                <span>作者：{appInfo?.author ?? APP_META.author}</span>
-                <span>构建时间：{formatDateTime(appInfo?.buildDate ?? null)}</span>
-                <span>Tauri：{appInfo?.tauriVersion ?? '2.x'}</span>
+                <span>
+                  {t('作者：{author}', { author: appInfo?.author ?? APP_META.author })}
+                </span>
+                <span>
+                  {t('构建时间：{time}', { time: formatDateTime(appInfo?.buildDate ?? null) })}
+                </span>
+                <span>{t('Tauri：{version}', { version: appInfo?.tauriVersion ?? '2.x' })}</span>
               </div>
             </div>
 
@@ -289,14 +302,14 @@ export function UpdatesPage() {
                 icon={<GithubOutlined />}
                 onClick={() => void openExternal(appInfo?.repository ?? APP_META.repository)}
               >
-                项目仓库
+                {t('项目仓库')}
               </Button>
               <Button
                 block
                 icon={<LinkOutlined />}
                 onClick={() => void openExternal(appInfo?.homepage ?? APP_META.homepage)}
               >
-                项目主页
+                {t('项目主页')}
               </Button>
             </Space>
           </div>
@@ -310,15 +323,17 @@ export function UpdatesPage() {
             icon={<RocketOutlined />}
             message={
               <span>
-                发现新版本 <span className="hm-mono">{updateInfo?.latestVersion}</span>
-                {isSkipped ? '（已忽略该版本）' : ''}
+                {t('发现新版本')} <span className="hm-mono">{updateInfo?.latestVersion}</span>
+                {isSkipped ? t('（已忽略该版本）') : ''}
               </span>
             }
             description={
               <div className="space-y-2">
                 <div className="text-xs">
-                  当前版本 {updateInfo?.currentVersion} · 发布时间{' '}
-                  {formatDateTime(updateInfo?.pubDate ?? null)}
+                  {t('当前版本 {version} · 发布时间 {time}', {
+                    version: updateInfo?.currentVersion ?? '',
+                    time: formatDateTime(updateInfo?.pubDate ?? null),
+                  })}
                 </div>
                 {updateInfo?.notes ? (
                   <div className="whitespace-pre-wrap text-xs leading-relaxed">
@@ -334,22 +349,22 @@ export function UpdatesPage() {
                       loading={downloading}
                       onClick={() => void download(updateInfo.downloadUrl as string)}
                     >
-                      下载更新包
+                      {t('下载更新包')}
                     </Button>
                   ) : null}
                   {isSkipped ? (
                     <Button size="small" onClick={() => void skipVersion('')}>
-                      取消忽略
+                      {t('取消忽略')}
                     </Button>
                   ) : (
                     <Button
                       size="small"
                       onClick={() => {
                         void skipVersion(updateInfo?.latestVersion ?? '');
-                        message.success('已忽略该版本');
+                        message.success(t('已忽略该版本'));
                       }}
                     >
-                      忽略此版本
+                      {t('忽略此版本')}
                     </Button>
                   )}
                 </Space>
@@ -360,18 +375,18 @@ export function UpdatesPage() {
           <Alert
             type="warning"
             showIcon
-            message="检查更新失败"
+            message={t('检查更新失败')}
             description={
               <div className="space-y-2">
                 <div className="hm-mono text-xs">{updateInfo.error}</div>
                 <div className="text-xs">
-                  可能是网络受限导致。可稍后重试，或前往项目仓库手动下载最新版本。
+                  {t('可能是网络受限导致。可稍后重试，或前往项目仓库手动下载最新版本。')}
                 </div>
               </div>
             }
             action={
               <Button size="small" onClick={() => void check(false)} loading={checking}>
-                重试
+                {t('重试')}
               </Button>
             }
           />
@@ -379,12 +394,15 @@ export function UpdatesPage() {
           <Alert
             type="success"
             showIcon
-            message="当前已是最新版本"
+            message={t('当前已是最新版本')}
             description={
               <span className="text-xs">
-                当前版本 <span className="hm-mono">{updateInfo?.currentVersion ?? version}</span>
+                {t('当前版本')}{' '}
+                <span className="hm-mono">{updateInfo?.currentVersion ?? version}</span>
                 {settings.lastCheckAt
-                  ? ` · 上次检查于 ${formatDateTime(settings.lastCheckAt)}`
+                  ? t(' · 上次检查于 {time}', {
+                      time: formatDateTime(settings.lastCheckAt),
+                    })
                   : ''}
               </span>
             }
@@ -393,7 +411,7 @@ export function UpdatesPage() {
 
         {/* 下载进度 */}
         {downloading || downloadResult ? (
-          <Card size="small" title="更新包下载">
+          <Card size="small" title={t('更新包下载')}>
             {downloading ? (
               <Progress percent={progress} status="active" />
             ) : (
@@ -401,10 +419,11 @@ export function UpdatesPage() {
                 <Alert
                   type="success"
                   showIcon
-                  message="更新包已下载完成"
+                  message={t('更新包已下载完成')}
                   description={
                     <div className="text-xs">
-                      保存位置：<span className="hm-mono break-all">{downloadResult?.path}</span>
+                      {t('保存位置：')}
+                      <span className="hm-mono break-all">{downloadResult?.path}</span>
                     </div>
                   }
                 />
@@ -414,7 +433,7 @@ export function UpdatesPage() {
                     icon={<ExportOutlined />}
                     onClick={() => (downloadResult ? void install(downloadResult.path) : undefined)}
                   >
-                    安装更新
+                    {t('安装更新')}
                   </Button>
                   <Button
                     onClick={() =>
@@ -425,7 +444,7 @@ export function UpdatesPage() {
                         : undefined
                     }
                   >
-                    在文件夹中显示
+                    {t('在文件夹中显示')}
                   </Button>
                 </Space>
               </div>
@@ -443,7 +462,7 @@ export function UpdatesPage() {
                 key: 'about',
                 label: (
                   <span>
-                    <InfoCircleOutlined /> 软件信息
+                    <InfoCircleOutlined /> {t('软件信息')}
                   </span>
                 ),
                 children: (
@@ -454,38 +473,38 @@ export function UpdatesPage() {
                           size="small"
                           column={1}
                           bordered
-                          title="基本信息"
+                          title={t('基本信息')}
                           items={[
                             {
                               key: 'name',
-                              label: '软件名称',
+                              label: t('软件名称'),
                               children: appInfo?.name ?? APP_META.name,
                             },
                             {
                               key: 'version',
-                              label: '当前版本',
+                              label: t('当前版本'),
                               children: <span className="hm-mono">{version}</span>,
                             },
                             {
                               key: 'tauri',
-                              label: 'Tauri 版本',
+                              label: t('Tauri 版本'),
                               children: (
                                 <span className="hm-mono">{appInfo?.tauriVersion ?? '2.x'}</span>
                               ),
                             },
                             {
                               key: 'build',
-                              label: '构建时间',
+                              label: t('构建时间'),
                               children: formatDateTime(appInfo?.buildDate ?? null),
                             },
                             {
                               key: 'author',
-                              label: '开发者',
+                              label: t('开发者'),
                               children: appInfo?.author ?? APP_META.author,
                             },
                             {
                               key: 'license',
-                              label: '开源许可',
+                              label: t('开源许可'),
                               children: appInfo?.license ?? APP_META.license,
                             },
                           ]}
@@ -493,32 +512,32 @@ export function UpdatesPage() {
                       </Col>
 
                       <Col xs={24} lg={12}>
-                        <Card size="small" title="核心能力" className="h-full">
+                        <Card size="small" title={t('核心能力')} className="h-full">
                           <div className="space-y-3">
                             {[
                               {
                                 icon: <ApiOutlined />,
                                 color: '#3366ff',
-                                title: '多站点统一管理',
-                                desc: '同时维护多个 Hexo 站点，一键切换上下文',
+                                title: t('多站点统一管理'),
+                                desc: t('同时维护多个 Hexo 站点，一键切换上下文'),
                               },
                               {
                                 icon: <ThunderboltOutlined />,
                                 color: '#fa8c16',
-                                title: '全流程自动化',
-                                desc: '构建、提交、推送、部署一条链路完成',
+                                title: t('全流程自动化'),
+                                desc: t('构建、提交、推送、部署一条链路完成'),
                               },
                               {
                                 icon: <SafetyCertificateOutlined />,
                                 color: '#52c41a',
-                                title: '配置生成器',
-                                desc: '覆盖 7 大平台与边缘层回源策略的 CI 配置',
+                                title: t('配置生成器'),
+                                desc: t('覆盖 7 大平台与边缘层回源策略的 CI 配置'),
                               },
                               {
                                 icon: <CoffeeOutlined />,
                                 color: '#722ed1',
-                                title: '本地优先',
-                                desc: '所有数据存放于本机 SQLite，不上传云端',
+                                title: t('本地优先'),
+                                desc: t('所有数据存放于本机 SQLite，不上传云端'),
                               },
                             ].map((item) => (
                               <div key={item.title} className="flex items-start gap-3">
@@ -542,18 +561,23 @@ export function UpdatesPage() {
                     <Alert
                       type="info"
                       showIcon
-                      message="数据存储位置"
+                      message={t('数据存储位置')}
                       description={
                         <div className="space-y-1 text-xs">
                           <div>
-                            应用数据目录（数据库与配置）：
-                            <span className="hm-mono">系统应用数据目录 / hexo-manager /</span>
+                            {t('应用数据目录（数据库与配置）：')}
+                            <span className="hm-mono">
+                              {t('系统应用数据目录 / hexo-manager /')}
+                            </span>
                           </div>
                           <div>
-                            数据库文件：
-                            <span className="hm-mono">hexo-manager.db</span>（SQLite，WAL 模式）
+                            {t('数据库文件：')}
+                            <span className="hm-mono">hexo-manager.db</span>
+                            {t('（SQLite，WAL 模式）')}
                           </div>
-                          <div>所有站点源码保持在其原始目录，本应用不会移动或复制你的站点文件</div>
+                          <div>
+                            {t('所有站点源码保持在其原始目录，本应用不会移动或复制你的站点文件')}
+                          </div>
                         </div>
                       }
                     />
@@ -564,7 +588,7 @@ export function UpdatesPage() {
                 key: 'tech',
                 label: (
                   <span>
-                    <ApiOutlined /> 技术栈
+                    <ApiOutlined /> {t('技术栈')}
                   </span>
                 ),
                 children: (
@@ -575,16 +599,16 @@ export function UpdatesPage() {
                       columns={techColumns}
                       dataSource={appInfo?.techStack ?? []}
                       pagination={false}
-                      locale={{ emptyText: <Empty description="暂无技术栈信息" /> }}
+                      locale={{ emptyText: <Empty description={t('暂无技术栈信息')} /> }}
                     />
 
                     {techGroups.length > 0 ? (
-                      <Card size="small" title="分层视图">
+                      <Card size="small" title={t('分层视图')}>
                         <div className="space-y-3">
                           {techGroups.map(([layer, items]) => (
                             <div key={layer} className="flex items-start gap-3">
                               <Tag color="blue" className="m-0 mt-0.5 shrink-0">
-                                {layer}
+                                {t(layer)}
                               </Tag>
                               <div className="flex flex-wrap gap-1">
                                 {items.map((item) => (
@@ -610,13 +634,13 @@ export function UpdatesPage() {
                 key: 'changelog',
                 label: (
                   <span>
-                    <SyncOutlined /> 更新日志
+                    <SyncOutlined /> {t('更新日志')}
                   </span>
                 ),
                 children: (
                   <div className="space-y-4">
                     {changelog.length === 0 ? (
-                      <Empty description="暂无更新日志" />
+                      <Empty description={t('暂无更新日志')} />
                     ) : (
                       <Timeline
                         items={changelog.map((item: Changelog, index) => ({
@@ -628,7 +652,7 @@ export function UpdatesPage() {
                                 <span className="text-xs hm-text-secondary">{item.date}</span>
                                 {index === 0 ? (
                                   <Tag color="blue" className="m-0">
-                                    最新
+                                    {t('最新')}
                                   </Tag>
                                 ) : null}
                               </div>
@@ -645,18 +669,18 @@ export function UpdatesPage() {
 
                     <Divider className="my-2" />
                     <div className="text-xs hm-text-secondary">
-                      更新日志来源于项目根目录的 CHANGELOG.md，遵循 Keep a Changelog 规范
+                      {t('更新日志来源于项目根目录的 CHANGELOG.md，遵循 Keep a Changelog 规范')}
                     </div>
                     <CodeBlock
                       language="markdown"
                       maxHeight={200}
                       code={`## [1.0.0] - 2025-01-01
 ### Added
-- 多站点创建、导入与切换
-- 文章可视化编辑与 Markdown 实时预览
-- 7 大平台 CI/CD 配置生成器
-- 边缘层回源策略配置（EdgeOne / Cloudflare）
-- Git 操作面板与一键部署`}
+- ${t('多站点创建、导入与切换')}
+- ${t('文章可视化编辑与 Markdown 实时预览')}
+- ${t('7 大平台 CI/CD 配置生成器')}
+- ${t('边缘层回源策略配置（EdgeOne / Cloudflare）')}
+- ${t('Git 操作面板与一键部署')}`}
                     />
                   </div>
                 ),
@@ -665,7 +689,7 @@ export function UpdatesPage() {
                 key: 'license',
                 label: (
                   <span>
-                    <SafetyCertificateOutlined /> 开源许可
+                    <SafetyCertificateOutlined /> {t('开源许可')}
                   </span>
                 ),
                 children: (
@@ -678,7 +702,7 @@ export function UpdatesPage() {
                       pagination={false}
                     />
 
-                    <Card size="small" title="许可证全文">
+                    <Card size="small" title={t('许可证全文')}>
                       <CodeBlock
                         language="plaintext"
                         maxHeight={260}
@@ -712,7 +736,7 @@ SOFTWARE.`}
                 key: 'update',
                 label: (
                   <span>
-                    <RocketOutlined /> 更新设置
+                    <RocketOutlined /> {t('更新设置')}
                   </span>
                 ),
                 children: (
@@ -722,9 +746,9 @@ SOFTWARE.`}
                       style={{ borderColor: 'var(--hm-border)' }}
                     >
                       <div>
-                        <div className="text-sm font-medium">启动时自动检查更新</div>
+                        <div className="text-sm font-medium">{t('启动时自动检查更新')}</div>
                         <div className="text-xs hm-text-secondary">
-                          应用启动后静默检查新版本，发现更新时在消息中心提示
+                          {t('应用启动后静默检查新版本，发现更新时在消息中心提示')}
                         </div>
                       </div>
                       <Switch
@@ -737,16 +761,16 @@ SOFTWARE.`}
                       size="small"
                       column={1}
                       bordered
-                      title="更新状态"
+                      title={t('更新状态')}
                       items={[
                         {
                           key: 'lastCheck',
-                          label: '上次检查时间',
+                          label: t('上次检查时间'),
                           children: formatDateTime(settings.lastCheckAt),
                         },
                         {
                           key: 'lastVersion',
-                          label: '上次已知版本',
+                          label: t('上次已知版本'),
                           children: settings.lastVersion ? (
                             <span className="hm-mono">{settings.lastVersion}</span>
                           ) : (
@@ -755,7 +779,7 @@ SOFTWARE.`}
                         },
                         {
                           key: 'skip',
-                          label: '已忽略版本',
+                          label: t('已忽略版本'),
                           children: settings.skipVersion ? (
                             <Space>
                               <span className="hm-mono">{settings.skipVersion}</span>
@@ -765,16 +789,16 @@ SOFTWARE.`}
                                 className="!px-0"
                                 onClick={() => void skipVersion('')}
                               >
-                                取消忽略
+                                {t('取消忽略')}
                               </Button>
                             </Space>
                           ) : (
-                            '未忽略任何版本'
+                            t('未忽略任何版本')
                           ),
                         },
                         {
                           key: 'platform',
-                          label: '当前平台',
+                          label: t('当前平台'),
                           children: config ? (
                             <span className="hm-mono text-xs">
                               {config.os}-{config.arch}
@@ -789,10 +813,10 @@ SOFTWARE.`}
                     {/* 更新源链路 */}
                     <Card
                       size="small"
-                      title="更新源链路"
+                      title={t('更新源链路')}
                       extra={
                         <span className="text-xs hm-text-secondary">
-                          按优先级依次尝试，第一个成功的源生效
+                          {t('按优先级依次尝试，第一个成功的源生效')}
                         </span>
                       }
                     >
@@ -802,7 +826,8 @@ SOFTWARE.`}
                         current={-1}
                         items={(config?.endpoints ?? []).map((endpoint, index) => ({
                           key: endpoint,
-                          title: index === 0 ? '首选源（Tauri updater 清单）' : '备用源',
+                          title:
+                            index === 0 ? t('首选源（Tauri updater 清单）') : t('备用源'),
                           description: (
                             <span
                               className="hm-mono cursor-pointer break-all text-xs hover:underline"
@@ -815,7 +840,7 @@ SOFTWARE.`}
                       />
                       {!config ? (
                         <div className="text-xs hm-text-secondary">
-                          更新源配置加载中，或当前环境（浏览器调试模式）不支持该命令
+                          {t('更新源配置加载中，或当前环境（浏览器调试模式）不支持该命令')}
                         </div>
                       ) : null}
                     </Card>
@@ -827,25 +852,27 @@ SOFTWARE.`}
                         loading={checking}
                         onClick={() => void check(false)}
                       >
-                        立即检查更新
+                        {t('立即检查更新')}
                       </Button>
                       <Button
                         icon={<BugOutlined />}
                         onClick={() => void openExternal(`${APP_META.repository}/issues`)}
                       >
-                        反馈问题
+                        {t('反馈问题')}
                       </Button>
                     </Space>
 
                     <Alert
                       type="info"
                       showIcon
-                      message="手动更新方式"
+                      message={t('手动更新方式')}
                       description={
                         <div className="space-y-1 text-xs">
-                          <div>1. 点击「检查更新」获取最新版本信息与下载地址</div>
-                          <div>2. 下载安装包后点击「安装更新」，应用将自动关闭并启动安装程序</div>
-                          <div>3. 也可直接前往项目仓库的 Releases 页面手动下载</div>
+                          <div>{t('1. 点击「检查更新」获取最新版本信息与下载地址')}</div>
+                          <div>
+                            {t('2. 下载安装包后点击「安装更新」，应用将自动关闭并启动安装程序')}
+                          </div>
+                          <div>{t('3. 也可直接前往项目仓库的 Releases 页面手动下载')}</div>
                         </div>
                       }
                     />
@@ -857,10 +884,14 @@ SOFTWARE.`}
         </Card>
 
         <div className="flex items-center justify-center gap-1.5 pb-2 text-xs hm-text-secondary">
-          <span>用</span>
+          <span>{t('用')}</span>
           <HeartOutlined className="text-red-400" />
           <span>
-            构建 · {APP_META.name} v{version} · {APP_META.license} License
+            {t('构建 · {name} v{version} · {license} License', {
+              name: APP_META.name,
+              version,
+              license: APP_META.license,
+            })}
           </span>
         </div>
       </div>

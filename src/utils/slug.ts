@@ -1,5 +1,7 @@
 /** Slug 与路径处理工具 */
 
+import { t } from '@/i18n';
+
 /**
  * 由标题生成 URL 友好 slug。
  * 保留中文字符（Hexo 支持），英文转小写，空格与符号转连字符。
@@ -82,7 +84,7 @@ export function titleFromFileName(fileName: string): string {
   let name = baseName(fileName).replace(/\.(md|markdown|mkd)$/i, '');
   // 去掉形如 2024-01-01- 的日期前缀
   name = name.replace(/^\d{4}-\d{2}-\d{2}-/, '');
-  return name || '未命名';
+  return name || t('未命名');
 }
 
 /**

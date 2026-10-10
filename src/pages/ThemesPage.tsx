@@ -47,6 +47,7 @@ import {
 } from '@/components';
 import { useThemeConfig, useThemes } from '@/hooks';
 import { useSiteStore } from '@/stores';
+import { useI18n } from '@/i18n';
 import type { Theme } from '@/types';
 import { formatRelative, gradientFromString, initialsOf } from '@/utils/format';
 import { openWithSystem } from '@/utils/desktop';
@@ -55,6 +56,7 @@ import { parseYaml } from '@/utils/yaml';
 /** 主题管理页面 */
 export function ThemesPage() {
   const { message, modal } = AntdApp.useApp();
+  const { t } = useI18n();
 
   const currentSiteId = useSiteStore((s) => s.currentSiteId);
   const currentSite = useSiteStore((s) => s.sites.find((site) => site.id === s.currentSiteId));
@@ -131,7 +133,7 @@ export function ThemesPage() {
 
   const handleInstall = async () => {
     if (!installName.trim()) {
-      message.warning('请输入主题名称');
+      message.warning(t('请输入主题名称'));
       return;
     }
 
@@ -155,7 +157,7 @@ export function ThemesPage() {
 
   const handleSaveConfig = async () => {
     if (yamlError) {
-      message.error('YAML 格式有误，请修正后再保存');
+      message.error(t('YAML 格式有误，请修正后再保存'));
       return;
     }
     await saveThemeConfig(draftRaw);
@@ -163,26 +165,26 @@ export function ThemesPage() {
 
   const handleUninstall = (theme: Theme) => {
     modal.confirm({
-      title: `卸载主题「${theme.name}」？`,
-      content: '主题目录与配置文件将被删除。如果该主题正在使用中，建议先切换到其他主题。',
-      okText: '卸载',
+      title: t('卸载主题「{name}」？', { name: theme.name }),
+      content: t('主题目录与配置文件将被删除。如果该主题正在使用中，建议先切换到其他主题。'),
+      okText: t('卸载'),
       okButtonProps: { danger: true },
-      cancelText: '取消',
+      cancelText: t('取消'),
       onOk: () => uninstall(theme),
     });
   };
 
   const handleSwitch = (theme: Theme) => {
     if (theme.isActive) {
-      message.info('该主题已是当前使用的主题');
+      message.info(t('该主题已是当前使用的主题'));
       return;
     }
 
     modal.confirm({
-      title: `切换到主题「${theme.name}」？`,
-      content: '切换后会修改 _config.yml 中的 theme 字段，需要重新生成站点才能看到效果。',
-      okText: '切换',
-      cancelText: '取消',
+      title: t('切换到主题「{name}」？', { name: theme.name }),
+      content: t('切换后会修改 _config.yml 中的 theme 字段，需要重新生成站点才能看到效果。'),
+      okText: t('切换'),
+      cancelText: t('取消'),
       onOk: () => switchTheme(theme),
     });
   };
@@ -191,9 +193,11 @@ export function ThemesPage() {
 
   return (
     <PageContainer
-      title="主题管理"
+      title={t('主题管理')}
       description={
-        currentSite ? `${currentSite.name} · 共 ${themes.length} 个主题` : '请先选择站点'
+        currentSite
+          ? t('{name} · 共 {count} 个主题', { name: currentSite.name, count: themes.length })
+          : t('请先选择站点')
       }
       card={false}
       flush
@@ -204,7 +208,7 @@ export function ThemesPage() {
             onClick={() => setInstallOpen(true)}
             disabled={currentSiteId === null}
           >
-            安装主题
+            {t('安装主题')}
           </Button>
           <Button
             icon={<ReloadOutlined />}
@@ -212,39 +216,43 @@ export function ThemesPage() {
             loading={loading}
             disabled={currentSiteId === null}
           >
-            刷新
+            {t('刷新')}
           </Button>
         </Space>
       }
     >
       {currentSiteId === null ? (
         <div className="hm-surface">
-          <EmptyState kind="themes" title="请先选择站点" description="在顶栏选择站点后管理其主题" />
+          <EmptyState
+            kind="themes"
+            title={t('请先选择站点')}
+            description={t('在顶栏选择站点后管理其主题')}
+          />
         </div>
       ) : (
         <div className="space-y-4">
           {/* 概览 */}
           <StatGrid columns={4}>
-            <StatCard title="已安装主题" value={themes.length} icon={<AppstoreOutlined />} />
+            <StatCard title={t('已安装主题')} value={themes.length} icon={<AppstoreOutlined />} />
             <StatCard
-              title="当前主题"
-              value={active?.name ?? currentSite?.theme ?? '未设置'}
+              title={t('当前主题')}
+              value={active?.name ?? currentSite?.theme ?? t('未设置')}
               icon={<CheckCircleOutlined />}
               iconColor="#52c41a"
             />
             <StatCard
-              title="带配置的主题"
+              title={t('带配置的主题')}
               value={themes.filter(hasConfig).length}
               icon={<SettingOutlined />}
               iconColor="#722ed1"
-              tooltip="存在 _config.yml 的主题数量"
+              tooltip={t('存在 _config.yml 的主题数量')}
             />
             <StatCard
-              title="可更新主题"
-              value={themes.filter((t) => t.version === null).length}
+              title={t('可更新主题')}
+              value={themes.filter((theme) => theme.version === null).length}
               icon={<SyncOutlined />}
               iconColor="#fa8c16"
-              tooltip="无法读取版本号的主题，可能需要手动更新"
+              tooltip={t('无法读取版本号的主题，可能需要手动更新')}
             />
           </StatGrid>
 
@@ -253,13 +261,13 @@ export function ThemesPage() {
             <Col xs={24} lg={15}>
               <Card
                 size="small"
-                title="已安装主题"
+                title={t('已安装主题')}
                 extra={
                   <Input
                     size="small"
                     allowClear
                     prefix={<SearchOutlined className="opacity-50" />}
-                    placeholder="搜索主题"
+                    placeholder={t('搜索主题')}
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
                     style={{ width: 180 }}
@@ -273,8 +281,8 @@ export function ThemesPage() {
                   <EmptyState
                     kind={keyword ? 'search' : 'themes'}
                     compact
-                    title={keyword ? '没有匹配的主题' : undefined}
-                    actionText={keyword ? undefined : '安装主题'}
+                    title={keyword ? t('没有匹配的主题') : undefined}
+                    actionText={keyword ? undefined : t('安装主题')}
                     onAction={keyword ? undefined : () => setInstallOpen(true)}
                     onRefresh={keyword ? () => setKeyword('') : undefined}
                   />
@@ -301,7 +309,7 @@ export function ThemesPage() {
                             </span>
                             {theme.isActive ? (
                               <Tag color="white" className="m-0 text-brand-600">
-                                使用中
+                                {t('使用中')}
                               </Tag>
                             ) : null}
                           </div>
@@ -319,18 +327,21 @@ export function ThemesPage() {
                             </div>
 
                             <p className="mt-1 mb-0 line-clamp-2 flex-1 text-xs hm-text-secondary">
-                              {theme.description || `${theme.author ?? '未知作者'} 开发的主题`}
+                              {theme.description ||
+                                t('{author} 开发的主题', {
+                                  author: theme.author ?? t('未知作者'),
+                                })}
                             </p>
 
                             <div className="mt-2 text-[11px] hm-text-secondary">
                               {theme.installedAt
-                                ? `安装于 ${formatRelative(theme.installedAt)}`
-                                : '本地主题'}
+                                ? t('安装于 {time}', { time: formatRelative(theme.installedAt) })
+                                : t('本地主题')}
                             </div>
 
                             <div className="mt-2 flex items-center justify-between gap-1">
                               <Space size={2}>
-                                <Tooltip title="编辑主题配置">
+                                <Tooltip title={t('编辑主题配置')}>
                                   <Button
                                     size="small"
                                     type="text"
@@ -340,7 +351,7 @@ export function ThemesPage() {
                                   />
                                 </Tooltip>
                                 {theme.repo ? (
-                                  <Tooltip title="打开仓库">
+                                  <Tooltip title={t('打开仓库')}>
                                     <Button
                                       size="small"
                                       type="text"
@@ -349,7 +360,7 @@ export function ThemesPage() {
                                     />
                                   </Tooltip>
                                 ) : null}
-                                <Tooltip title="更新主题">
+                                <Tooltip title={t('更新主题')}>
                                   <Button
                                     size="small"
                                     type="text"
@@ -358,7 +369,7 @@ export function ThemesPage() {
                                     onClick={() => void update(theme)}
                                   />
                                 </Tooltip>
-                                <Tooltip title="卸载">
+                                <Tooltip title={t('卸载')}>
                                   <Button
                                     size="small"
                                     type="text"
@@ -377,7 +388,7 @@ export function ThemesPage() {
                                 onClick={() => handleSwitch(theme)}
                                 disabled={theme.isActive}
                               >
-                                {theme.isActive ? '使用中' : '启用'}
+                                {theme.isActive ? t('使用中') : t('启用')}
                               </Button>
                             </div>
                           </div>
@@ -393,7 +404,7 @@ export function ThemesPage() {
             <Col xs={24} lg={9}>
               <Card
                 size="small"
-                title="主题市场"
+                title={t('主题市场')}
                 extra={
                   <Button
                     size="small"
@@ -409,7 +420,7 @@ export function ThemesPage() {
                     size="small"
                     allowClear
                     prefix={<SearchOutlined className="opacity-50" />}
-                    placeholder="搜索主题市场"
+                    placeholder={t('搜索主题市场')}
                     value={marketKeyword}
                     onChange={(e) => setMarketKeyword(e.target.value)}
                     onPressEnter={() => void search(marketKeyword || undefined)}
@@ -420,9 +431,11 @@ export function ThemesPage() {
                   <EmptyState
                     kind={marketKeyword ? 'search' : 'themes'}
                     compact
-                    title={marketKeyword ? '没有匹配结果' : '市场数据为空'}
+                    title={marketKeyword ? t('没有匹配结果') : t('市场数据为空')}
                     description={
-                      marketKeyword ? '换个关键词试试' : '可能需要网络连接才能获取主题市场数据'
+                      marketKeyword
+                        ? t('换个关键词试试')
+                        : t('可能需要网络连接才能获取主题市场数据')
                     }
                     onRefresh={() => void search(marketKeyword || undefined)}
                   />
@@ -431,7 +444,7 @@ export function ThemesPage() {
                     size="small"
                     dataSource={filteredMarket}
                     renderItem={(item) => {
-                      const installed = themes.some((t) => t.name === item.name);
+                      const installed = themes.some((theme) => theme.name === item.name);
                       return (
                         <List.Item className="px-3">
                           <div className="w-full">
@@ -448,12 +461,12 @@ export function ThemesPage() {
                             </div>
 
                             <p className="mt-0.5 mb-1 line-clamp-2 text-xs hm-text-secondary">
-                              {item.description || '暂无描述'}
+                              {item.description || t('暂无描述')}
                             </p>
 
                             <div className="flex items-center justify-between">
                               <span className="text-[11px] hm-text-secondary">
-                                {item.author ?? '未知作者'}
+                                {item.author ?? t('未知作者')}
                               </span>
                               <Space size={4}>
                                 {item.repo ? (
@@ -475,7 +488,7 @@ export function ThemesPage() {
                                     setInstallOpen(true);
                                   }}
                                 >
-                                  {installed ? '已安装' : '安装'}
+                                  {installed ? t('已安装') : t('安装')}
                                 </Button>
                               </Space>
                             </div>
@@ -491,12 +504,12 @@ export function ThemesPage() {
                 className="mt-4"
                 type="info"
                 showIcon
-                message="主题来源说明"
+                message={t('主题来源说明')}
                 description={
                   <ul className="mt-1 mb-0 list-disc pl-4 text-xs leading-relaxed">
-                    <li>npm 安装：执行 npm install 并复制到 themes 目录（推荐）</li>
-                    <li>Git 克隆：直接从仓库地址克隆到 themes 目录</li>
-                    <li>也可手动把主题文件夹放入 themes 目录后点击「刷新」</li>
+                    <li>{t('npm 安装：执行 npm install 并复制到 themes 目录（推荐）')}</li>
+                    <li>{t('Git 克隆：直接从仓库地址克隆到 themes 目录')}</li>
+                    <li>{t('也可手动把主题文件夹放入 themes 目录后点击「刷新」')}</li>
                   </ul>
                 }
               />
@@ -508,31 +521,31 @@ export function ThemesPage() {
       {/* 安装主题弹窗 */}
       <Modal
         open={installOpen}
-        title="安装主题"
+        title={t('安装主题')}
         onCancel={() => setInstallOpen(false)}
         onOk={() => void handleInstall()}
         confirmLoading={installing}
-        okText="开始安装"
-        cancelText="取消"
+        okText={t('开始安装')}
+        cancelText={t('取消')}
         width={560}
       >
         <div className="space-y-4 pt-2">
           <div>
-            <div className="mb-2 text-sm">安装来源</div>
+            <div className="mb-2 text-sm">{t('安装来源')}</div>
             <Radio.Group
               value={installSource}
               onChange={(e) => setInstallSource(e.target.value as 'npm' | 'git')}
               optionType="button"
               buttonStyle="solid"
             >
-              <Radio.Button value="npm">npm 包（推荐）</Radio.Button>
-              <Radio.Button value="git">Git 仓库</Radio.Button>
+              <Radio.Button value="npm">{t('npm 包（推荐）')}</Radio.Button>
+              <Radio.Button value="git">{t('Git 仓库')}</Radio.Button>
             </Radio.Group>
           </div>
 
           <div>
             <div className="mb-2 text-sm">
-              {installSource === 'npm' ? 'npm 包名' : 'Git 仓库地址'}
+              {installSource === 'npm' ? t('npm 包名') : t('Git 仓库地址')}
             </div>
             <Input
               value={installName}
@@ -551,14 +564,18 @@ export function ThemesPage() {
           <Alert
             type="warning"
             showIcon
-            message="安装过程可能较慢"
-            description="需要从网络下载主题文件，请确保网络连接正常。安装完成后会自动刷新主题列表。"
+            message={t('安装过程可能较慢')}
+            description={t(
+              '需要从网络下载主题文件，请确保网络连接正常。安装完成后会自动刷新主题列表。',
+            )}
           />
 
           {/* 已安装主题快速选择 */}
           {themes.length > 0 ? (
             <div>
-              <div className="mb-1.5 text-xs hm-text-secondary">已安装（通常无需重复安装）</div>
+              <div className="mb-1.5 text-xs hm-text-secondary">
+                {t('已安装（通常无需重复安装）')}
+              </div>
               <Space size={4} wrap>
                 {themes.map((theme) => (
                   <Tag key={theme.name} className="m-0 hm-mono" style={{ fontSize: 11 }}>
@@ -575,7 +592,7 @@ export function ThemesPage() {
       <Drawer
         open={configOpen}
         onClose={() => setConfigOpen(false)}
-        title={`主题配置 · ${configTheme ?? ''}`}
+        title={t('主题配置 · {theme}', { theme: configTheme ?? '' })}
         width={720}
         extra={
           <Space>
@@ -585,7 +602,7 @@ export function ThemesPage() {
               onClick={() => setDraftRaw(themeRaw)}
               disabled={draftRaw === themeRaw}
             >
-              还原
+              {t('还原')}
             </Button>
             <Button
               size="small"
@@ -595,7 +612,7 @@ export function ThemesPage() {
               onClick={() => void handleSaveConfig()}
               disabled={draftRaw === themeRaw || Boolean(yamlError)}
             >
-              保存
+              {t('保存')}
             </Button>
           </Space>
         }
@@ -611,7 +628,7 @@ export function ThemesPage() {
                 className="mb-3"
                 type="error"
                 showIcon
-                message="YAML 语法错误"
+                message={t('YAML 语法错误')}
                 description={<span className="hm-mono text-xs break-all">{yamlError}</span>}
               />
             ) : (
@@ -619,8 +636,10 @@ export function ThemesPage() {
                 className="mb-3"
                 type="success"
                 showIcon
-                message="主题配置文件"
-                description={`编辑 themes/${configTheme}/_config.yml，保存后重新生成站点生效`}
+                message={t('主题配置文件')}
+                description={t('编辑 themes/{theme}/_config.yml，保存后重新生成站点生效', {
+                  theme: configTheme ?? '',
+                })}
               />
             )}
 
@@ -636,21 +655,26 @@ export function ThemesPage() {
             <Alert
               type="error"
               showIcon
-              message="主题配置加载失败"
+              message={t('主题配置加载失败')}
               description={
                 <div className="space-y-2">
                   <div className="hm-mono text-xs break-all">{themeConfigError}</div>
                   <div className="text-xs hm-text-secondary">
-                    已尝试查找 themes/{configTheme}/_config.yml、_config.{configTheme}.yml 与
-                    themes/{configTheme}/_config.yaml。若主题确实无独立配置文件，可改用站点
-                    _config.yml 的 theme_config 段。
+                    {t(
+                      '已尝试查找 {a}、{b} 与 {c}。若主题确实无独立配置文件，可改用站点 _config.yml 的 theme_config 段。',
+                      {
+                        a: `themes/${configTheme}/_config.yml`,
+                        b: `_config.${configTheme}.yml`,
+                        c: `themes/${configTheme}/_config.yaml`,
+                      },
+                    )}
                   </div>
                 </div>
               }
               action={
                 <Space direction="vertical">
                   <Button size="small" onClick={() => void reloadThemeConfig()}>
-                    重试
+                    {t('重试')}
                   </Button>
                   <Button
                     size="small"
@@ -661,7 +685,7 @@ export function ThemesPage() {
                       )
                     }
                   >
-                    打开目录
+                    {t('打开目录')}
                   </Button>
                 </Space>
               }
@@ -672,21 +696,21 @@ export function ThemesPage() {
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={
               <div className="text-sm hm-text-secondary">
-                该主题没有独立的 _config.yml
+                {t('该主题没有独立的 _config.yml')}
                 <div className="mt-1 text-xs">
-                  部分主题的配置直接写在站点 _config.yml 的 theme_config 中
+                  {t('部分主题的配置直接写在站点 _config.yml 的 theme_config 中')}
                 </div>
               </div>
             }
           >
             <Space direction="vertical">
-              <Button onClick={() => void reloadThemeConfig()}>重新加载</Button>
+              <Button onClick={() => void reloadThemeConfig()}>{t('重新加载')}</Button>
               <Button
                 onClick={() =>
                   void openWithSystem(`${currentSite?.path ?? ''}/themes/${configTheme ?? ''}`)
                 }
               >
-                打开主题目录
+                {t('打开主题目录')}
               </Button>
             </Space>
           </Empty>
@@ -695,29 +719,29 @@ export function ThemesPage() {
 
       {/* 当前主题信息 */}
       {active ? (
-        <Card size="small" title="当前主题详情" className="mt-4">
+        <Card size="small" title={t('当前主题详情')} className="mt-4">
           <Descriptions
             size="small"
             column={3}
             items={[
-              { key: 'name', label: '主题名称', children: active.name },
-              { key: 'version', label: '版本', children: active.version ?? '未知' },
-              { key: 'author', label: '作者', children: active.author ?? '未知' },
+              { key: 'name', label: t('主题名称'), children: active.name },
+              { key: 'version', label: t('版本'), children: active.version ?? t('未知') },
+              { key: 'author', label: t('作者'), children: active.author ?? t('未知') },
               {
                 key: 'path',
-                label: '主题路径',
+                label: t('主题路径'),
                 span: 2,
                 children: <span className="hm-mono text-xs break-all">{active.path}</span>,
               },
               {
                 key: 'config',
-                label: '独立配置',
+                label: t('独立配置'),
                 children: active.hasConfig ? (
                   <Tag color="green" className="m-0">
-                    有
+                    {t('有')}
                   </Tag>
                 ) : (
-                  <Tag className="m-0">无</Tag>
+                  <Tag className="m-0">{t('无')}</Tag>
                 ),
               },
             ]}
@@ -726,9 +750,9 @@ export function ThemesPage() {
           <div className="mt-3">
             <Segmented
               options={[
-                { label: '打开主题目录', value: 'dir', icon: <EyeOutlined /> },
+                { label: t('打开主题目录'), value: 'dir', icon: <EyeOutlined /> },
                 ...(active.repo
-                  ? [{ label: '访问仓库', value: 'repo', icon: <ExportOutlined /> }]
+                  ? [{ label: t('访问仓库'), value: 'repo', icon: <ExportOutlined /> }]
                   : []),
               ]}
               onChange={(value) => {

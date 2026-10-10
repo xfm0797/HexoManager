@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { App as AntdApp } from 'antd';
 import { useSiteStore } from '@/stores';
+import { t } from '@/i18n';
 import type { CreateSiteInput, Site, UpdateSiteInput } from '@/types';
 
 interface UseSitesResult {
@@ -39,7 +40,7 @@ export function useSites(): UseSitesResult {
   const create = useCallback(
     async (input: CreateSiteInput) => {
       const site = await createSite(input);
-      message.success(`站点「${site.name}」创建成功`);
+      message.success(t('站点「{name}」创建成功', { name: site.name }));
       return site;
     },
     [createSite, message],
@@ -48,7 +49,7 @@ export function useSites(): UseSitesResult {
   const importExisting = useCallback(
     async (path: string) => {
       const site = await importSite(path);
-      message.success(`已导入站点「${site.name}」`);
+      message.success(t('已导入站点「{name}」', { name: site.name }));
       return site;
     },
     [importSite, message],
@@ -57,7 +58,7 @@ export function useSites(): UseSitesResult {
   const update = useCallback(
     async (siteId: number, updates: UpdateSiteInput) => {
       const site = await updateSite(siteId, updates);
-      message.success('站点信息已更新');
+      message.success(t('站点信息已更新'));
       return site;
     },
     [updateSite, message],
@@ -66,7 +67,7 @@ export function useSites(): UseSitesResult {
   const remove = useCallback(
     async (siteId: number, deleteFiles = false) => {
       await deleteSite(siteId, deleteFiles);
-      message.success(deleteFiles ? '站点及其文件已删除' : '站点已从列表中移除');
+      message.success(deleteFiles ? t('站点及其文件已删除') : t('站点已从列表中移除'));
     },
     [deleteSite, message],
   );

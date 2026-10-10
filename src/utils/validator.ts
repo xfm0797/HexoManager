@@ -1,5 +1,7 @@
 /** 校验工具 */
 
+import { t } from '@/i18n';
+
 /** URL 校验 */
 export function isValidUrl(value: string): boolean {
   try {
@@ -41,22 +43,22 @@ export function isValidDomain(value: string): boolean {
 /** 站点名称校验 */
 export function validateSiteName(value: string): string | null {
   const trimmed = value.trim();
-  if (!trimmed) return '请输入站点名称';
-  if (trimmed.length > 60) return '站点名称不能超过 60 个字符';
+  if (!trimmed) return t('请输入站点名称');
+  if (trimmed.length > 60) return t('站点名称不能超过 60 个字符');
   return null;
 }
 
 /** 路径校验（绝对路径） */
 export function validateAbsolutePath(value: string): string | null {
   const trimmed = value.trim();
-  if (!trimmed) return '请选择站点目录';
+  if (!trimmed) return t('请选择站点目录');
 
   const isWindows = /^[a-zA-Z]:[\\/]/.test(trimmed);
   const isUnix = trimmed.startsWith('/');
   const isUnc = trimmed.startsWith('\\\\');
 
   if (!isWindows && !isUnix && !isUnc) {
-    return '请填写绝对路径（如 /Users/name/blog 或 D:\\blog）';
+    return t('请填写绝对路径（如 /Users/name/blog 或 D:\\blog）');
   }
   return null;
 }
@@ -66,7 +68,7 @@ export function validateNodeVersion(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed || trimmed === 'system') return null;
   if (!/^\d+(\.\d+){0,2}$/.test(trimmed)) {
-    return 'Node 版本格式应为 20 或 20.11.0';
+    return t('Node 版本格式应为 20 或 20.11.0');
   }
   return null;
 }
@@ -76,7 +78,7 @@ export function validateEnvKey(key: string): string | null {
   const trimmed = key.trim();
   if (!trimmed) return null;
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
-    return '变量名只能包含字母、数字与下划线，且不能以数字开头';
+    return t('变量名只能包含字母、数字与下划线，且不能以数字开头');
   }
   return null;
 }
@@ -84,31 +86,31 @@ export function validateEnvKey(key: string): string | null {
 /** 提交信息校验 */
 export function validateCommitMessage(value: string): string | null {
   const trimmed = value.trim();
-  if (!trimmed) return '请输入提交信息';
-  if (trimmed.length > 200) return '提交信息不能超过 200 个字符';
+  if (!trimmed) return t('请输入提交信息');
+  if (trimmed.length > 200) return t('提交信息不能超过 200 个字符');
   return null;
 }
 
 /** 端口校验 */
 export function validatePort(value: number | string): string | null {
   const port = Number(value);
-  if (!Number.isInteger(port)) return '端口必须为整数';
-  if (port < 1024) return '建议使用 1024 以上的端口';
-  if (port > 65535) return '端口不能超过 65535';
+  if (!Number.isInteger(port)) return t('端口必须为整数');
+  if (port < 1024) return t('建议使用 1024 以上的端口');
+  if (port > 65535) return t('端口不能超过 65535');
   return null;
 }
 
 /** 通用必填校验 */
-export function required(value: unknown, label = '此项'): string | null {
-  if (value === null || value === undefined) return `${label}不能为空`;
-  if (typeof value === 'string' && !value.trim()) return `${label}不能为空`;
-  if (Array.isArray(value) && value.length === 0) return `${label}不能为空`;
+export function required(value: unknown, label = t('此项')): string | null {
+  if (value === null || value === undefined) return t('{label}不能为空', { label });
+  if (typeof value === 'string' && !value.trim()) return t('{label}不能为空', { label });
+  if (Array.isArray(value) && value.length === 0) return t('{label}不能为空', { label });
   return null;
 }
 
 /** 长度校验 */
-export function maxLength(value: string, max: number, label = '内容'): string | null {
-  if (value.length > max) return `${label}不能超过 ${max} 个字符`;
+export function maxLength(value: string, max: number, label = t('内容')): string | null {
+  if (value.length > max) return t('{label}不能超过 {max} 个字符', { label, max });
   return null;
 }
 

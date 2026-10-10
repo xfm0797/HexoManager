@@ -5,6 +5,7 @@ import { App as AntdApp } from 'antd';
 import { gitService } from '@/services';
 import { useDeployStore } from '@/stores';
 import type { CommitLog, GitStatus } from '@/types';
+import { t } from '@/i18n';
 
 interface UseGitResult {
   status: GitStatus | null;
@@ -87,7 +88,8 @@ export function useGit(siteId: number | null): UseGitResult {
   }, [siteId]);
 
   const init = useCallback(
-    () => run(() => gitService.init(siteId as number).then(() => undefined), 'Git 仓库初始化完成'),
+    () =>
+      run(() => gitService.init(siteId as number).then(() => undefined), t('Git 仓库初始化完成')),
     [run, siteId],
   );
   const add = useCallback(
@@ -100,7 +102,7 @@ export function useGit(siteId: number | null): UseGitResult {
         const log = await gitService.commit(siteId as number, msg);
         await refreshCommits();
         return log;
-      }, '提交成功'),
+      }, t('提交成功')),
     [run, siteId, refreshCommits],
   );
   const push = useCallback(
@@ -108,11 +110,11 @@ export function useGit(siteId: number | null): UseGitResult {
       run(async () => {
         await gitService.push(siteId as number);
         await refreshCommits();
-      }, '推送成功'),
+      }, t('推送成功')),
     [run, siteId, refreshCommits],
   );
   const pull = useCallback(
-    () => run(() => gitService.pull(siteId as number).then(() => undefined), '拉取成功'),
+    () => run(() => gitService.pull(siteId as number).then(() => undefined), t('拉取成功')),
     [run, siteId],
   );
   const discard = useCallback(
@@ -120,22 +122,23 @@ export function useGit(siteId: number | null): UseGitResult {
       run(async () => {
         await gitService.discard(siteId as number, files);
         setDiff('');
-      }, '已放弃更改'),
+      }, t('已放弃更改')),
     [run, siteId],
   );
   const stash = useCallback(
-    () => run(() => gitService.stash(siteId as number).then(() => undefined), '已暂存当前改动'),
+    () => run(() => gitService.stash(siteId as number).then(() => undefined), t('已暂存当前改动')),
     [run, siteId],
   );
   const stashPop = useCallback(
-    () => run(() => gitService.stashPop(siteId as number).then(() => undefined), '已恢复暂存改动'),
+    () =>
+      run(() => gitService.stashPop(siteId as number).then(() => undefined), t('已恢复暂存改动')),
     [run, siteId],
   );
   const setRemote = useCallback(
     (url: string, branch?: string) =>
       run(async () => {
         await gitService.setRemote(siteId as number, url, branch);
-      }, '远程仓库已更新'),
+      }, t('远程仓库已更新')),
     [run, siteId],
   );
 

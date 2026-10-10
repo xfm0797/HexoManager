@@ -18,6 +18,7 @@ import {
 } from '@ant-design/icons';
 import { useSiteStore, useUiStore, useUpdateStore, useUnreadCount } from '@/stores';
 import { formatRelative } from '@/utils/format';
+import { useI18n } from '@/i18n';
 import { SiteStatusBadge } from './StatusBadge';
 
 /** 顶部栏 */
@@ -33,6 +34,7 @@ export function TopBar() {
   const notifications = useUiStore((s) => s.notifications);
   const markAllRead = useUiStore((s) => s.markAllRead);
   const unread = useUnreadCount();
+  const { t } = useI18n();
 
   // 发现新版本且未被忽略时，在顶栏展示升级入口
   const updateInfo = useUpdateStore((s) => s.updateInfo);
@@ -43,9 +45,9 @@ export function TopBar() {
   const currentSite = sites.find((s) => s.id === currentSiteId);
 
   const quickMenu: MenuProps['items'] = [
-    { key: 'dashboard', label: '返回工作台', icon: <CloudServerOutlined /> },
-    { key: 'deploy', label: '部署配置', icon: <RocketOutlined /> },
-    { key: 'updates', label: '检查更新', icon: <CloudDownloadOutlined /> },
+    { key: 'dashboard', label: t('返回工作台'), icon: <CloudServerOutlined /> },
+    { key: 'deploy', label: t('部署配置'), icon: <RocketOutlined /> },
+    { key: 'updates', label: t('检查更新'), icon: <CloudDownloadOutlined /> },
   ];
 
   const handleQuickAction: MenuProps['onClick'] = ({ key }) => {
@@ -62,14 +64,14 @@ export function TopBar() {
   const notificationPanel = (
     <div className="w-80">
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-medium">通知</span>
+        <span className="font-medium">{t('通知')}</span>
         <Button type="link" size="small" onClick={markAllRead} disabled={unread === 0}>
-          全部已读
+          {t('全部已读')}
         </Button>
       </div>
 
       {notifications.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无通知" />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('暂无通知')} />
       ) : (
         <List
           size="small"
@@ -101,7 +103,7 @@ export function TopBar() {
 
       <div className="mt-2 border-t pt-2 text-center" style={{ borderColor: 'var(--hm-border)' }}>
         <Button type="link" size="small" onClick={() => navigate('/notifications')}>
-          查看全部
+          {t('查看全部')}
         </Button>
       </div>
     </div>
@@ -117,14 +119,14 @@ export function TopBar() {
         <Select
           value={currentSiteId ?? undefined}
           onChange={(value) => setCurrentSite(value)}
-          placeholder="选择站点"
+          placeholder={t('选择站点')}
           style={{ minWidth: 200, maxWidth: 300 }}
           suffixIcon={<CloudServerOutlined />}
           notFoundContent={
             <div className="py-2 text-center text-xs hm-text-secondary">
-              还没有站点
+              {t('还没有站点')}
               <Button type="link" size="small" onClick={() => navigate('/sites')}>
-                去创建
+                {t('去创建')}
               </Button>
             </div>
           }
@@ -133,7 +135,9 @@ export function TopBar() {
             label: (
               <span className="flex items-center justify-between gap-3">
                 <span className="truncate">{site.name}</span>
-                <span className="text-xs hm-text-secondary">{site.articleCount} 篇</span>
+                <span className="text-xs hm-text-secondary">
+                  {t('{count} 篇', { count: site.articleCount })}
+                </span>
               </span>
             ),
           }))}
@@ -156,7 +160,9 @@ export function TopBar() {
       {/* 右侧：操作区 */}
       <div className="flex shrink-0 items-center gap-1">
         {updateAvailable ? (
-          <Tooltip title={`发现新版本 ${updateInfo?.latestVersion}，点击查看`}>
+          <Tooltip
+            title={t('发现新版本 {version}，点击查看', { version: updateInfo?.latestVersion ?? '' })}
+          >
             <Button
               type="text"
               className="!text-orange-500"
@@ -167,22 +173,22 @@ export function TopBar() {
               }
               onClick={() => navigate('/updates')}
             >
-              新版本
+              {t('新版本')}
             </Button>
           </Tooltip>
         ) : null}
 
-        <Tooltip title="刷新站点列表">
+        <Tooltip title={t('刷新站点列表')}>
           <Button type="text" icon={<SyncOutlined />} onClick={() => void refreshSites()} />
         </Tooltip>
 
         <Dropdown menu={{ items: quickMenu, onClick: handleQuickAction }} trigger={['click']}>
           <Button type="text" icon={<ReloadOutlined />}>
-            快捷操作
+            {t('快捷操作')}
           </Button>
         </Dropdown>
 
-        <Tooltip title={isDark ? '切换到浅色模式' : '切换到深色模式'}>
+        <Tooltip title={isDark ? t('切换到浅色模式') : t('切换到深色模式')}>
           <Button type="text" icon={<BulbOutlined />} onClick={toggleDark} />
         </Tooltip>
 

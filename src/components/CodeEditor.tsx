@@ -6,6 +6,7 @@ import { CopyOutlined } from '@ant-design/icons';
 import { App as AntdApp, Button, Tooltip } from 'antd';
 import { useUiStore } from '@/stores';
 import { copyToClipboard } from '@/utils/desktop';
+import { useI18n } from '@/i18n';
 
 export type EditorLanguage =
   'yaml' | 'json' | 'markdown' | 'javascript' | 'toml' | 'shell' | 'plaintext';
@@ -52,6 +53,7 @@ export function CodeEditor({
   className = '',
 }: CodeEditorProps) {
   const isDark = useUiStore((s) => s.isDark);
+  const { t } = useI18n();
   const { message } = AntdApp.useApp();
 
   // 用行数估算高度，避免短内容出现大片空白
@@ -92,8 +94,8 @@ export function CodeEditor({
 
   const handleCopy = async () => {
     const ok = await copyToClipboard(value);
-    if (ok) message.success('已复制到剪贴板');
-    else message.error('复制失败，请手动选择内容复制');
+    if (ok) message.success(t('已复制到剪贴板'));
+    else message.error(t('复制失败，请手动选择内容复制'));
   };
 
   return (
@@ -106,7 +108,7 @@ export function CodeEditor({
           <span className="truncate text-sm font-medium">{title}</span>
           <div className="flex items-center gap-1">
             {extra}
-            <Tooltip title="复制内容">
+            <Tooltip title={t('复制内容')}>
               <Button type="text" size="small" icon={<CopyOutlined />} onClick={handleCopy} />
             </Tooltip>
           </div>
@@ -147,7 +149,7 @@ export function CodeEditor({
           style={{ borderColor: 'var(--hm-border)' }}
         >
           <span>
-            {value.split('\n').length} 行 · {value.length} 字符
+            {t('{lines} 行 · {chars} 字符', { lines: value.split('\n').length, chars: value.length })}
           </span>
           <span>{LANGUAGE_MAP[language]}</span>
         </div>
@@ -174,11 +176,12 @@ export function CodeBlock({
   lineNumbers = false,
   title,
 }: CodeBlockProps) {
+  const { t } = useI18n();
   const { message } = AntdApp.useApp();
 
   const handleCopy = async () => {
     const ok = await copyToClipboard(code);
-    if (ok) message.success('已复制');
+    if (ok) message.success(t('已复制'));
   };
 
   const lines = code.split('\n');
