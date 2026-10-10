@@ -40,6 +40,26 @@
   `import w from 'monaco-editor/<lang>/<name>.worker.js?worker'`
   —— 去掉 `esm/vs/` 前缀、保留 `.js` 扩展名
 
+## 国际化（i18n，1.2.0 起）
+
+- 架构：**中文原文即词条**，不引入框架。源码保留中文并 `t('文章管理')` 包裹，
+  译文在 `src/i18n/locales/en-US.ts`（`Record<string, string>`，**键=中文原文**），
+  未命中回退中文。核心在 `src/i18n/index.ts`
+- 语言解析：显式偏好（`localStorage` 键 `hexo-manager:locale`，`system|zh-CN|en-US`）
+  > 系统语言；系统语言以 `zh` 开头 → 中文，**其余一切（含 `en`/`C`/空）→ 英文**
+- **关键设计**：`useI18n()` 返回的 `t` 用 `useCallback` 按 `locale` 固化身份
+  （内部 `translateIn(locale, …)`）。写进 `useMemo`/`useCallback` 依赖数组既合法
+  又能在切语言时重算；反之模块级 `import { t }` 不能进依赖数组（lint 会报
+  「外部作用域的值」），非组件代码才用模块级 `t`
+- 后端 250+ 条中文错误不改 Rust 签名，由 `src/i18n/backendMessages.ts`
+  （`EXACT` 精确表 + `RULES` 带参正则）在 `services/invoke.ts` 的 catch 里映射。
+  **该表所有键必须加引号** —— 纯中文裸键在 JS 里是合法标识符，但含 `，`/空格/全角括号会语法错误
+- 工具链（无依赖 Node 脚本，已接入 CI check job）：`npm run i18n:merge`
+  （`_parts/*.json` → `en-US.ts`，增量且幂等）、`npm run i18n:check`
+  （缺译文**或英文译文残留 CJK** 时退出码 1）。唯一豁免：语言选项的母语自称「简体中文」
+- 翻译边界：写文件/DB 的值、传给 Rust 的参数、比较与匹配用的字面量、
+  枚举状态值、CSS 类名、localStorage 键、URL、正则、路径、日志内容**都不翻**
+
 ## CI（GitHub Actions）/ 跨平台打包
 - **`NODE_OPTIONS: --max-old-space-size=4096` 已在 `.github/workflows/build.yml` 的 workflow 级
   `env` 中固定**：V8 老生代上限按物理内存自动推导，macos-latest 仅 7GB → 约 2048MB，
