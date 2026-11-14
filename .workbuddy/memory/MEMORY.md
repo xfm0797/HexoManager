@@ -117,3 +117,28 @@
   JSON 字符串或文件路径）与 `TAURI_CONFIG` 环境变量（原始 JSON），均按
   JSON Merge Patch (RFC 7396) 深合并，优先级 = 基础配置 < 平台配置 < `--config` < 环境变量
 - 排查 Bug 的规范：先写独立 reproduction program 验证根因，再落地修复
+
+## 命令线程模型（Tauri 2，务必记住）
+- `#[tauri::command]` 的**普通 `fn` 跑在主线程**（事件循环线程），只有 `async fn` 才上
+  tokio 运行时。所以同步命令里做文件 IO = 整个窗口假死，不是"占住一个 worker"那么轻
+- 重 IO 命令统一写成 `pub async fn` + `utils::blocking::cmd(move || { ... }).await`
+  （`State<'_, T>` 不能 move 进 `'static` 闭包，先 `Db::from_arc(&state.db)`）
+- 保留同步的只有：单次 `metadata`（`file_exists`）、启动系统程序（`open_in_explorer`）、
+  纯 DB 查询（`get_sites` / `get_git_config` / 模板 CRUD）
+- 写新命令时先自问：这里会不会读超过 1 MB 或遍历目录？会就必须 async + blocking
+
+## 插件与权限（迭代 4 后）
+- 只注册 `tauri-plugin-opener`（`OpenerExt`）与 `tauri-plugin-dialog`；fs/shell/process/
+  updater 已移除，文件读写走 `file_commands` 白名单、子进程走 `utils::process`、
+  自更新走 `update::*` + minisign 验签
+- **删/加插件必须同步改 `src-tauri/capabilities/default.json`**，否则 `tauri-build`
+  解析 capabilities 时报未知权限标识符而编译失败
+- `#[tauri::command]` 生成的 `__cmd__*` 宏**不会**被 `pub use` 转发 → `lib.rs` 的
+  `generate_handler!` 必须写真实路径（如 `commands::articles::crud::create_article`）
+
+## 日志（可观测性）
+- `utils/log.rs`：落盘 `<app_data>/logs/app-YYYY-MM-DD.log`（UTC 日期、保留 7 天、
+  单条截断 4000 字符、写失败静默）；`lib.rs` setup 第一件事 init
+- 前端 `invoke.ts` 的 `call` 失败会自动上报（5 秒去重），用户在
+  「偏好设置 → 本地数据 → 诊断日志」可导出合并文本
+- 新增关键路径（长任务、外部进程、网络请求）时顺手加 `log::info/error`，scope 用模块名

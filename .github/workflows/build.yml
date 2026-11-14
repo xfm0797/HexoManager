@@ -46,9 +46,14 @@ jobs:
       - name: TypeScript 类型检查
         run: npm run typecheck
 
+      # 版本号散落 7 文件 8 处，历史上多次漏改（如 constants 停在 1.0.0）
+      - name: 版本号一致性检查
+        run: npm run version:check
+
+      # 曾经是 continue-on-error：ESLint 一有告警就整片红、没人看，于是长期被忽略。
+      # 现在源码已清零（--max-warnings 0），改为硬卡口。
       - name: ESLint 检查
         run: npm run lint
-        continue-on-error: true
 
       # 卡住「英文界面漏出中文」：缺译文或英文译文里残留中文都会让本步失败
       - name: i18n 覆盖率检查
@@ -75,9 +80,18 @@ jobs:
         working-directory: ./src-tauri
         run: cargo check --all-targets
 
+      # 本机（Windows）跑不了测试二进制（tauri 目标 0xC0000139），Linux runner 正常，
+      # 因此这一步是 Rust 侧 20+ 个回归测试唯一的执行机会
+      - name: Rust 单元测试
+        working-directory: ./src-tauri
+        run: cargo test --all-targets
+
+      # 本仓库自身的代码当前 0 clippy 告警；`-- -D warnings` 让告警直接变成失败标记，
+      # 但保留 continue-on-error，避免某个工具链版本新增的 lint 卡住整条发布流水线。
+      # 等攒够一轮清理后应去掉 continue-on-error。
       - name: Clippy 检查
         working-directory: ./src-tauri
-        run: cargo clippy --all-targets
+        run: cargo clippy --all-targets -- -D warnings
         continue-on-error: true
 
       - name: Rust 格式检查
