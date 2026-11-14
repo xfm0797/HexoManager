@@ -1,7 +1,7 @@
 /** 桌面能力封装：目录/文件选择、外部打开、剪贴板 */
 
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
-import { open as openPath } from '@tauri-apps/plugin-shell';
+import { invoke } from '@tauri-apps/api/core';
 import { t } from '@/i18n';
 
 /**
@@ -67,9 +67,28 @@ export async function pickSavePath(options?: {
   return typeof result === 'string' ? result : null;
 }
 
-/** 用系统默认程序打开路径或链接 */
+/**
+ * 用系统默认程序打开路径或链接。
+ *
+ * 走自研的 Rust 命令而不是 `@tauri-apps/plugin-shell`：
+ * 链接交给 `open_external`（只放行 http/https），本地路径交给 `open_in_explorer`
+ * （文件会被打开所在目录并在资源管理器中选中）。这样前端就不必为一个函数
+ * 引入整个 shell 插件，也就不必在 capabilities 里授权任意程序执行。
+ */
 export async function openWithSystem(target: string): Promise<void> {
-  await openPath(target);
+  const value = target.trim();
+  if (!value) return;
+  const lower = value.toLowerCase();
+  try {
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      await invoke('open_external', { url: value });
+    } else {
+      await invoke('open_in_explorer', { path: value });
+    }
+  } catch (error) {
+    // 调用方基本都是 `void openWithSystem(...)`，不抛出去以免产生未处理的 rejection
+    console.warn('[openWithSystem]', error);
+  }
 }
 
 /** 复制文本到剪贴板（带降级方案） */

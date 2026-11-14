@@ -15,15 +15,22 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
+# 只保留真正用到的两个插件：
+#   - dialog：前端 `@tauri-apps/plugin-dialog` 的目录/文件选择框；
+#   - opener：`open_in_explorer` / `open_external` 调用系统默认程序。
+# 文件读写、进程执行、自更新都由本仓库自己的命令实现（file_commands /
+# utils::process / update::*），此前注册的 fs / shell / process / updater 四个
+# 插件既没被 Rust 调用也没被前端调用，白白让二进制变大、还要求 capabilities
+# 授予「任意路径读写 + 任意程序执行」这类高危权限 —— 已移除。
 tauri-plugin-dialog = "2"
-tauri-plugin-fs = "2"
 tauri-plugin-opener = "2"
-tauri-plugin-shell = "2"
-tauri-plugin-updater = "2"
-tauri-plugin-process = "2"
 
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# 更新包签名校验（tauri-plugin-updater 已间接依赖，这里显式声明以直接使用）
+minisign-verify = "0.2"
+# preserve_order：让 serde_json::Value 的对象保持插入顺序（默认按字母序）。
+# Front Matter 回写依赖它保住用户原有的键序，否则每次保存都会重排整段 YAML。
+serde_json = { version = "1", features = ["preserve_order"] }
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
