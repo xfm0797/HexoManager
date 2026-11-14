@@ -129,9 +129,7 @@ pub async fn log(site_path: &str, limit: Option<i64>) -> AppResult<Vec<CommitLog
     let cwd = cwd_of(site_path);
     let n = limit.unwrap_or(50).to_string();
 
-    // 使用非打印字符分隔字段，避免提交信息含逗号导致解析错误
-    let format = "--pretty=format:%H%x1f%h%x1f%an%x1f%ae%x1f%ai%x1f%s";
-    let out = process::run("git", &["log", format, "-n", &n], Some(cwd), Some(60)).await?;
+    let out = process::run("git", &["log", LOG_FORMAT, "-n", &n], Some(cwd), Some(60)).await?;
 
     if !out.success {
         // 无提交记录的空仓库
@@ -141,8 +139,18 @@ pub async fn log(site_path: &str, limit: Option<i64>) -> AppResult<Vec<CommitLog
         return Err(AppError::Process(out.combined()));
     }
 
+    Ok(parse_log_lines(&out.stdout))
+}
+
+/// `git log` 的字段格式：用非打印字符 `\x1f` 分隔，避免提交信息含逗号/制表符导致解析错位。
+pub const LOG_FORMAT: &str = "--pretty=format:%H%x1f%h%x1f%an%x1f%ae%x1f%ai%x1f%s";
+
+/// 把 `git log` 的输出解析为提交记录。
+///
+/// 字段顺序必须与 [`LOG_FORMAT`] 一致；不完整的行（例如被截断）直接跳过。
+pub fn parse_log_lines(stdout: &str) -> Vec<CommitLog> {
     let mut logs = Vec::new();
-    for line in out.stdout.lines() {
+    for line in stdout.lines() {
         let parts: Vec<&str> = line.split('\u{1f}').collect();
         if parts.len() < 6 {
             continue;
@@ -156,8 +164,7 @@ pub async fn log(site_path: &str, limit: Option<i64>) -> AppResult<Vec<CommitLog
             message: parts[5].to_string(),
         });
     }
-
-    Ok(logs)
+    logs
 }
 
 /// `git diff`（工作区差异）。
@@ -257,4 +264,31 @@ pub async fn reset_hard(site_path: &str, commit_hash: &str) -> AppResult<String>
         return Err(AppError::Process(out.combined()));
     }
     Ok(out.combined())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 提交信息里带分隔符（逗号、制表符）也不能错位：字段用 \x1f 分隔。
+    #[test]
+    fn test_parse_log_lines_keeps_fields_aligned() {
+        let out = "abc123\u{1f}abc\u{1f}张三\u{1f}a@b.c\u{1f}2026-11-14 10:00:00 +0800\u{1f}fix: 修复, 顺序\t问题\n\
+                   def456\u{1f}def\u{1f}李四\u{1f}d@e.f\u{1f}2026-11-13 09:00:00 +0800\u{1f}feat: 新增";
+        let logs = parse_log_lines(out);
+        assert_eq!(logs.len(), 2);
+        assert_eq!(logs[0].hash, "abc123");
+        assert_eq!(logs[0].short_hash, "abc");
+        assert_eq!(logs[0].author, "张三");
+        assert_eq!(logs[0].message, "fix: 修复, 顺序\t问题");
+        assert_eq!(logs[1].message, "feat: 新增");
+    }
+
+    /// 字段数不足的行（如被截断）必须跳过，不能 panic。
+    #[test]
+    fn test_parse_log_lines_skips_incomplete() {
+        assert!(parse_log_lines("").is_empty());
+        assert!(parse_log_lines("only-one-field").is_empty());
+        assert!(parse_log_lines("a\u{1f}b\u{1f}c").is_empty());
+    }
 }

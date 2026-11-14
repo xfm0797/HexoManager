@@ -1,22 +1,13 @@
 //! Hexo 操作命令（对应大纲 7.3）。
 
-use crate::db::Db;
+use crate::db::{site_path_of, Db};
 use crate::models::{Article, BuildResult, DeployResult, EnvCheck, PreviewServer};
-use crate::utils::error::{AppError, AppResult};
+use crate::utils::error::AppResult;
 use crate::utils::now_utc;
 use crate::AppState;
 use tauri::{Emitter, State};
 
 /// 从数据库读取站点路径。
-fn site_path_of(db: &Db, site_id: i64) -> AppResult<String> {
-    let conn = db.conn()?;
-    conn.query_row(
-        "SELECT path FROM sites WHERE id = ?1",
-        params![site_id],
-        |r| r.get(0),
-    )
-    .map_err(|_| AppError::NotFound(format!("站点不存在：{}", site_id)))
-}
 
 use rusqlite::params;
 
@@ -123,12 +114,9 @@ pub async fn hexo_server_start(
     let db = Db::from_arc(&state.db);
     let path = site_path_of(&db, site_id).map_err(|e| e.to_string())?;
 
-    // 已在运行则直接返回，避免重复启动
+    // 已在运行则直接返回（`get` 会顺手清理已退出的条目）
     if let Some(existing) = state.servers.get(site_id) {
-        if crate::hexo::server::is_running(existing.pid) {
-            return Ok(existing);
-        }
-        state.servers.remove(site_id);
+        return Ok(existing);
     }
 
     let desired = port.unwrap_or(4000);
@@ -137,35 +125,30 @@ pub async fn hexo_server_start(
     let server = crate::hexo::server::spawn_server(site_id, &path, actual_port)
         .await
         .map_err(|e| e.to_string())?;
+    let info = server.info.clone();
 
-    state.servers.insert(server.clone());
-    Ok(server)
+    // 句柄交给注册表持有：退出应用时由 `stop_all` 统一回收
+    state.servers.insert(server);
+    Ok(info)
 }
 
 /// 停止本地预览服务。
 #[tauri::command]
 pub fn hexo_server_stop(state: State<'_, AppState>, pid: u32) -> Result<(), String> {
-    // 先按 PID 结束
-    let _ = crate::hexo::server::kill_by_pid(pid);
-
-    // 同步清理注册表
-    let list = state.servers.list();
-    for server in list {
-        if server.pid == pid {
-            state.servers.remove(server.site_id);
-        }
+    // 结束进程树并回收句柄，同时清理注册表条目
+    let had_handle = state.servers.stop_by_pid(pid);
+    if !had_handle && !crate::hexo::server::is_running(pid) {
+        // 注册表里没有、进程也已不存在：幂等成功
+        return Ok(());
     }
-
     Ok(())
 }
 
 /// 列出全部运行中的预览服务。
 #[tauri::command]
 pub fn hexo_server_list(state: State<'_, AppState>) -> Result<Vec<PreviewServer>, String> {
-    let mut list = state.servers.list();
-    // 过滤掉已退出的进程
-    list.retain(|s| crate::hexo::server::is_running(s.pid));
-    Ok(list)
+    // `list` 内部按句柄存活情况过滤，并清理已退出的条目
+    Ok(state.servers.list())
 }
 
 /// 新建文章：`hexo new post <title>`。

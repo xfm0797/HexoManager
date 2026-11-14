@@ -4,6 +4,7 @@ use crate::db::Db;
 use crate::models::{
     DeployConfig, DeployLog, DeployTemplate, EnvVar, GenerateConfigInput, GeneratedFile,
 };
+use crate::utils::blocking;
 use crate::utils::error::{AppError, AppResult};
 use crate::AppState;
 use rusqlite::params;
@@ -11,26 +12,41 @@ use serde_json::Value;
 use tauri::State;
 
 /// 生成部署配置（可选写盘）。
+///
+/// 会渲染全部模板并写文件，放到阻塞线程池。
 #[tauri::command]
-pub fn generate_deploy_config(input: GenerateConfigInput) -> Result<Vec<GeneratedFile>, String> {
-    validate_input(&input).map_err(|e| e.to_string())?;
-    crate::deploy::config_generator::generate_all(&input).map_err(|e| e.to_string())
+pub async fn generate_deploy_config(
+    input: GenerateConfigInput,
+) -> Result<Vec<GeneratedFile>, String> {
+    blocking::cmd(move || {
+        validate_input(&input).map_err(|e| e.to_string())?;
+        crate::deploy::config_generator::generate_all(&input).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// 预览部署配置（不写盘）。
 #[tauri::command]
-pub fn preview_deploy_config(input: GenerateConfigInput) -> Result<Vec<GeneratedFile>, String> {
-    crate::deploy::config_generator::preview_all(&input).map_err(|e| e.to_string())
+pub async fn preview_deploy_config(
+    input: GenerateConfigInput,
+) -> Result<Vec<GeneratedFile>, String> {
+    blocking::cmd(move || {
+        crate::deploy::config_generator::preview_all(&input).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// 生成指定 Pages 平台的配置。
 #[tauri::command]
-pub fn generate_pages_config(
+pub async fn generate_pages_config(
     input: GenerateConfigInput,
     platform: String,
 ) -> Result<Vec<GeneratedFile>, String> {
-    crate::deploy::pages_generator::generate_for_platform(&input, &platform)
-        .map_err(|e| e.to_string())
+    blocking::cmd(move || {
+        crate::deploy::pages_generator::generate_for_platform(&input, &platform)
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// 获取可用的部署模板清单。
@@ -65,6 +81,11 @@ pub fn save_deploy_config(
         .get("buildCommand")
         .and_then(Value::as_str)
         .unwrap_or("npm install && npx hexo generate");
+    let branch = config.get("branch").and_then(Value::as_str).unwrap_or("main");
+    let output_dir = config
+        .get("outputDir")
+        .and_then(Value::as_str)
+        .unwrap_or("public");
     let deploy_targets = config
         .get("deployTargets")
         .cloned()
@@ -82,8 +103,9 @@ pub fn save_deploy_config(
 
     conn.execute(
         "INSERT INTO deploy_configs (site_id, repo_platform, ci_platforms, node_version,
-            build_command, deploy_targets, env_vars, edge_provider, edge_domain, origin_strategy)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
+            build_command, deploy_targets, env_vars, edge_provider, edge_domain, origin_strategy,
+            branch, output_dir)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)
          ON CONFLICT(site_id) DO UPDATE SET
             repo_platform = excluded.repo_platform,
             ci_platforms = excluded.ci_platforms,
@@ -93,7 +115,9 @@ pub fn save_deploy_config(
             env_vars = excluded.env_vars,
             edge_provider = excluded.edge_provider,
             edge_domain = excluded.edge_domain,
-            origin_strategy = excluded.origin_strategy",
+            origin_strategy = excluded.origin_strategy,
+            branch = excluded.branch,
+            output_dir = excluded.output_dir",
         params![
             site_id,
             repo_platform,
@@ -104,7 +128,9 @@ pub fn save_deploy_config(
             env_vars.to_string(),
             edge_provider,
             edge_domain,
-            origin_strategy
+            origin_strategy,
+            branch,
+            output_dir
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -120,7 +146,8 @@ pub fn get_deploy_config(state: State<'_, AppState>, site_id: i64) -> Result<Dep
     let result = conn
         .query_row(
             "SELECT site_id, repo_platform, ci_platforms, node_version, build_command,
-                    deploy_targets, env_vars, edge_provider, edge_domain, origin_strategy
+                    deploy_targets, env_vars, edge_provider, edge_domain, origin_strategy,
+                    branch, output_dir
              FROM deploy_configs WHERE site_id = ?1",
             params![site_id],
             |r| {
@@ -145,6 +172,12 @@ pub fn get_deploy_config(state: State<'_, AppState>, site_id: i64) -> Result<Dep
                     build_command: r
                         .get::<_, Option<String>>(4)?
                         .unwrap_or_else(|| "npm install && npx hexo generate".into()),
+                    branch: r
+                        .get::<_, Option<String>>(10)?
+                        .unwrap_or_else(|| "main".into()),
+                    output_dir: r
+                        .get::<_, Option<String>>(11)?
+                        .unwrap_or_else(|| "public".into()),
                     deploy_targets: parse_list(r.get(5)?),
                     env_vars: parse_env(r.get(6)?),
                     edge_provider: r.get(7)?,
@@ -164,6 +197,8 @@ pub fn get_deploy_config(state: State<'_, AppState>, site_id: i64) -> Result<Dep
         ci_platforms: vec!["github".into()],
         node_version: "20".into(),
         build_command: "npm install && npx hexo generate".into(),
+        branch: "main".into(),
+        output_dir: "public".into(),
         deploy_targets: vec![],
         env_vars: vec![],
         edge_provider: Some("cloudflare".into()),
@@ -174,12 +209,20 @@ pub fn get_deploy_config(state: State<'_, AppState>, site_id: i64) -> Result<Dep
 
 /// 获取部署历史。
 #[tauri::command]
-pub fn get_deploy_logs(
+pub async fn get_deploy_logs(
     state: State<'_, AppState>,
     site_id: i64,
     limit: Option<i64>,
 ) -> Result<Vec<DeployLog>, String> {
-    let db = &state.db;
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || get_deploy_logs_impl(&db, site_id, limit)).await
+}
+
+fn get_deploy_logs_impl(
+    db: &Db,
+    site_id: i64,
+    limit: Option<i64>,
+) -> Result<Vec<DeployLog>, String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     let n = limit.unwrap_or(50);
 
@@ -300,16 +343,24 @@ pub fn validate_domain(domain: String) -> Result<(), String> {
 }
 
 /// 检查部署配置文件是否已存在（避免覆盖用户手写内容）。
+///
+/// 需要渲染全部模板再逐个 `stat`，放到阻塞线程池。
 #[tauri::command]
-pub fn check_deploy_files(input: GenerateConfigInput) -> Result<Vec<(String, bool)>, String> {
-    let files = crate::deploy::config_generator::preview_all(&input).map_err(|e| e.to_string())?;
-    let root = std::path::Path::new(&input.site_path);
+pub async fn check_deploy_files(
+    input: GenerateConfigInput,
+) -> Result<Vec<(String, bool)>, String> {
+    blocking::cmd(move || {
+        let files =
+            crate::deploy::config_generator::preview_all(&input).map_err(|e| e.to_string())?;
+        let root = std::path::Path::new(&input.site_path);
 
-    Ok(files
-        .into_iter()
-        .map(|f| {
-            let exists = root.join(&f.path).exists();
-            (f.path, exists)
-        })
-        .collect())
+        Ok(files
+            .into_iter()
+            .map(|f| {
+                let exists = root.join(&f.path).exists();
+                (f.path, exists)
+            })
+            .collect())
+    })
+    .await
 }

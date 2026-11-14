@@ -1,22 +1,14 @@
 //! 配置管理命令（站点配置、原始 YAML、插件）。
 
-use crate::db::Db;
+use crate::db::{site_path_of, Db};
 use crate::models::Plugin;
-use crate::utils::error::{AppError, AppResult};
+use crate::utils::blocking;
+use crate::utils::error::AppResult;
 use crate::AppState;
 use rusqlite::params;
 use serde_json::Value;
 use tauri::State;
 
-fn site_path_of(db: &Db, site_id: i64) -> AppResult<String> {
-    let conn = db.conn()?;
-    conn.query_row(
-        "SELECT path FROM sites WHERE id = ?1",
-        params![site_id],
-        |r| r.get(0),
-    )
-    .map_err(|_| AppError::NotFound(format!("站点不存在：{}", site_id)))
-}
 
 fn config_path_of(db: &Db, site_id: i64) -> AppResult<(String, String)> {
     let site_path = site_path_of(db, site_id)?;
@@ -26,29 +18,52 @@ fn config_path_of(db: &Db, site_id: i64) -> AppResult<(String, String)> {
 
 /// 读取站点配置（结构化）。
 #[tauri::command]
-pub fn get_site_config(state: State<'_, AppState>, site_id: i64) -> Result<Value, String> {
-    let (_, cfg) = config_path_of(&state.db, site_id).map_err(|e| e.to_string())?;
-    crate::hexo::config_parser::parse_yaml_file(&cfg).map_err(|e| e.to_string())
+pub async fn get_site_config(
+    state: State<'_, AppState>,
+    site_id: i64,
+) -> Result<Value, String> {
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || {
+        let (_, cfg) = config_path_of(&db, site_id).map_err(|e| e.to_string())?;
+        crate::hexo::config_parser::parse_yaml_file(&cfg).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// 读取站点配置原始文本（保留注释）。
 #[tauri::command]
-pub fn get_site_config_raw(state: State<'_, AppState>, site_id: i64) -> Result<String, String> {
-    let (_, cfg) = config_path_of(&state.db, site_id).map_err(|e| e.to_string())?;
-    crate::hexo::config_parser::read_raw(&cfg).map_err(|e| e.to_string())
+pub async fn get_site_config_raw(
+    state: State<'_, AppState>,
+    site_id: i64,
+) -> Result<String, String> {
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || {
+        let (_, cfg) = config_path_of(&db, site_id).map_err(|e| e.to_string())?;
+        crate::hexo::config_parser::read_raw(&cfg).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// 保存站点配置。
 ///
 /// 若提供 `raw` 则按原始文本写入（保留注释）；否则按结构化 `config` 写入。
 #[tauri::command]
-pub fn save_site_config(
+pub async fn save_site_config(
     state: State<'_, AppState>,
     site_id: i64,
     config: Option<Value>,
     raw: Option<String>,
 ) -> Result<(), String> {
-    let db = &state.db;
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || save_site_config_impl(&db, site_id, config, raw)).await
+}
+
+fn save_site_config_impl(
+    db: &Db,
+    site_id: i64,
+    config: Option<Value>,
+    raw: Option<String>,
+) -> Result<(), String> {
     let (_, cfg) = config_path_of(db, site_id).map_err(|e| e.to_string())?;
 
     // 写入前先备份一次，便于误操作恢复
@@ -109,95 +124,118 @@ pub fn validate_config(content: String, config_type: Option<String>) -> Result<(
 
 /// 获取配置差异（对比备份文件 `_config.yml.bak`）。
 #[tauri::command]
-pub fn diff_site_config(state: State<'_, AppState>, site_id: i64) -> Result<String, String> {
-    let (_, cfg) = config_path_of(&state.db, site_id).map_err(|e| e.to_string())?;
-    let backup = format!("{}.bak", cfg);
+pub async fn diff_site_config(
+    state: State<'_, AppState>,
+    site_id: i64,
+) -> Result<String, String> {
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || {
+        let (_, cfg) = config_path_of(&db, site_id).map_err(|e| e.to_string())?;
+        let backup = format!("{}.bak", cfg);
 
-    if !std::path::Path::new(&backup).exists() {
-        return Ok(String::new());
-    }
+        if !std::path::Path::new(&backup).exists() {
+            return Ok(String::new());
+        }
 
-    let old = std::fs::read_to_string(&backup).unwrap_or_default();
-    let new = std::fs::read_to_string(&cfg).unwrap_or_default();
+        let old = std::fs::read_to_string(&backup).unwrap_or_default();
+        let new = std::fs::read_to_string(&cfg).unwrap_or_default();
 
-    // 简易逐行差异输出
-    let mut diff = String::new();
-    let old_lines: Vec<&str> = old.lines().collect();
-    let new_lines: Vec<&str> = new.lines().collect();
-    let max = old_lines.len().max(new_lines.len());
+        // 简易逐行差异输出
+        let mut diff = String::new();
+        let old_lines: Vec<&str> = old.lines().collect();
+        let new_lines: Vec<&str> = new.lines().collect();
+        let max = old_lines.len().max(new_lines.len());
 
-    for i in 0..max {
-        let o = old_lines.get(i).copied().unwrap_or("");
-        let n = new_lines.get(i).copied().unwrap_or("");
-        if o != n {
-            if !o.is_empty() {
-                diff.push_str(&format!("- {}\n", o));
-            }
-            if !n.is_empty() {
-                diff.push_str(&format!("+ {}\n", n));
+        for i in 0..max {
+            let o = old_lines.get(i).copied().unwrap_or("");
+            let n = new_lines.get(i).copied().unwrap_or("");
+            if o != n {
+                if !o.is_empty() {
+                    diff.push_str(&format!("- {}\n", o));
+                }
+                if !n.is_empty() {
+                    diff.push_str(&format!("+ {}\n", n));
+                }
             }
         }
-    }
 
-    Ok(diff)
+        Ok(diff)
+    })
+    .await
 }
 
 /// 恢复配置备份。
 #[tauri::command]
-pub fn restore_site_config(state: State<'_, AppState>, site_id: i64) -> Result<(), String> {
-    let (_, cfg) = config_path_of(&state.db, site_id).map_err(|e| e.to_string())?;
-    let backup = format!("{}.bak", cfg);
+pub async fn restore_site_config(
+    state: State<'_, AppState>,
+    site_id: i64,
+) -> Result<(), String> {
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || {
+        let (_, cfg) = config_path_of(&db, site_id).map_err(|e| e.to_string())?;
+        let backup = format!("{}.bak", cfg);
 
-    if !std::path::Path::new(&backup).exists() {
-        return Err("没有可恢复的配置备份".into());
-    }
+        if !std::path::Path::new(&backup).exists() {
+            return Err("没有可恢复的配置备份".into());
+        }
 
-    std::fs::copy(&backup, &cfg).map_err(|e| format!("恢复配置失败：{}", e))?;
-    Ok(())
+        std::fs::copy(&backup, &cfg).map_err(|e| format!("恢复配置失败：{}", e))?;
+        Ok(())
+    })
+    .await
 }
 
 /// 导出配置为 JSON（供迁移备份）。
 #[tauri::command]
-pub fn export_config(state: State<'_, AppState>, site_id: i64) -> Result<String, String> {
-    let (site_path, cfg) = config_path_of(&state.db, site_id).map_err(|e| e.to_string())?;
+pub async fn export_config(state: State<'_, AppState>, site_id: i64) -> Result<String, String> {
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || {
+        let (site_path, cfg) = config_path_of(&db, site_id).map_err(|e| e.to_string())?;
 
-    let site_config = crate::hexo::config_parser::parse_yaml_file(&cfg).unwrap_or(Value::Null);
-    let theme_name = site_config
-        .get("theme")
-        .and_then(|v| v.as_str())
-        .unwrap_or("landscape")
-        .to_string();
+        let site_config =
+            crate::hexo::config_parser::parse_yaml_file(&cfg).unwrap_or(Value::Null);
+        let theme_name = site_config
+            .get("theme")
+            .and_then(|v| v.as_str())
+            .unwrap_or("landscape")
+            .to_string();
 
-    let theme_cfg_path = format!(
-        "{}/themes/{}/_config.yml",
-        site_path.trim_end_matches('/'),
-        theme_name
-    );
-    let theme_config =
-        crate::hexo::config_parser::parse_yaml_file(&theme_cfg_path).unwrap_or(Value::Null);
+        let theme_cfg_path = format!(
+            "{}/themes/{}/_config.yml",
+            site_path.trim_end_matches('/'),
+            theme_name
+        );
+        let theme_config =
+            crate::hexo::config_parser::parse_yaml_file(&theme_cfg_path).unwrap_or(Value::Null);
 
-    let payload = serde_json::json!({
-        "exportedAt": crate::utils::now_utc(),
-        "siteConfig": site_config,
-        "themeName": theme_name,
-        "themeConfig": theme_config,
-    });
+        let payload = serde_json::json!({
+            "exportedAt": crate::utils::now_utc(),
+            "siteConfig": site_config,
+            "themeName": theme_name,
+            "themeConfig": theme_config,
+        });
 
-    serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())
+        serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// 导入配置（从导出的 JSON 恢复）。
 #[tauri::command]
-pub fn import_config(
+pub async fn import_config(
     state: State<'_, AppState>,
     site_id: i64,
     payload: String,
 ) -> Result<(), String> {
-    let db = &state.db;
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || import_config_impl(&db, site_id, &payload)).await
+}
+
+fn import_config_impl(db: &Db, site_id: i64, payload: &str) -> Result<(), String> {
     let (site_path, cfg) = config_path_of(db, site_id).map_err(|e| e.to_string())?;
 
     let value: Value =
-        serde_json::from_str(&payload).map_err(|e| format!("解析导入内容失败：{}", e))?;
+        serde_json::from_str(payload).map_err(|e| format!("解析导入内容失败：{}", e))?;
 
     if let Some(site_config) = value.get("siteConfig").filter(|v| !v.is_null()) {
         crate::hexo::config_parser::write_yaml_file(&cfg, site_config)
@@ -308,8 +346,15 @@ pub fn get_config_templates() -> Vec<Value> {
 
 /// 获取站点的插件列表（从 package.json 依赖中读取）。
 #[tauri::command]
-pub fn get_plugins(state: State<'_, AppState>, site_id: i64) -> Result<Vec<Plugin>, String> {
-    let db = &state.db;
+pub async fn get_plugins(
+    state: State<'_, AppState>,
+    site_id: i64,
+) -> Result<Vec<Plugin>, String> {
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || get_plugins_impl(&db, site_id)).await
+}
+
+fn get_plugins_impl(db: &Db, site_id: i64) -> Result<Vec<Plugin>, String> {
     let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
     let pkg_path = std::path::Path::new(&site_path).join("package.json");
 
@@ -357,11 +402,7 @@ pub async fn install_plugin(
     let db = Db::from_arc(&state.db);
     let db = &db;
     let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
-    let npm_bin = if cfg!(target_os = "windows") {
-        "npm.cmd"
-    } else {
-        "npm"
-    };
+    let npm_bin = crate::utils::node::npm();
 
     let out = crate::utils::process::run(
         npm_bin,
@@ -397,11 +438,7 @@ pub async fn uninstall_plugin(
     let db = Db::from_arc(&state.db);
     let db = &db;
     let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
-    let npm_bin = if cfg!(target_os = "windows") {
-        "npm.cmd"
-    } else {
-        "npm"
-    };
+    let npm_bin = crate::utils::node::npm();
 
     let out = crate::utils::process::run(
         npm_bin,

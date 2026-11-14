@@ -1,22 +1,12 @@
 //! Git 操作命令（对应大纲 7.4）。
 
-use crate::db::Db;
+use crate::db::{site_path_of, Db};
 use crate::models::{CommitLog, GitConfig, GitStatus};
-use crate::utils::error::{AppError, AppResult};
 use crate::utils::now_utc;
 use crate::AppState;
 use rusqlite::params;
 use tauri::State;
 
-fn site_path_of(db: &Db, site_id: i64) -> AppResult<String> {
-    let conn = db.conn()?;
-    conn.query_row(
-        "SELECT path FROM sites WHERE id = ?1",
-        params![site_id],
-        |r| r.get(0),
-    )
-    .map_err(|_| AppError::NotFound(format!("站点不存在：{}", site_id)))
-}
 
 /// 初始化 Git 仓库。
 #[tauri::command]
