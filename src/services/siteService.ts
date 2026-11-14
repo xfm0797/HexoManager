@@ -1,12 +1,12 @@
 /** 站点管理服务层 */
 
-import { call, callSafe } from './invoke';
+import { call } from './invoke';
 import type { CreateSiteInput, FileTreeNode, Site, SiteStats, UpdateSiteInput } from '@/types';
 
 export const siteService = {
   /** 获取全部站点 */
   list(): Promise<Site[]> {
-    return callSafe<Site[]>('get_sites', undefined, []);
+    return call<Site[]>('get_sites');
   },
 
   /** 获取单个站点 */
@@ -29,9 +29,9 @@ export const siteService = {
     return call<Site>('update_site', { siteId, updates });
   },
 
-  /** 删除站点 */
-  remove(siteId: number, deleteFiles = false): Promise<void> {
-    return call<void>('delete_site', { siteId, deleteFiles });
+  /** 删除站点；`deleteFiles` 时返回目录被移动到的位置（便于提示用户手动清理） */
+  remove(siteId: number, deleteFiles = false): Promise<string | null> {
+    return call<string | null>('delete_site', { siteId, deleteFiles });
   },
 
   /** 复制站点 */

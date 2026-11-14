@@ -8,6 +8,8 @@ export interface UpdateInfo {
   notes: string | null;
   pubDate: string | null;
   downloadUrl: string | null;
+  /** 安装包 minisign 签名（GitHub API 回退时为空，此时不自动安装） */
+  signature: string | null;
   error: string | null;
 }
 

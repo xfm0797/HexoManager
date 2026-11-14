@@ -265,7 +265,7 @@ export function ConfigPage() {
         m.configService.exportConfig(currentSiteId),
       );
       const { fileService } = await import('@/services');
-      await fileService.write(target, exported);
+      await fileService.write(target, exported, true);
       message.success(t('配置已导出到 {path}', { path: target }));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
@@ -282,7 +282,7 @@ export function ConfigPage() {
 
     try {
       const { configService, fileService } = await import('@/services');
-      const content = await fileService.read(source);
+      const content = await fileService.read(source, true);
       await configService.importConfig(currentSiteId, content);
       await refresh();
       message.success(t('配置已导入'));

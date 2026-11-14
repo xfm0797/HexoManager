@@ -1,4 +1,8 @@
+pub mod blocking;
 pub mod error;
+pub mod fs;
+pub mod log;
+pub mod node;
 pub mod process;
 
 use serde::{Deserialize, Serialize};
@@ -82,15 +86,83 @@ pub fn is_ignored(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
-/// 将系统时间格式化为本地可读字符串。
+/// 将系统时间格式化为 UTC 字符串。
+///
+/// 统一成 UTC 而不是本地时间：前端 `formatDateTime` 会把不带时区的时间串
+/// 一律按 UTC 解释再转本地显示，若这里给的是本地时间就会被再加一次时区偏移
+/// （东八区少显示 8 小时）。
 pub fn format_system_time(t: std::time::SystemTime) -> Option<String> {
-    let dt: chrono::DateTime<chrono::Local> = t.into();
+    let dt: chrono::DateTime<chrono::Utc> = t.into();
     Some(dt.format("%Y-%m-%d %H:%M:%S").to_string())
 }
 
 /// 当前时间字符串（与 SQLite `datetime('now')` 的 UTC 口径保持一致）。
 pub fn now_utc() -> String {
     chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+/// 把 front matter 里的时间串统一成数据库使用的 UTC 字符串。
+///
+/// 背景：Hexo 的 `date` / `updated` 惯例是**本地时间且不带时区**（如
+/// `2026-11-14 22:00:00`），而数据库里其他时间列是 UTC。两者混在同一列里
+/// 排序会错位（东八区差 8 小时，"晚上发的文章"可能排在"早上的草稿"之前）。
+/// 因此入库前统一换算：带时区的按原时区折算，不带时区的按本地时间解释。
+pub fn local_time_to_utc(raw: &str) -> Option<String> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return None;
+    }
+
+    // 1) 带时区偏移或 Z 后缀：按其自身时区解析后折算
+    for fmt in [
+        "%Y-%m-%dT%H:%M:%S%.f%:z",
+        "%Y-%m-%d %H:%M:%S%.f%:z",
+        "%Y-%m-%dT%H:%M:%S%.fZ",
+        "%Y-%m-%d %H:%M:%S%.fZ",
+    ] {
+        if let Ok(dt) = chrono::DateTime::parse_from_str(s, fmt) {
+            return Some(
+                dt.with_timezone(&chrono::Utc)
+                    .format("%Y-%m-%d %H:%M:%S")
+                    .to_string(),
+            );
+        }
+    }
+
+    // 2) 不带时区：Hexo 惯例按本地时间解释
+    for fmt in [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M",
+    ] {
+        if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(s, fmt) {
+            return naive
+                .and_local_timezone(chrono::Local)
+                .single()
+                .map(|local| {
+                    local
+                        .with_timezone(&chrono::Utc)
+                        .format("%Y-%m-%d %H:%M:%S")
+                        .to_string()
+                });
+        }
+    }
+
+    // 3) 只有日期
+    if let Ok(date) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        return date
+            .and_hms_opt(0, 0, 0)
+            .and_then(|naive| naive.and_local_timezone(chrono::Local).single())
+            .map(|local| {
+                local
+                    .with_timezone(&chrono::Utc)
+                    .format("%Y-%m-%d %H:%M:%S")
+                    .to_string()
+            });
+    }
+
+    None
 }
 
 /// 计算 Markdown 文本的中文字数/英文词数近似值。
@@ -138,4 +210,51 @@ pub fn slugify(title: &str) -> String {
         }
     }
     slug.trim_matches('-').to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 带偏移的时间必须按其自身时区折算，与运行机器的本地时区无关。
+    #[test]
+    fn test_local_time_to_utc_with_offset() {
+        assert_eq!(
+            local_time_to_utc("2026-11-14T22:00:00+08:00").as_deref(),
+            Some("2026-11-14 14:00:00")
+        );
+        assert_eq!(
+            local_time_to_utc("2026-11-14T22:00:00Z").as_deref(),
+            Some("2026-11-14 22:00:00")
+        );
+        assert_eq!(
+            local_time_to_utc("2026-11-14 22:00:00-05:00").as_deref(),
+            Some("2026-11-15 03:00:00")
+        );
+    }
+
+    /// 只有日期时补 00:00:00，且结果仍是 `YYYY-MM-DD HH:MM:SS` 形态。
+    #[test]
+    fn test_local_time_to_utc_date_only() {
+        let out = local_time_to_utc("2026-11-14").expect("应能解析纯日期");
+        assert_eq!(out.len(), 19, "必须是统一的 19 字符形态：{}", out);
+        assert!(out.contains(':'));
+    }
+
+    /// 无法解析的输入返回 None，交由调用方回退（不能塞进一个假时间）。
+    #[test]
+    fn test_local_time_to_utc_invalid() {
+        assert!(local_time_to_utc("").is_none());
+        assert!(local_time_to_utc("   ").is_none());
+        assert!(local_time_to_utc("昨天下午").is_none());
+        assert!(local_time_to_utc("2026-13-45 99:99:99").is_none());
+    }
+
+    /// 两种来源的时间折算后能正确排序：带 +08:00 的 22 点早于 UTC 的 15 点。
+    #[test]
+    fn test_utc_normalization_makes_sorting_correct() {
+        let a = local_time_to_utc("2026-11-14T22:00:00+08:00").unwrap();
+        let b = local_time_to_utc("2026-11-14T15:00:00Z").unwrap();
+        assert!(a < b, "东八区 22:00 应排在 UTC 15:00 之前（14:00 < 15:00）");
+    }
 }

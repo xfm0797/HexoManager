@@ -6,12 +6,12 @@ import type { ConfigTemplate, Plugin, SiteConfig } from '@/types';
 export const configService = {
   /** 读取站点配置（结构化） */
   get(siteId: number): Promise<SiteConfig> {
-    return callSafe<SiteConfig>('get_site_config', { siteId }, {});
+    return call<SiteConfig>('get_site_config', { siteId });
   },
 
   /** 读取原始 YAML 文本 */
   getRaw(siteId: number): Promise<string> {
-    return callSafe<string>('get_site_config_raw', { siteId }, '');
+    return call<string>('get_site_config_raw', { siteId });
   },
 
   /** 保存配置（结构化或原始文本） */
@@ -30,7 +30,7 @@ export const configService = {
 
   /** 查看配置差异 */
   diff(siteId: number): Promise<string> {
-    return callSafe<string>('diff_site_config', { siteId }, '');
+    return call<string>('diff_site_config', { siteId });
   },
 
   /** 恢复配置备份 */
@@ -57,7 +57,7 @@ export const configService = {
 
   /** 插件列表 */
   plugins(siteId: number): Promise<Plugin[]> {
-    return callSafe<Plugin[]>('get_plugins', { siteId }, []);
+    return call<Plugin[]>('get_plugins', { siteId });
   },
 
   /** 安装插件 */

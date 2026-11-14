@@ -5,15 +5,6 @@ use crate::utils::error::{AppError, AppResult};
 use crate::utils::process;
 use std::path::Path;
 
-/// 解析 `npx` 可执行文件名（Windows 下为 `npx.cmd`）。
-fn npx_bin() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "npx.cmd"
-    } else {
-        "npx"
-    }
-}
-
 /// 依次尝试 `npx hexo <args>`；若失败则回退到全局 `hexo <args>`。
 async fn run_hexo(
     cwd: &Path,
@@ -23,7 +14,13 @@ async fn run_hexo(
     let mut full_args = vec!["hexo"];
     full_args.extend_from_slice(args);
 
-    let npx_out = process::run(npx_bin(), &full_args, Some(cwd), Some(timeout_secs)).await;
+    let npx_out = process::run(
+        crate::utils::node::npx(),
+        &full_args,
+        Some(cwd),
+        Some(timeout_secs),
+    )
+    .await;
 
     match npx_out {
         Ok(out) if out.success => Ok(out),

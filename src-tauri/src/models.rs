@@ -349,6 +349,12 @@ pub struct ThemeConfig {
     pub config: serde_json::Value,
     pub is_active: bool,
     pub raw: String,
+    /// 实际读取到的配置文件路径（相对站点根目录，取不到相对路径时为绝对路径）。
+    /// 主题允许用 `_config.<theme>.yml` 覆盖主题内 `_config.yml`，两者内容可能不同，
+    /// 界面需要据此告诉用户「正在编辑哪一份」。
+    pub source_path: String,
+    /// 是否正在编辑站点级覆盖文件（`_config.<theme>.yml`）而非主题自带文件
+    pub is_site_override: bool,
 }
 
 // ==================== 插件 ====================
@@ -375,6 +381,10 @@ pub struct DeployConfig {
     pub ci_platforms: Vec<String>,
     pub node_version: String,
     pub build_command: String,
+    /// CI 触发器与 Pages 部署使用的分支
+    pub branch: String,
+    /// Hexo 输出目录（public / docs …）
+    pub output_dir: String,
     pub deploy_targets: Vec<String>,
     pub env_vars: Vec<EnvVar>,
     pub edge_provider: Option<String>,
@@ -413,6 +423,10 @@ pub struct GenerateConfigInput {
     pub ci_platforms: Option<Vec<String>>,
     pub node_version: Option<String>,
     pub build_command: Option<String>,
+    /// Git 分支：CI 触发器与 Pages 部署使用的分支，缺省 `main`
+    pub branch: Option<String>,
+    /// Hexo 输出目录（`public` / `docs` …），缺省 `public`
+    pub output_dir: Option<String>,
     pub env_vars: Option<Vec<EnvVar>>,
     pub edge_provider: Option<String>,
     pub edge_domain: Option<String>,
@@ -459,6 +473,11 @@ pub struct UpdateInfo {
     pub notes: Option<String>,
     pub pub_date: Option<String>,
     pub download_url: Option<String>,
+    /// 安装包的 minisign 签名（来自 `latest.json` 的 `platforms.<target>.signature`）。
+    ///
+    /// 用 GitHub Releases API 回退时拿不到签名，此时为 `None` —— 安装环节会拒绝
+    /// 直接执行未经校验的安装包。
+    pub signature: Option<String>,
     pub error: Option<String>,
 }
 

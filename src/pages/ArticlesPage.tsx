@@ -395,8 +395,15 @@ export function ArticlesPage() {
 
   const handlePublish = async (article: Article) => {
     try {
-      await publishArticle(article.id);
-      message.success(t('文章已发布'));
+      const published = await publishArticle(article.id);
+      const before = article.filePath.split(/[\\/]/).pop() ?? '';
+      const after = published.filePath.split(/[\\/]/).pop() ?? '';
+      if (before && after && before !== after) {
+        // 目标目录已有同名文件，后端改名为 xxx-1.md 以免覆盖线上文章
+        message.warning(t('目标目录已有同名文件，已发布为 {name}', { name: after }), 6);
+      } else {
+        message.success(t('文章已发布'));
+      }
       await fetchTaxonomies(currentSiteId as number);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
@@ -415,12 +422,14 @@ export function ArticlesPage() {
   const handleDuplicate = async (article: Article) => {
     if (currentSiteId === null) return;
     try {
+      // 列表接口不回传正文，复制前需要单独取回全文，否则副本会是空文章
+      const source = article.content === null ? await articleService.get(article.id) : article;
       const created = await articleService.create(
         currentSiteId,
         t('{name} 副本', { name: article.title }),
       );
       await articleService.update(created.id, {
-        content: article.content ?? '',
+        content: source.content ?? '',
         categories: article.categories,
         tags: article.tags,
         status: 'draft',
@@ -587,7 +596,7 @@ export function ArticlesPage() {
                   size="small"
                   type="text"
                   icon={<ReloadOutlined />}
-                  onClick={() => void refresh()}
+                  onClick={() => void refresh(true)}
                 />
               </Tooltip>
             </Space>
@@ -608,7 +617,7 @@ export function ArticlesPage() {
               </div>
             ) : error && articles.length === 0 ? (
               <div className="p-4">
-                <ErrorState compact message={error} onRetry={() => void refresh()} />
+                <ErrorState compact message={error} onRetry={() => void refresh(true)} />
               </div>
             ) : articles.length === 0 ? (
               <EmptyState

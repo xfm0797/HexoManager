@@ -1,6 +1,6 @@
 /** Git 服务层 */
 
-import { call, callSafe } from './invoke';
+import { call } from './invoke';
 import type { CommitLog, GitConfig, GitStatus } from '@/types';
 
 export const gitService = {
@@ -9,23 +9,9 @@ export const gitService = {
     return call<string>('git_init', { siteId });
   },
 
-  /** 查看状态 */
+  /** 查看状态（「不是仓库」由后端返回 isRepo:false，不靠兜底值伪造） */
   status(siteId: number): Promise<GitStatus> {
-    return callSafe<GitStatus>(
-      'git_status',
-      { siteId },
-      {
-        isRepo: false,
-        branch: null,
-        remote: null,
-        ahead: 0,
-        behind: 0,
-        staged: [],
-        unstaged: [],
-        untracked: [],
-        clean: true,
-      },
-    );
+    return call<GitStatus>('git_status', { siteId });
   },
 
   /** 暂存文件（不传则暂存全部） */
@@ -50,12 +36,12 @@ export const gitService = {
 
   /** 提交历史 */
   log(siteId: number, limit = 50): Promise<CommitLog[]> {
-    return callSafe<CommitLog[]>('git_log', { siteId, limit }, []);
+    return call<CommitLog[]>('git_log', { siteId, limit });
   },
 
   /** 工作区差异 */
   diff(siteId: number): Promise<string> {
-    return callSafe<string>('git_diff', { siteId }, '');
+    return call<string>('git_diff', { siteId });
   },
 
   /** 设置远程仓库 */
@@ -80,6 +66,6 @@ export const gitService = {
 
   /** 获取 Git 配置 */
   getConfig(siteId: number): Promise<GitConfig | null> {
-    return callSafe<GitConfig | null>('get_git_config', { siteId }, null);
+    return call<GitConfig | null>('get_git_config', { siteId });
   },
 };

@@ -27,15 +27,11 @@ stages:
           inputs:
             version: $(NODE_VERSION)
 
-        - step: npmInstall
-          displayName: 安装依赖
-          inputs:
-            command: install
-
+        # 构建命令来自「部署配置 → 构建命令」（含安装依赖）
         - step: executeCommand
-          displayName: 生成静态文件
+          displayName: 安装依赖并生成静态文件
           inputs:
-            command: npx hexo generate
+            command: {{build_command}}
 
         - step: publishArtifact
           displayName: 上传构建产物

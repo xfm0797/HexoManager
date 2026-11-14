@@ -218,8 +218,21 @@ pub async fn check_update(manifest_url: Option<String>) -> AppResult<UpdateInfo>
 
     for url in &endpoints {
         match fetch_and_parse(&client, url, &current).await {
-            Ok(info) => return Ok(info),
+            Ok(info) => {
+                crate::utils::log::info(
+                    "update",
+                    format!(
+                        "检查更新成功（源 {}）：当前 {}，最新 {}，可更新={}",
+                        url,
+                        current,
+                        info.latest_version.as_deref().unwrap_or("-"),
+                        info.available
+                    ),
+                );
+                return Ok(info);
+            }
             Err(e) => {
+                crate::utils::log::warn("update", format!("更新源不可用（{url}）：{e}"));
                 last_error = Some(e.to_string());
             }
         }
@@ -233,6 +246,7 @@ pub async fn check_update(manifest_url: Option<String>) -> AppResult<UpdateInfo>
         notes: None,
         pub_date: None,
         download_url: None,
+        signature: None,
         error: last_error,
     })
 }
@@ -275,6 +289,7 @@ fn parse_manifest(body: &Value, current: &str) -> UpdateInfo {
             notes: None,
             pub_date: None,
             download_url: None,
+            signature: None,
             error: Some("清单格式无法识别".into()),
         }
     }
@@ -298,7 +313,9 @@ fn parse_latest_json(body: &Value, current: &str) -> UpdateInfo {
     let arch = std::env::consts::ARCH; // x86_64 / aarch64 ...
     let target = format!("{os}-{arch}");
 
-    let download_url = body
+    // 命中平台条目后同时取出 url 与 signature：签名必须来自同一条目，
+    // 否则会出现「用 A 平台的签名校验 B 平台的包」这种必然失败的组合
+    let entry = body
         .get("platforms")
         .and_then(Value::as_object)
         .and_then(|platforms| {
@@ -310,16 +327,24 @@ fn parse_latest_json(body: &Value, current: &str) -> UpdateInfo {
                         .iter()
                         .find(|(key, _)| key.as_str().starts_with(os))
                 })
-                .and_then(|(_, entry)| entry.get("url"))
-                .and_then(Value::as_str)
-                .map(String::from)
-        })
+                .map(|(_, entry)| entry)
+        });
+
+    let download_url = entry
+        .and_then(|e| e.get("url"))
+        .and_then(Value::as_str)
+        .map(String::from)
         .or_else(|| {
             // 自建清单可提供顶层 download_url 兜底
             body.get("download_url")
                 .and_then(Value::as_str)
                 .map(String::from)
         });
+
+    let signature = entry
+        .and_then(|e| e.get("signature"))
+        .and_then(Value::as_str)
+        .map(String::from);
 
     UpdateInfo {
         available,
@@ -335,6 +360,7 @@ fn parse_latest_json(body: &Value, current: &str) -> UpdateInfo {
             .and_then(Value::as_str)
             .map(String::from),
         download_url,
+        signature,
         error: None,
     }
 }
@@ -368,6 +394,7 @@ fn parse_github_release(body: &Value, current: &str) -> UpdateInfo {
             .and_then(Value::as_str)
             .map(String::from),
         download_url,
+        signature: None,
         error: None,
     }
 }

@@ -231,11 +231,17 @@ export const useArticleStore = create<ArticleState>((set, get) => ({
   },
 
   async fetchTaxonomies(siteId) {
-    const [categories, tags] = await Promise.all([
-      articleService.categories(siteId),
-      articleService.tags(siteId),
-    ]);
-    set({ categories, tags });
+    // 分类/标签是筛选面板的数据源：失败必须落到 `error`（页面显示加载失败），
+    // 而不是静默变成「没有分类」。所以这里不能用兜底值吞掉错误。
+    try {
+      const [categories, tags] = await Promise.all([
+        articleService.categories(siteId),
+        articleService.tags(siteId),
+      ]);
+      set({ categories, tags });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+    }
   },
 
   async renameCategory(siteId, oldName, newName) {

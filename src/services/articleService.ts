@@ -1,6 +1,6 @@
 /** 文章管理服务层 */
 
-import { call, callSafe } from './invoke';
+import { call } from './invoke';
 import type {
   Article,
   ArticleQuery,
@@ -14,21 +14,22 @@ import type {
 export const articleService = {
   /** 分页查询文章 */
   list(query: ArticleQuery): Promise<PaginatedArticles> {
-    return callSafe<PaginatedArticles>(
-      'get_articles',
-      { query },
-      {
-        items: [],
-        total: 0,
-        page: query.page ?? 1,
-        limit: query.limit ?? 20,
-      },
-    );
+    return call<PaginatedArticles>('get_articles', { query });
   },
 
   /** 获取单篇文章 */
   get(articleId: number): Promise<Article> {
     return call<Article>('get_article', { articleId });
+  },
+
+  /**
+   * 重新扫描站点文章目录并同步数据库。
+   *
+   * 列表/搜索接口已不再隐式扫描（否则每次翻页都是 O(N) 文件 IO），
+   * 因此「刷新」按钮与切换站点时需要显式调用本方法。
+   */
+  rescan(siteId: number): Promise<void> {
+    return call<void>('refresh_articles', { siteId });
   },
 
   /** 新建文章 */
@@ -80,22 +81,22 @@ export const articleService = {
 
   /** 批量导入 Markdown */
   importFiles(siteId: number, files: string[]): Promise<Article[]> {
-    return callSafe<Article[]>('import_articles', { siteId, files }, []);
+    return call<Article[]>('import_articles', { siteId, files });
   },
 
   /** 搜索文章 */
   search(siteId: number, query: string): Promise<Article[]> {
-    return callSafe<Article[]>('search_articles', { siteId, query }, []);
+    return call<Article[]>('search_articles', { siteId, query });
   },
 
   /** 获取分类 */
   categories(siteId: number): Promise<Category[]> {
-    return callSafe<Category[]>('get_categories', { siteId }, []);
+    return call<Category[]>('get_categories', { siteId });
   },
 
   /** 获取标签 */
   tags(siteId: number): Promise<Tag[]> {
-    return callSafe<Tag[]>('get_tags', { siteId }, []);
+    return call<Tag[]>('get_tags', { siteId });
   },
 
   /** 重命名分类 */
@@ -120,7 +121,7 @@ export const articleService = {
 
   /** 获取文章历史版本（基于 Git） */
   history(articleId: number, limit = 30): Promise<CommitLog[]> {
-    return callSafe<CommitLog[]>('get_article_history', { articleId, limit }, []);
+    return call<CommitLog[]>('get_article_history', { articleId, limit });
   },
 
   /** 读取指定提交的文章内容 */

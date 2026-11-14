@@ -2,6 +2,7 @@
 
 use crate::db::Db;
 use crate::models::{AppInfo, Changelog, UpdateInfo, UpdateSettings};
+use crate::utils::blocking;
 use crate::AppState;
 use rusqlite::params;
 use tauri::State;
@@ -104,26 +105,46 @@ pub async fn download_update(
         .map_err(|e| e.to_string())
 }
 
-/// 安装更新包（启动系统安装器）。
+/// 安装更新包（校验签名后启动系统安装器）。
+///
+/// `signature` 来自更新清单的 `platforms.<target>.signature`；公钥取自
+/// `tauri.conf.json` 的 `plugins.updater.pubkey`。两者缺一即拒绝执行 ——
+/// 宁可不自动安装，也不能运行一个没校验过的可执行文件。
 #[tauri::command]
-pub async fn install_update(path: String) -> Result<(), String> {
-    crate::update::install::install_update(&path)
+pub async fn install_update(
+    app: tauri::AppHandle,
+    path: String,
+    signature: Option<String>,
+) -> Result<(), String> {
+    let pubkey = app
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|v| v.get("pubkey"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+
+    crate::update::install::install_update(&path, signature.as_deref(), pubkey.as_deref())
         .await
         .map_err(|e| e.to_string())
 }
 
 /// 获取更新日志。
 #[tauri::command]
-pub fn get_changelog(state: State<'_, AppState>, project_root: Option<String>) -> Vec<Changelog> {
-    // 优先读取项目根目录的 CHANGELOG.md
-    let root = project_root.or_else(|| {
-        // 尝试从当前工作目录向上查找
-        std::env::current_dir()
-            .ok()
-            .map(|p| p.display().to_string())
-    });
-    let _ = state;
-    crate::update::check::get_changelog(root.as_deref())
+pub async fn get_changelog(project_root: Option<String>) -> Vec<Changelog> {
+    blocking::cmd(move || {
+        // 优先读取项目根目录的 CHANGELOG.md
+        let root = project_root.or_else(|| {
+            // 尝试从当前工作目录向上查找
+            std::env::current_dir()
+                .ok()
+                .map(|p| p.display().to_string())
+        });
+        Ok(crate::update::check::get_changelog(root.as_deref()))
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// 获取应用信息。
@@ -148,8 +169,14 @@ pub fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
 
 /// 读取本地版本号文件 `version.json`（仅开发期使用）。
 #[tauri::command]
-pub fn get_local_version(project_root: Option<String>) -> Result<serde_json::Value, String> {
-    crate::update::check::read_local_version(project_root.as_deref()).map_err(|e| e.to_string())
+pub async fn get_local_version(
+    project_root: Option<String>,
+) -> Result<serde_json::Value, String> {
+    blocking::cmd(move || {
+        crate::update::check::read_local_version(project_root.as_deref())
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// 更新源配置（供「关于与更新」页展示检查链路）。

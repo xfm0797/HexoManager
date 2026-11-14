@@ -86,8 +86,13 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   },
 
   async fetchSettings() {
-    const settings = await updateService.getSettings();
-    set({ settings });
+    try {
+      const settings = await updateService.getSettings();
+      set({ settings });
+    } catch (e) {
+      // 读取设置失败时保留默认值，同时把原因暴露出来（此前静默兜底成默认值）
+      set({ error: e instanceof Error ? e.message : String(e) });
+    }
   },
 
   async fetchConfig() {
@@ -127,6 +132,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         notes: null,
         pubDate: null,
         downloadUrl: null,
+        signature: null,
         error: message,
       };
     }
@@ -146,12 +152,17 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   },
 
   async installUpdate(path) {
-    await updateService.install(path);
+    // 签名来自同一次 check 得到的清单条目；缺失时后端会拒绝安装
+    await updateService.install(path, get().updateInfo?.signature ?? null);
   },
 
   async fetchChangelog(projectRoot) {
-    const changelog = await updateService.changelog(projectRoot);
-    set({ changelog });
+    try {
+      const changelog = await updateService.changelog(projectRoot);
+      set({ changelog });
+    } catch (e) {
+      set({ changelog: [], error: e instanceof Error ? e.message : String(e) });
+    }
   },
 
   async skipVersion(version) {

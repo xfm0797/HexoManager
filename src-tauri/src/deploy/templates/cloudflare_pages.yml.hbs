@@ -29,10 +29,9 @@ jobs:
           node-version: '{{node_version}}'
           cache: npm
 
+      # 构建命令来自「部署配置 → 构建命令」
       - name: 安装依赖并构建
-        run: |
-          npm install
-          npx hexo generate
+        run: {{build_command}}
 
       - name: 发布到 Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

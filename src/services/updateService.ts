@@ -1,6 +1,6 @@
 /** 更新与应用信息服务层 */
 
-import { call, callSafe } from './invoke';
+import { call } from './invoke';
 import type {
   AppInfo,
   AppSetting,
@@ -27,19 +27,14 @@ export const updateService = {
     return call<DownloadResult>('download_update', { url, targetDir: targetDir ?? null });
   },
 
-  /** 安装更新包 */
-  install(path: string): Promise<void> {
-    return call<void>('install_update', { path });
+  /** 安装更新包（必须带签名：后端会用内置公钥校验后才启动安装器） */
+  install(path: string, signature?: string | null): Promise<void> {
+    return call<void>('install_update', { path, signature: signature ?? null });
   },
 
   /** 读取更新设置 */
   getSettings(): Promise<UpdateSettings> {
-    return callSafe<UpdateSettings>('get_update_settings', undefined, {
-      autoCheck: true,
-      lastCheckAt: null,
-      lastVersion: null,
-      skipVersion: null,
-    });
+    return call<UpdateSettings>('get_update_settings');
   },
 
   /** 保存更新设置 */
@@ -49,7 +44,7 @@ export const updateService = {
 
   /** 获取更新日志 */
   changelog(projectRoot?: string): Promise<Changelog[]> {
-    return callSafe<Changelog[]>('get_changelog', { projectRoot: projectRoot ?? null }, []);
+    return call<Changelog[]>('get_changelog', { projectRoot: projectRoot ?? null });
   },
 
   /** 获取应用信息 */
@@ -64,16 +59,14 @@ export const updateService = {
 
   /** 读取本地版本号文件 */
   localVersion(projectRoot?: string): Promise<Record<string, unknown>> {
-    return callSafe<Record<string, unknown>>(
-      'get_local_version',
-      { projectRoot: projectRoot ?? null },
-      {},
-    );
+    return call<Record<string, unknown>>('get_local_version', {
+      projectRoot: projectRoot ?? null,
+    });
   },
 
   /** 读取全部应用设置 */
   appSettings(): Promise<AppSetting[]> {
-    return callSafe<AppSetting[]>('get_app_settings', undefined, []);
+    return call<AppSetting[]>('get_app_settings');
   },
 
   /** 写入应用设置 */

@@ -6,7 +6,7 @@ import type { Theme, ThemeConfig, ThemeInfo } from '@/types';
 export const themeService = {
   /** 已安装主题列表 */
   list(siteId: number): Promise<Theme[]> {
-    return callSafe<Theme[]>('get_themes', { siteId }, []);
+    return call<Theme[]>('get_themes', { siteId });
   },
 
   /** 安装主题 */

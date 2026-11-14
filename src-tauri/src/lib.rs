@@ -28,20 +28,40 @@ fn database_path(app: &tauri::AppHandle) -> std::path::PathBuf {
     base.join("hexomanager.db")
 }
 
+/// 日志目录：`<app_data_dir>/logs`
+fn logs_path(app: &tauri::AppHandle) -> std::path::PathBuf {
+    let base = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::env::temp_dir().join("hexomanager"));
+    base.join("logs")
+}
+
 /// 应用入口。
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         // ---------- 插件 ----------
+        // 只注册实际用到的插件。文件读写、进程执行、自更新均走本仓库命令，
+        // 注册对应的官方插件只会放大攻击面（任意路径读写 / 任意程序执行）。
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         // ---------- 状态初始化 ----------
         .setup(|app| {
+            // 日志要最先初始化：后续任何一步失败都要能留下线索
+            utils::log::init(logs_path(app.handle()));
+
             let db_path = database_path(app.handle());
+            utils::log::info(
+                "app",
+                format!(
+                    "启动 HexoManager {}（{} {}），数据库：{}",
+                    update::check::APP_VERSION,
+                    std::env::consts::OS,
+                    std::env::consts::ARCH,
+                    db_path.display()
+                ),
+            );
 
             let db = Db::open(&db_path)
                 .map_err(|e| format!("数据库初始化失败（{}）：{}", db_path.display(), e))?;
@@ -71,8 +91,6 @@ pub fn run() {
             // Tauri 按具体类型查找 state，注册成 Arc<AppState> 会导致
             // 运行时报 "state not managed for field `state`"
             app.manage(state);
-
-            // 启动时清理已退出的预览服务记录
             Ok(())
         })
         // ---------- 命令注册 ----------
@@ -88,25 +106,28 @@ pub fn run() {
             commands::site_commands::get_site_stats,
             commands::site_commands::backup_site,
             commands::site_commands::get_site_file_tree,
+            commands::site_commands::refresh_articles,
             // ===== 文章管理（7.2）=====
-            commands::article_commands::create_article,
-            commands::article_commands::get_articles,
-            commands::article_commands::get_article,
-            commands::article_commands::update_article,
-            commands::article_commands::delete_article,
-            commands::article_commands::publish_article,
-            commands::article_commands::unpublish_article,
-            commands::article_commands::create_draft,
-            commands::article_commands::import_articles,
-            commands::article_commands::search_articles,
-            commands::article_commands::get_categories,
-            commands::article_commands::get_tags,
-            commands::article_commands::rename_category,
-            commands::article_commands::rename_tag,
-            commands::article_commands::delete_category,
-            commands::article_commands::delete_tag,
-            commands::article_commands::get_article_history,
-            commands::article_commands::get_article_at_commit,
+            // 命令必须写真实路径：`#[tauri::command]` 生成的 `__cmd__*` 宏不会被
+            // `pub use` 带出去，用门面别名注册会报 "cannot find macro __cmd__xxx"
+            commands::articles::crud::create_article,
+            commands::articles::query::get_articles,
+            commands::articles::query::get_article,
+            commands::articles::crud::update_article,
+            commands::articles::crud::delete_article,
+            commands::articles::publish::publish_article,
+            commands::articles::publish::unpublish_article,
+            commands::articles::publish::create_draft,
+            commands::articles::crud::import_articles,
+            commands::articles::query::search_articles,
+            commands::articles::taxonomy::get_categories,
+            commands::articles::taxonomy::get_tags,
+            commands::articles::taxonomy::rename_category,
+            commands::articles::taxonomy::rename_tag,
+            commands::articles::taxonomy::delete_category,
+            commands::articles::taxonomy::delete_tag,
+            commands::articles::history::get_article_history,
+            commands::articles::history::get_article_at_commit,
             // ===== Front Matter 模板（7.2 扩展）=====
             commands::template_commands::get_front_matter_templates,
             commands::template_commands::save_front_matter_template,
@@ -202,11 +223,29 @@ pub fn run() {
             commands::update_commands::get_update_config,
             commands::update_commands::get_app_settings,
             commands::update_commands::set_app_setting,
+            // ===== 诊断日志 =====
+            commands::diag_commands::log_client_error,
+            commands::diag_commands::get_log_path,
+            commands::diag_commands::get_log_dir,
+            commands::diag_commands::export_logs,
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("HexoManager 启动失败");
-}
 
+    // 退出事件里统一回收预览服务子进程。此前 `spawn_server` 用 `mem::forget`
+    // 丢掉句柄，退出应用后 `npx hexo server` 会变成孤儿进程常驻，端口
+    // 4000–4100 被逐个占满（下次启动只能不断往上找端口）。
+    app.run(|handle, event| {
+        if matches!(
+            event,
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+        ) {
+            if let Some(state) = handle.try_state::<AppState>() {
+                state.servers.stop_all();
+            }
+        }
+    });
+}
 #[cfg(test)]
 mod tests {
     use super::*;

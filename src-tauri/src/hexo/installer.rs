@@ -22,11 +22,7 @@ pub async fn check_env(path: &str) -> AppResult<EnvCheck> {
     }
 
     // ---- npm ----
-    let npm_bin = if cfg!(target_os = "windows") {
-        "npm.cmd"
-    } else {
-        "npm"
-    };
+    let npm_bin = crate::utils::node::npm();
     let npm_out = process::run(npm_bin, &["--version"], None, Some(30))
         .await
         .ok();
@@ -111,11 +107,7 @@ pub async fn init_site(path: &str, name: Option<&str>) -> AppResult<String> {
         std::fs::create_dir_all(target)?;
     }
 
-    let npx_bin = if cfg!(target_os = "windows") {
-        "npx.cmd"
-    } else {
-        "npx"
-    };
+    let npx_bin = crate::utils::node::npx();
 
     // `hexo init` 会脚手架 + 自动 npm install
     let out = process::run(npx_bin, &["hexo", "init", "."], Some(target), Some(900)).await?;
@@ -137,11 +129,7 @@ pub async fn init_site(path: &str, name: Option<&str>) -> AppResult<String> {
             )));
         }
         // 安装依赖
-        let npm_bin = if cfg!(target_os = "windows") {
-            "npm.cmd"
-        } else {
-            "npm"
-        };
+        let npm_bin = crate::utils::node::npm();
         let install = process::run(npm_bin, &["install"], Some(target), Some(900)).await?;
         if !install.success {
             return Err(AppError::Process(format!(
@@ -178,11 +166,7 @@ pub async fn init_site(path: &str, name: Option<&str>) -> AppResult<String> {
 
 /// 安装 Hexo CLI（全局）。
 pub async fn install_hexo(path: Option<&str>) -> AppResult<String> {
-    let npm_bin = if cfg!(target_os = "windows") {
-        "npm.cmd"
-    } else {
-        "npm"
-    };
+    let npm_bin = crate::utils::node::npm();
     let cwd = path.map(Path::new);
     let out = process::run(npm_bin, &["install", "-g", "hexo-cli"], cwd, Some(600)).await?;
     if !out.success {

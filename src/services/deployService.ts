@@ -17,7 +17,7 @@ export const deployService = {
 
   /** 预览部署配置 */
   preview(input: GenerateConfigInput): Promise<GeneratedFile[]> {
-    return callSafe<GeneratedFile[]>('preview_deploy_config', { input }, []);
+    return call<GeneratedFile[]>('preview_deploy_config', { input });
   },
 
   /** 生成指定 Pages 平台配置 */
@@ -42,7 +42,7 @@ export const deployService = {
 
   /** 部署历史 */
   logs(siteId: number, limit = 50): Promise<DeployLog[]> {
-    return callSafe<DeployLog[]>('get_deploy_logs', { siteId, limit }, []);
+    return call<DeployLog[]>('get_deploy_logs', { siteId, limit });
   },
 
   /** 回滚部署 */
@@ -62,6 +62,6 @@ export const deployService = {
 
   /** 检查目标配置文件是否已存在 */
   checkFiles(input: GenerateConfigInput): Promise<[string, boolean][]> {
-    return callSafe<[string, boolean][]>('check_deploy_files', { input }, []);
+    return call<[string, boolean][]>('check_deploy_files', { input });
   },
 };

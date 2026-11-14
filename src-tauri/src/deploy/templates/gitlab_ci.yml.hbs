@@ -18,8 +18,8 @@ stages:
 build:
   stage: build
   script:
-    - npm install
-    - npx hexo generate
+    # 构建命令来自「部署配置 → 构建命令」
+    - {{build_command}}
   artifacts:
     paths:
       - {{output_dir}}

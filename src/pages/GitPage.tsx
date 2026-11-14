@@ -847,7 +847,7 @@ export function GitPage() {
                 );
                 if (!target) return;
                 const { fileService } = await import('@/services');
-                await fileService.write(target, diff);
+                await fileService.write(target, diff, true);
                 message.success(t('差异已导出'));
               }}
             >

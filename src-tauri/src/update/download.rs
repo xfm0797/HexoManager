@@ -2,6 +2,7 @@
 
 use crate::utils::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::path::PathBuf;
 
 /// 下载结果。
@@ -54,16 +55,25 @@ pub async fn download_update(url: &str, target_dir: Option<String>) -> AppResult
     std::fs::create_dir_all(&dir)?;
 
     let target = dir.join(&filename);
-    let bytes = resp
-        .bytes()
+    // 边下边写盘：更新包可达上百 MB，`resp.bytes()` 会把整包读进内存，
+    // 在低配机器上直接 OOM。这里按块追加，内存占用只与块大小相关。
+    let mut file = std::fs::File::create(&target)?;
+    let mut size: u64 = 0;
+    let mut resp = resp;
+    while let Some(chunk) = resp
+        .chunk()
         .await
-        .map_err(|e| AppError::Network(format!("读取下载内容失败：{}", e)))?;
-
-    std::fs::write(&target, &bytes)?;
+        .map_err(|e| AppError::Network(format!("读取下载内容失败：{}", e)))?
+    {
+        file.write_all(&chunk)?;
+        size += chunk.len() as u64;
+    }
+    file.flush()?;
+    drop(file);
 
     Ok(DownloadResult {
         path: target.display().to_string(),
-        size: bytes.len() as u64,
+        size,
         success: true,
     })
 }

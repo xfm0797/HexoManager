@@ -66,8 +66,15 @@ export function useSites(): UseSitesResult {
 
   const remove = useCallback(
     async (siteId: number, deleteFiles = false) => {
-      await deleteSite(siteId, deleteFiles);
-      message.success(deleteFiles ? t('站点及其文件已删除') : t('站点已从列表中移除'));
+      const quarantined = await deleteSite(siteId, deleteFiles);
+      if (!deleteFiles) {
+        message.success(t('站点已从列表中移除'));
+      } else if (quarantined) {
+        // 目录是移动到同级隐藏目录而非物理删除，必须告诉用户实际位置
+        message.success(t('站点已移除，文件已移至 {path}', { path: quarantined }), 8);
+      } else {
+        message.success(t('站点及其文件已删除'));
+      }
     },
     [deleteSite, message],
   );

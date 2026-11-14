@@ -29,8 +29,8 @@ interface SiteState {
   importSite: (path: string) => Promise<Site>;
   /** 更新站点 */
   updateSite: (siteId: number, updates: Parameters<typeof siteService.update>[1]) => Promise<Site>;
-  /** 删除站点 */
-  deleteSite: (siteId: number, deleteFiles?: boolean) => Promise<void>;
+  /** 删除站点；勾选删除文件时返回目录被移动到的位置 */
+  deleteSite: (siteId: number, deleteFiles?: boolean) => Promise<string | null>;
   /** 刷新当前站点统计 */
   fetchStats: (siteId?: number) => Promise<void>;
   /** 按 ID 取站点 */
@@ -101,7 +101,7 @@ export const useSiteStore = create<SiteState>((set, get) => ({
   },
 
   async deleteSite(siteId, deleteFiles = false) {
-    await siteService.remove(siteId, deleteFiles);
+    const quarantined = await siteService.remove(siteId, deleteFiles);
     set((state) => {
       const sites = state.sites.filter((s) => s.id !== siteId);
       return {
@@ -111,6 +111,7 @@ export const useSiteStore = create<SiteState>((set, get) => ({
         stats: state.currentSiteId === siteId ? null : state.stats,
       };
     });
+    return quarantined;
   },
 
   async fetchStats(siteId) {

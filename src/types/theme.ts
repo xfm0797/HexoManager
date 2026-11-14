@@ -31,6 +31,10 @@ export interface ThemeConfig {
   config: Record<string, unknown>;
   isActive: boolean;
   raw: string;
+  /** 实际读取到的配置文件（相对站点根目录，如 `_config.butterfly.yml`） */
+  sourcePath: string;
+  /** 是否在编辑站点级覆盖文件而非主题自带文件 */
+  isSiteOverride: boolean;
 }
 
 /** 插件 */

@@ -71,6 +71,8 @@ interface DeployFormValues {
   repoPlatform?: PlatformId;
   nodeVersion?: string;
   buildCommand?: string;
+  branch?: string;
+  outputDir?: string;
   envVars?: EnvVar[];
   edgeProvider?: string;
   edgeDomain?: string;
@@ -123,7 +125,9 @@ export function DeployPage() {
       repoUrl: config.repoPlatform ? undefined : undefined,
       repoPlatform: (config.repoPlatform as PlatformId) ?? 'github',
       nodeVersion: config.nodeVersion || '20',
-      buildCommand: config.buildCommand || 'hexo clean && hexo generate',
+      buildCommand: config.buildCommand || BUILD_COMMANDS[0].value,
+      branch: config.branch || 'main',
+      outputDir: config.outputDir || 'public',
       envVars: config.envVars ?? [],
       edgeProvider: config.edgeProvider ?? 'edgeone',
       edgeDomain: config.edgeDomain ?? undefined,
@@ -143,7 +147,9 @@ export function DeployPage() {
       repoPlatform: values.repoPlatform ?? 'github',
       ciPlatforms: selectedPlatforms,
       nodeVersion: values.nodeVersion || '20',
-      buildCommand: values.buildCommand || 'hexo clean && hexo generate',
+      buildCommand: values.buildCommand || BUILD_COMMANDS[0].value,
+      branch: values.branch?.trim() || 'main',
+      outputDir: values.outputDir?.trim() || 'public',
       envVars: values.envVars ?? [],
       edgeProvider: edgeEnabled ? (values.edgeProvider ?? 'edgeone') : undefined,
       edgeDomain: edgeEnabled ? values.edgeDomain?.trim() || undefined : undefined,
@@ -164,14 +170,18 @@ export function DeployPage() {
       return;
     }
 
-    const files = await preview(buildInput);
-    if (files.length > 0) {
-      setPreviewOpen(true);
-      // 同步检查文件是否已存在
-      const check = await checkFiles(buildInput);
-      setFileCheck(check);
-    } else {
-      message.info(t('没有生成任何配置文件，请检查平台选择'));
+    try {
+      const files = await preview(buildInput);
+      if (files.length > 0) {
+        setPreviewOpen(true);
+        // 同步检查文件是否已存在
+        const check = await checkFiles(buildInput);
+        setFileCheck(check);
+      } else {
+        message.info(t('没有生成任何配置文件，请检查平台选择'));
+      }
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -182,7 +192,14 @@ export function DeployPage() {
       return;
     }
 
-    const check = await checkFiles(buildInput);
+    // 后端生成失败要显式报错，不能当成「没有已存在的文件」继续往下走
+    let check: Awaited<ReturnType<typeof checkFiles>>;
+    try {
+      check = await checkFiles(buildInput);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e));
+      return;
+    }
     const existing = check.filter(([, exists]) => exists);
 
     if (existing.length > 0) {
@@ -226,6 +243,8 @@ export function DeployPage() {
         ciPlatforms: selectedPlatforms as string[],
         nodeVersion: buildInput.nodeVersion ?? '20',
         buildCommand: buildInput.buildCommand ?? '',
+        branch: buildInput.branch ?? 'main',
+        outputDir: buildInput.outputDir ?? 'public',
         envVars: buildInput.envVars ?? [],
         edgeProvider: edgeEnabled ? (buildInput.edgeProvider ?? null) : null,
         edgeDomain: edgeEnabled ? (buildInput.edgeDomain ?? null) : null,
@@ -489,6 +508,26 @@ export function DeployPage() {
                                     </>
                                   )}
                                 />
+                              </FormField>
+                            </Col>
+                          </Row>
+                          <Row gutter={12} className="mt-3">
+                            <Col span={10}>
+                              <FormField
+                                name="branch"
+                                label={t('部署分支')}
+                                tooltip={t('workflow 的触发分支与 Pages 发布分支')}
+                              >
+                                <Input placeholder="main" className="hm-mono" allowClear />
+                              </FormField>
+                            </Col>
+                            <Col span={14}>
+                              <FormField
+                                name="outputDir"
+                                label={t('输出目录')}
+                                tooltip={t('Hexo 生成的静态文件目录，默认 public')}
+                              >
+                                <Input placeholder="public" className="hm-mono" allowClear />
                               </FormField>
                             </Col>
                           </Row>
@@ -859,7 +898,11 @@ export function DeployPage() {
               {[...filesByPlatform.entries()].map(([platform, files]) => (
                 <div key={platform} className="flex items-start gap-3">
                   <Tag color="blue" className="m-0 mt-0.5">
-                    {platform}
+                    {platform === 'edge'
+                      ? t('边缘层')
+                      : platform === 'common'
+                        ? t('通用')
+                        : platform}
                   </Tag>
                   <div className="flex flex-wrap gap-1">
                     {files.map((file) => (

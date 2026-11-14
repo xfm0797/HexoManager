@@ -204,11 +204,13 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
 
   async exportConfig(siteId, targetPath) {
     const payload = await configService.exportConfig(siteId);
-    await fileService.write(targetPath, payload);
+    // 导出目录由用户在保存对话框中选择，允许落在站点之外
+    await fileService.write(targetPath, payload, true);
   },
 
   async importConfig(siteId, sourcePath) {
-    const payload = await fileService.read(sourcePath);
+    // 导入来源是用户在打开对话框中选择的文件
+    const payload = await fileService.read(sourcePath, true);
     await configService.importConfig(siteId, payload);
     await get().fetchConfig(siteId);
   },
@@ -228,8 +230,13 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
   },
 
   async fetchThemes(siteId) {
-    const themes = await themeService.list(siteId);
-    set({ themes });
+    set({ error: null });
+    try {
+      const themes = await themeService.list(siteId);
+      set({ themes });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+    }
   },
 
   async installTheme(siteId, name, source) {
@@ -298,8 +305,13 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
   },
 
   async fetchPlugins(siteId) {
-    const plugins = await configService.plugins(siteId);
-    set({ plugins });
+    set({ error: null });
+    try {
+      const plugins = await configService.plugins(siteId);
+      set({ plugins });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+    }
   },
 
   async installPlugin(siteId, name) {

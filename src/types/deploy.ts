@@ -56,6 +56,10 @@ export interface DeployConfig {
   ciPlatforms: string[];
   nodeVersion: string;
   buildCommand: string;
+  /** CI 触发器与 Pages 部署使用的分支 */
+  branch: string;
+  /** Hexo 输出目录（public / docs …） */
+  outputDir: string;
   deployTargets: string[];
   envVars: EnvVar[];
   edgeProvider: string | null;
@@ -81,6 +85,10 @@ export interface GenerateConfigInput {
   ciPlatforms?: string[];
   nodeVersion?: string;
   buildCommand?: string;
+  /** Git 分支：CI 触发器与 Pages 部署使用，缺省 main */
+  branch?: string;
+  /** Hexo 输出目录（public / docs …），缺省 public */
+  outputDir?: string;
   envVars?: EnvVar[];
   edgeProvider?: string;
   edgeDomain?: string;

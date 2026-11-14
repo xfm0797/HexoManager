@@ -8,24 +8,52 @@ import { getLocale } from '@/i18n';
 dayjs.extend(relativeTime);
 // dayjs 的当前语言由 src/i18n 统一切换，这里不再固定为中文
 
+/** 「本地时间、无时区标记」的时间串，如 `2026-11-14 22:00:00` */
+const NAIVE_TIME = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/;
+
+/**
+ * 解析后端时间。
+ *
+ * 后端所有时间列（`now_utc()` 与 SQLite `datetime('now')`）都是 **UTC**，
+ * 但格式沿用 SQLite 默认的 `YYYY-MM-DD HH:mm:ss`——不带时区标记。dayjs 遇到
+ * 这种串会按**本地时间**解析，东八区就会整体少显示 8 小时（典型症状：刚部署
+ * 完却显示「8 小时前」）。这里显式补上 `Z` 再解析，由 dayjs 负责转本地显示。
+ */
+function parseTimestamp(value: string | number | Date): dayjs.Dayjs {
+  if (typeof value === 'string') {
+    const raw = value.trim();
+    if (NAIVE_TIME.test(raw)) {
+      return dayjs(`${raw.replace(' ', 'T')}Z`);
+    }
+  }
+  return dayjs(value);
+}
+
+/** 解析后端时间戳为毫秒（用于排序），空值/非法值返回 0 */
+export function toTimestamp(value: string | number | Date | null | undefined): number {
+  if (value === null || value === undefined || value === '') return 0;
+  const d = parseTimestamp(value);
+  return d.isValid() ? d.valueOf() : 0;
+}
+
 /** 格式化日期时间 */
 export function formatDateTime(value: string | number | Date | null | undefined): string {
   if (value === null || value === undefined || value === '') return '—';
-  const d = dayjs(value);
+  const d = parseTimestamp(value);
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : '—';
 }
 
 /** 格式化日期 */
 export function formatDateOnly(value: string | number | Date | null | undefined): string {
   if (value === null || value === undefined || value === '') return '—';
-  const d = dayjs(value);
+  const d = parseTimestamp(value);
   return d.isValid() ? d.format('YYYY-MM-DD') : '—';
 }
 
 /** 相对时间（如「3 分钟前」） */
 export function formatRelative(value: string | number | Date | null | undefined): string {
   if (value === null || value === undefined || value === '') return '—';
-  const d = dayjs(value);
+  const d = parseTimestamp(value);
   return d.isValid() ? d.fromNow() : '—';
 }
 

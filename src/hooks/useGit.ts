@@ -83,9 +83,14 @@ export function useGit(siteId: number | null): UseGitResult {
       setDiff('');
       return;
     }
-    const text = await gitService.diff(siteId);
-    setDiff(text);
-  }, [siteId]);
+    try {
+      setDiff(await gitService.diff(siteId));
+    } catch (e) {
+      // diff 读不到（比如还不是仓库）不应让面板停在 loading，但也不能假装是空 diff
+      setDiff('');
+      message.error(e instanceof Error ? e.message : String(e));
+    }
+  }, [siteId, message]);
 
   const init = useCallback(
     () =>

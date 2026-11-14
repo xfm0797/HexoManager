@@ -168,7 +168,7 @@ export function LogsPage() {
     ].filter((line) => line !== '');
 
     try {
-      await fileService.write(target, lines.join('\n'));
+      await fileService.write(target, lines.join('\n'), true);
       message.success(t('日志已导出'));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));

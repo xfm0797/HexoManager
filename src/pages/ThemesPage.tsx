@@ -85,6 +85,7 @@ export function ThemesPage() {
   const [configOpen, setConfigOpen] = useState(false);
 
   const {
+    themeConfig,
     raw: themeRaw,
     loading: configLoading,
     saving: configSaving,
@@ -637,9 +638,21 @@ export function ThemesPage() {
                 type="success"
                 showIcon
                 message={t('主题配置文件')}
-                description={t('编辑 themes/{theme}/_config.yml，保存后重新生成站点生效', {
-                  theme: configTheme ?? '',
-                })}
+                description={
+                  <>
+                    <div className="hm-mono text-xs break-all">
+                      {themeConfig?.sourcePath ??
+                        `themes/${configTheme ?? ''}/_config.yml`}
+                    </div>
+                    <div className="mt-1 text-xs hm-text-secondary">
+                      {themeConfig?.isSiteOverride
+                        ? t('站点级覆盖文件：优先于主题自带的 _config.yml，主题升级不会丢失')
+                        : t('主题自带配置：主题升级可能被覆盖，建议改用站点级覆盖文件')}
+                      {' · '}
+                      {t('保存后重新生成站点生效')}
+                    </div>
+                  </>
+                }
               />
             )}
 
@@ -663,8 +676,8 @@ export function ThemesPage() {
                     {t(
                       '已尝试查找 {a}、{b} 与 {c}。若主题确实无独立配置文件，可改用站点 _config.yml 的 theme_config 段。',
                       {
-                        a: `themes/${configTheme}/_config.yml`,
-                        b: `_config.${configTheme}.yml`,
+                        a: `_config.${configTheme}.yml`,
+                        b: `themes/${configTheme}/_config.yml`,
                         c: `themes/${configTheme}/_config.yaml`,
                       },
                     )}

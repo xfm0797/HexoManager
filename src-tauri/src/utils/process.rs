@@ -86,7 +86,7 @@ pub async fn run(
     // Windows 下隐藏控制台窗口
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
+        // tokio 的 Command 自带 creation_flags（std 的那个才需要 CommandExt trait）
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
@@ -149,7 +149,7 @@ where
 
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
+        // tokio 的 Command 自带 creation_flags（std 的那个才需要 CommandExt trait）
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }

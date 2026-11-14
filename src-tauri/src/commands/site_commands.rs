@@ -2,6 +2,7 @@
 
 use crate::db::Db;
 use crate::models::{CreateSiteInput, Site, SiteStats, UpdateSiteInput};
+use crate::utils::blocking;
 use crate::utils::error::{AppError, AppResult};
 use crate::utils::{count_words, now_utc, FileTreeNode};
 use crate::AppState;
@@ -240,7 +241,7 @@ pub async fn delete_site(
     state: State<'_, AppState>,
     site_id: i64,
     delete_files: Option<bool>,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     let db = Db::from_arc(&state.db);
     let db = &db;
     let path: String = {
@@ -253,22 +254,45 @@ pub async fn delete_site(
         .map_err(|_| format!("站点不存在：{}", site_id))?
     };
 
-    // 先停止该站点的预览服务
-    if let Some(server) = state.servers.remove(site_id) {
-        let _ = crate::hexo::server::kill_by_pid(server.pid);
-    }
+    // 先停止该站点的预览服务（同时回收子进程句柄）
+    state.servers.stop_site(site_id);
 
-    if delete_files.unwrap_or(false) {
+    // 删目录改为「移动到同级的隐藏目录」：与 `remove_dir_all` 一样把站点从
+    // 原位置移走，但保留了反悔余地——`remove_dir_all` 一旦误删就再也拿不回来，
+    // 而本操作的代价只是用户要手动清理一次（路径会回显在提示里）。
+    let quarantined = if delete_files.unwrap_or(false) {
         let p = std::path::Path::new(&path);
         if p.exists() {
-            std::fs::remove_dir_all(p).map_err(|e| format!("删除站点目录失败：{}", e))?;
+            Some(quarantine_dir(p).map_err(|e| format!("删除站点目录失败：{}", e))?)
+        } else {
+            None
         }
-    }
+    } else {
+        None
+    };
 
     let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM sites WHERE id = ?1", params![site_id])
         .map_err(|e| e.to_string())?;
-    Ok(())
+    Ok(quarantined)
+}
+
+/// 把目录重命名到同级的 `.<name>.deleted-<时间戳>`，返回新位置。
+///
+/// 选同目录改名而不是复制后删除：`node_modules` 动辄几百 MB，复制既慢又占双倍
+/// 空间；同一文件系统内的 rename 是原子的，失败也不会留下半截数据。
+fn quarantine_dir(dir: &std::path::Path) -> std::io::Result<String> {
+    let name = dir
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "site".into());
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
+    let target = dir
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join(format!(".{}.deleted-{}", name, stamp));
+    std::fs::rename(dir, &target)?;
+    Ok(target.display().to_string())
 }
 
 /// 获取全部站点。
@@ -370,22 +394,29 @@ async fn duplicate_site_impl(
         )));
     }
 
-    copy_dir_recursive(
-        std::path::Path::new(&source.path),
-        std::path::Path::new(new_path),
-    )?;
+    // 整站复制是几十秒级的重 IO，绝不能占着 tokio worker 线程
+    let source_path = source.path.clone();
+    let target = new_path.to_string();
+    let title = new_name.to_string();
+    let skip = crate::utils::fs::SKIP_BUILD_OUTPUT;
+    blocking::run(move || {
+        crate::utils::fs::copy_dir_skipping(
+            std::path::Path::new(&source_path),
+            std::path::Path::new(&target),
+            skip,
+        )?;
 
-    // 修正复制的站点配置
-    let cfg = format!("{}/_config.yml", new_path.trim_end_matches('/'));
-    if let Ok(mut value) = crate::hexo::config_parser::parse_yaml_file(&cfg) {
-        if let Some(obj) = value.as_object_mut() {
-            obj.insert(
-                "title".into(),
-                serde_json::Value::String(new_name.to_string()),
-            );
+        // 修正复制的站点配置
+        let cfg = format!("{}/_config.yml", target.trim_end_matches('/'));
+        if let Ok(mut value) = crate::hexo::config_parser::parse_yaml_file(&cfg) {
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("title".into(), serde_json::Value::String(title));
+            }
+            let _ = crate::hexo::config_parser::write_yaml_file(&cfg, &value);
         }
-        let _ = crate::hexo::config_parser::write_yaml_file(&cfg, &value);
-    }
+        Ok(())
+    })
+    .await?;
 
     let id = {
         let conn = db.conn()?;
@@ -410,39 +441,13 @@ async fn duplicate_site_impl(
     get_site_by_id(db, id)
 }
 
-/// 递归复制目录（跳过 node_modules 与 .git 以加速）。
-fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> AppResult<()> {
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-
-        // 跳过依赖与版本库目录（体积大且可重建）
-        if name_str == "node_modules" || name_str == ".git" || name_str == "public" {
-            continue;
-        }
-
-        let from = entry.path();
-        let to = dst.join(&name);
-
-        if entry.file_type()?.is_dir() {
-            copy_dir_recursive(&from, &to)?;
-        } else {
-            std::fs::copy(&from, &to)?;
-        }
-    }
-    Ok(())
-}
-
 /// 获取站点统计。
 #[tauri::command]
 pub async fn get_site_stats(state: State<'_, AppState>, site_id: i64) -> Result<SiteStats, String> {
     let db = &state.db;
     let site = get_site_by_id(db, site_id).map_err(|e| e.to_string())?;
 
-    // 重新扫描文章以保证统计准确
-    let _ = rescan_articles(db, site_id, &site.path).await;
+    // 统计全部取自库中的派生数据；磁盘同步由 refresh_articles / 构建等显式动作触发
 
     let (article_count, draft_count, published_count, total_words, categories, tags) = {
         let conn = db.conn().map_err(|e| e.to_string())?;
@@ -577,9 +582,9 @@ async fn backup_site_impl(db: &Db, site_id: i64, backup_path: &str) -> AppResult
         .replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
     let target = std::path::Path::new(backup_path).join(format!("{}-{}", safe_name, stamp));
 
-    copy_dir_recursive(std::path::Path::new(&site.path), &target)?;
-
-    // 记录备份元信息
+    // 整站复制：同 duplicate，必须离开 async 上下文
+    let source_path = site.path.clone();
+    let target_for_copy = target.clone();
     let meta = serde_json::json!({
         "siteId": site.id,
         "siteName": site.name,
@@ -587,18 +592,52 @@ async fn backup_site_impl(db: &Db, site_id: i64, backup_path: &str) -> AppResult
         "backupAt": now_utc(),
         "backupPath": target.display().to_string(),
     });
-    std::fs::write(
-        target.join(".hexomanager-backup.json"),
-        serde_json::to_string_pretty(&meta)?,
-    )?;
+    blocking::run(move || {
+        crate::utils::fs::copy_dir_skipping(
+            std::path::Path::new(&source_path),
+            &target_for_copy,
+            crate::utils::fs::SKIP_BUILD_OUTPUT,
+        )?;
+
+        // 记录备份元信息
+        std::fs::write(
+            target_for_copy.join(".hexomanager-backup.json"),
+            serde_json::to_string_pretty(&meta)?,
+        )?;
+        Ok(())
+    })
+    .await?;
 
     Ok(target.display().to_string())
 }
 
 // ==================== 文章扫描（供导入与统计复用） ====================
 
-/// 扫描站点 `source/_posts` 与 `source/_drafts`，同步文章到数据库。
-pub async fn rescan_articles(db: &Db, site_id: i64, site_path: &str) -> AppResult<()> {
+/// 现有文章的指纹：`file_path -> (mtime_ns, size)`。
+fn load_fingerprints(
+    db: &Db,
+    site_id: i64,
+) -> AppResult<std::collections::HashMap<String, (Option<i64>, Option<i64>)>> {
+    let conn = db.conn()?;
+    let mut stmt =
+        conn.prepare("SELECT file_path, file_mtime, file_size FROM articles WHERE site_id = ?1")?;
+    let rows = stmt.query_map(params![site_id], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            (r.get::<_, Option<i64>>(1)?, r.get::<_, Option<i64>>(2)?),
+        ))
+    })?;
+    Ok(rows.flatten().collect())
+}
+
+/// 同步扫描站点文章目录（**阻塞 IO**，只应在 `spawn_blocking` 里调用）。
+///
+/// 只返回「内容可能变化」的文章：文件指纹（mtime + 大小）与库中记录一致的直接跳过，
+/// 一次 stat 比重读文件 + 解析 YAML 便宜一个数量级。
+fn scan_articles(
+    site_path: &str,
+    fingerprints: &std::collections::HashMap<String, (Option<i64>, Option<i64>)>,
+) -> Vec<crate::commands::article_commands::ScannedArticle> {
     let root = std::path::Path::new(site_path);
     let posts_dir = root.join("source").join("_posts");
     let drafts_dir = root.join("source").join("_drafts");
@@ -621,6 +660,24 @@ pub async fn rescan_articles(db: &Db, site_id: i64, site_path: &str) -> AppResul
             let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
             if !matches!(ext, "md" | "markdown") {
                 continue;
+            }
+
+            // 指纹一致 → 内容不可能变化，跳过读取与解析
+            let path_str = path.display().to_string();
+            let (mtime, size) = match entry.metadata() {
+                Ok(meta) => (
+                    meta.modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_nanos() as i64),
+                    Some(meta.len() as i64),
+                ),
+                Err(_) => (None, None),
+            };
+            if let Some((Some(known_mtime), Some(known_size))) = fingerprints.get(&path_str) {
+                if mtime == Some(*known_mtime) && size == Some(*known_size) {
+                    continue;
+                }
             }
 
             let content = std::fs::read_to_string(path).unwrap_or_default();
@@ -683,17 +740,19 @@ pub async fn rescan_articles(db: &Db, site_id: i64, site_path: &str) -> AppResul
                 .and_then(|v| v.as_str())
                 .map(str::to_string);
 
+            // front matter 的时间是「本地时间无时区」，入库前统一折算成 UTC，
+            // 否则会与 now_utc() 写入的值混在同一列排序（东八区差 8 小时）
             let created_at = front
                 .as_ref()
                 .and_then(|f| f.get("date"))
                 .and_then(|v| v.as_str())
-                .map(str::to_string);
+                .and_then(crate::utils::local_time_to_utc);
 
             let updated_at = front
                 .as_ref()
                 .and_then(|f| f.get("updated"))
                 .and_then(|v| v.as_str())
-                .map(str::to_string);
+                .and_then(crate::utils::local_time_to_utc);
 
             let excerpt = front
                 .as_ref()
@@ -704,7 +763,7 @@ pub async fn rescan_articles(db: &Db, site_id: i64, site_path: &str) -> AppResul
             found.push(crate::commands::article_commands::ScannedArticle {
                 title,
                 slug,
-                file_path: path.display().to_string(),
+                file_path: path_str,
                 content: body,
                 excerpt,
                 status: status.to_string(),
@@ -721,28 +780,110 @@ pub async fn rescan_articles(db: &Db, site_id: i64, site_path: &str) -> AppResul
                         .as_ref()
                         .and_then(|f| f.get("date"))
                         .and_then(|v| v.as_str())
-                        .map(str::to_string)
+                        .and_then(crate::utils::local_time_to_utc)
                 } else {
                     None
                 },
+                file_mtime: mtime,
+                file_size: size,
             });
         }
     }
 
-    crate::commands::article_commands::sync_articles(db, site_id, found).await
+    found
+}
+
+/// 重新扫描站点文章目录并同步数据库（显式刷新）。
+///
+/// 读接口不再隐式触发扫描：此前每次翻页都是一次全站扫描（500 篇 ≈ 500 次
+/// 文件读 + YAML 解析 + 全表 UPDATE），这才是列表卡顿的主因。
+pub async fn rescan_articles(db: &Db, site_id: i64, site_path: &str) -> AppResult<()> {
+    let fingerprints = load_fingerprints(db, site_id)?;
+    let root = site_path.to_string();
+
+    // 读盘是阻塞 IO：放进 blocking 线程池，避免占住 tokio worker 让其他 IPC 排队
+    let found = tokio::task::spawn_blocking(move || scan_articles(&root, &fingerprints))
+        .await
+        .map_err(|e| AppError::Other(format!("扫描文章失败：{}", e)))?;
+
+    // 这里是整站扫描：允许清理磁盘上已不存在的记录
+    crate::commands::article_commands::reconcile_site(db, site_id, found).await
+}
+
+/// 显式刷新文章列表：重新扫描磁盘并同步数据库。
+///
+/// 前端在「刷新」按钮与切换站点时调用；普通分页/搜索只读库。
+#[tauri::command]
+pub async fn refresh_articles(state: State<'_, AppState>, site_id: i64) -> Result<(), String> {
+    let db = Db::from_arc(&state.db);
+    let site = get_site_by_id(&db, site_id).map_err(|e| e.to_string())?;
+    rescan_articles(&db, site_id, &site.path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 获取站点的文件树（供文件管理页使用）。
+///
+/// 递归遍历整棵目录（含 node_modules 时可达数万条目），放到阻塞线程池。
 #[tauri::command]
-pub fn get_site_file_tree(
+pub async fn get_site_file_tree(
     state: State<'_, AppState>,
     site_id: i64,
     max_depth: Option<usize>,
 ) -> Result<FileTreeNode, String> {
-    let site = get_site_by_id(&state.db, site_id).map_err(|e| e.to_string())?;
-    let root = std::path::Path::new(&site.path);
-    if !root.exists() {
-        return Err(format!("站点目录不存在：{}", site.path));
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || {
+        let site = get_site_by_id(&db, site_id).map_err(|e| e.to_string())?;
+        let root = std::path::Path::new(&site.path);
+        if !root.exists() {
+            return Err(format!("站点目录不存在：{}", site.path));
+        }
+        Ok(FileTreeNode::from_path(root, 0, max_depth.unwrap_or(4)))
+    })
+    .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_site_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "hexo-mgr-site-test-{}-{}",
+            tag,
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("source").join("_posts")).unwrap();
+        dir
     }
-    Ok(FileTreeNode::from_path(root, 0, max_depth.unwrap_or(4)))
+
+    /// 增量扫描：指纹（mtime + 大小）未变化的文件不重复读取/解析。
+    #[test]
+    fn test_scan_skips_unchanged_files() {
+        let dir = temp_site_dir("scan");
+        let post = dir.join("source").join("_posts").join("a.md");
+        std::fs::write(&post, "---\ntitle: A\n---\n\n# A\n").unwrap();
+
+        let first = scan_articles(dir.to_str().unwrap(), &Default::default());
+        assert_eq!(first.len(), 1, "首次扫描应发现 1 篇");
+        assert!(first[0].file_mtime.is_some(), "扫描必须记录文件指纹");
+        assert!(first[0].file_size.is_some());
+
+        let mut fingerprints = std::collections::HashMap::new();
+        fingerprints.insert(
+            first[0].file_path.clone(),
+            (first[0].file_mtime, first[0].file_size),
+        );
+        let second = scan_articles(dir.to_str().unwrap(), &fingerprints);
+        assert!(second.is_empty(), "指纹未变化时不应重新解析");
+
+        // 内容变化后必须重新扫描到
+        std::fs::write(&post, "---\ntitle: A2\n---\n\n# A2 正文更长一些\n").unwrap();
+        let third = scan_articles(dir.to_str().unwrap(), &fingerprints);
+        assert_eq!(third.len(), 1, "内容变化后应重新扫描");
+        assert_eq!(third[0].title, "A2");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

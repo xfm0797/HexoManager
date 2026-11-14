@@ -1,13 +1,62 @@
 //! 建表迁移脚本。
 //!
 //! 字段与开发大纲第五章「数据库设计」逐字段对齐。
+//!
+//! 采用 `PRAGMA user_version` 记录已应用的结构版本：`SCHEMA_SQL` 只是**基线**
+//! （全部 `CREATE TABLE IF NOT EXISTS`），之后任何结构变更（新增列、补索引）
+//! 都必须以「追加一步」的方式写进 [`MIGRATIONS`]，而不是改基线 —— 老库不会重建表，
+//! 改基线对它完全无效。
 
 use crate::utils::error::AppResult;
 use rusqlite::Connection;
 
-/// 执行全部建表迁移（幂等，可重复调用）。
+/// 结构变更步骤：`(目标版本号, SQL)`，版本号从 1 起严格递增。
+///
+/// 每一步都要求「可整体成功或整体失败」：在事务里执行 SQL 并同时写入
+/// `user_version`，因此中途失败不会留下半应用的 schema。
+const MIGRATIONS: &[(i64, &str)] = &[
+    // v1：记录文章文件指纹（mtime 纳秒 + 字节数）。
+    // 扫描时 stat 一致就跳过读文件与 YAML 解析，让全站扫描从 O(内容) 降到 O(stat)。
+    (
+        1,
+        r#"
+ALTER TABLE articles ADD COLUMN file_mtime INTEGER;
+ALTER TABLE articles ADD COLUMN file_size INTEGER;
+"#,
+    ),
+    // v2：部署配置记住「分支」与「输出目录」——此前生成 workflow 时硬编码 main/public，
+    // 主分支叫 master 的站点会生成一个永不触发的 Actions 配置。
+    (
+        2,
+        r#"
+ALTER TABLE deploy_configs ADD COLUMN branch TEXT DEFAULT 'main';
+ALTER TABLE deploy_configs ADD COLUMN output_dir TEXT DEFAULT 'public';
+"#,
+    ),
+];
+
+/// 当前代码期望的结构版本（最后一步的版本号）。
+pub fn latest_version() -> i64 {
+    MIGRATIONS.last().map(|(v, _)| *v).unwrap_or(0)
+}
+
+/// 执行全部迁移（幂等，可重复调用）。
 pub fn run_migrations(conn: &Connection) -> AppResult<()> {
+    // 基线：全部 CREATE TABLE IF NOT EXISTS，对新库与老库都安全
     conn.execute_batch(SCHEMA_SQL)?;
+
+    let mut version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    for (target, sql) in MIGRATIONS {
+        if *target <= version {
+            continue;
+        }
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch(sql)?;
+        // PRAGMA 不支持参数绑定，版本号来自代码内常量
+        tx.pragma_update(None, "user_version", *target)?;
+        tx.commit()?;
+        version = *target;
+    }
     Ok(())
 }
 
@@ -161,3 +210,42 @@ CREATE INDEX IF NOT EXISTS idx_plugins_site ON plugins(site_id);
 CREATE INDEX IF NOT EXISTS idx_theme_configs_site ON theme_configs(site_id);
 CREATE INDEX IF NOT EXISTS idx_templates_order ON front_matter_templates(sort_order, id);
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn version(conn: &Connection) -> i64 {
+        conn.query_row("PRAGMA user_version", [], |r| r.get(0))
+            .expect("读取 user_version")
+    }
+
+    /// 新库要跑到最新版本，且每步结构变更都生效。
+    #[test]
+    fn test_migrations_reach_latest_version() {
+        let conn = Connection::open_in_memory().expect("内存数据库");
+        run_migrations(&conn).expect("迁移失败");
+
+        assert_eq!(version(&conn), latest_version());
+        assert!(latest_version() >= 1);
+
+        // v1 的新列必须存在（用一条真正执行的 SELECT 探测，失败即列缺失）
+        let mut stmt = conn
+            .prepare("SELECT file_mtime, file_size FROM articles LIMIT 1")
+            .expect("v1 的列不存在");
+        let mut rows = stmt.query([]).expect("查询新列失败");
+        let _ = rows.next().expect("读取结果失败");
+    }
+
+    /// 迁移必须幂等：重复调用不能因为 `ALTER TABLE` 重复执行而失败。
+    ///
+    /// 这正是引入 `user_version` 的原因 —— 之前只有一个 `execute_batch` 基线，
+    /// 任何 ALTER 放在里面都会在第二次启动时炸掉。
+    #[test]
+    fn test_migrations_are_idempotent() {
+        let conn = Connection::open_in_memory().expect("内存数据库");
+        run_migrations(&conn).expect("首次迁移失败");
+        run_migrations(&conn).expect("重复迁移失败（user_version 未生效？）");
+        assert_eq!(version(&conn), latest_version());
+    }
+}

@@ -71,14 +71,27 @@ impl Default for TemplateContext {
     }
 }
 
+/// 模板作用域：决定「什么时候生成这个文件」。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Scope {
+    /// 某个 CI / Pages 平台：按用户勾选的平台过滤
+    Platform,
+    /// 边缘层（回源 / 容灾脚本）：由 `edge_provider` 控制，与选中的平台无关
+    Edge,
+    /// 通用说明文档：始终生成
+    Common,
+}
+
 /// 单个模板文件定义。
 struct TemplateFile {
     /// 模板在 bundle 中的 id
     id: &'static str,
     /// 目标相对路径
     path: &'static str,
-    /// 平台标识
+    /// 平台标识（`Scope::Common` 时为 "common"）
     platform: &'static str,
+    /// 生成条件
+    scope: Scope,
     /// 文件说明
     description: &'static str,
     /// 模板内容
@@ -92,6 +105,7 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "github_pages",
         path: ".github/workflows/pages.yml",
         platform: "github",
+        scope: Scope::Platform,
         description: "GitHub Actions 自动构建并部署到 GitHub Pages",
         source: include_str!("templates/github_pages.yml.hbs"),
     },
@@ -99,6 +113,7 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "github_cname",
         path: "source/CNAME",
         platform: "github",
+        scope: Scope::Platform,
         description: "自定义域名配置（GitHub Pages / Gitee Pages 通用）",
         source: include_str!("templates/cname.hbs"),
     },
@@ -107,6 +122,7 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "gitee_pages",
         path: ".gitee/workflows/pages.yml",
         platform: "gitee",
+        scope: Scope::Platform,
         description: "Gitee Go 自动构建并部署到 Gitee Pages",
         source: include_str!("templates/gitee_pages.yml.hbs"),
     },
@@ -115,6 +131,7 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "gitlab_ci",
         path: ".gitlab-ci.yml",
         platform: "gitlab",
+        scope: Scope::Platform,
         description: "GitLab CI/CD 自动构建并部署到 GitLab Pages",
         source: include_str!("templates/gitlab_ci.yml.hbs"),
     },
@@ -123,6 +140,7 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "vercel_json",
         path: "vercel.json",
         platform: "vercel",
+        scope: Scope::Platform,
         description: "Vercel 项目配置：构建命令、输出目录与缓存响应头",
         source: include_str!("templates/vercel.json.hbs"),
     },
@@ -130,6 +148,7 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "vercel_workflow",
         path: ".github/workflows/vercel.yml",
         platform: "vercel",
+        scope: Scope::Platform,
         description: "GitHub Actions 自动部署到 Vercel",
         source: include_str!("templates/vercel.yml.hbs"),
     },
@@ -138,6 +157,7 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "netlify_toml",
         path: "netlify.toml",
         platform: "netlify",
+        scope: Scope::Platform,
         description: "Netlify 项目配置：构建命令、发布目录与重定向规则",
         source: include_str!("templates/netlify.toml.hbs"),
     },
@@ -145,6 +165,7 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "netlify_workflow",
         path: ".github/workflows/netlify.yml",
         platform: "netlify",
+        scope: Scope::Platform,
         description: "GitHub Actions 自动部署到 Netlify",
         source: include_str!("templates/netlify.yml.hbs"),
     },
@@ -153,6 +174,7 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "cloudflare_toml",
         path: "cloudflare.toml",
         platform: "cloudflare",
+        scope: Scope::Platform,
         description: "Cloudflare Pages 项目配置（wrangler 读取）",
         source: include_str!("templates/cloudflare.toml.hbs"),
     },
@@ -160,6 +182,7 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "cloudflare_workflow",
         path: ".github/workflows/cloudflare-pages.yml",
         platform: "cloudflare",
+        scope: Scope::Platform,
         description: "GitHub Actions 自动部署到 Cloudflare Pages",
         source: include_str!("templates/cloudflare_pages.yml.hbs"),
     },
@@ -168,6 +191,7 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "edgeone_config",
         path: "edgeone.config.json",
         platform: "edgeone",
+        scope: Scope::Platform,
         description: "腾讯云 EdgeOne Pages 项目配置",
         source: include_str!("templates/edgeone.config.json.hbs"),
     },
@@ -175,14 +199,16 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "edgeone_workflow",
         path: ".github/workflows/edgeone.yml",
         platform: "edgeone",
+        scope: Scope::Platform,
         description: "GitHub Actions 自动部署到 EdgeOne Pages",
         source: include_str!("templates/edgeone.yml.hbs"),
     },
-    // ---------- 边缘层配置 ----------
+    // ---------- 边缘层配置（由 edge_provider 控制，不依赖选中的平台） ----------
     TemplateFile {
         id: "edgeone_origin_guide",
         path: "deploy-config/edgeone-config.txt",
         platform: "edge",
+        scope: Scope::Edge,
         description: "EdgeOne 智能回源与故障转移配置指南",
         source: include_str!("templates/edgeone-config.txt.hbs"),
     },
@@ -190,13 +216,15 @@ const TEMPLATES: &[TemplateFile] = &[
         id: "cloudflare_worker",
         path: "deploy-config/cloudflare-worker.js",
         platform: "edge",
+        scope: Scope::Edge,
         description: "Cloudflare Workers 智能回源与故障转移脚本",
         source: include_str!("templates/cloudflare-worker.js.hbs"),
     },
     TemplateFile {
         id: "deploy_readme",
         path: "deploy-config/README.md",
-        platform: "edge",
+        platform: "common",
+        scope: Scope::Common,
         description: "部署配置说明文档",
         source: include_str!("templates/deploy_readme.md.hbs"),
     },
@@ -370,13 +398,23 @@ pub fn build_context(input: &crate::models::GenerateConfigInput) -> TemplateCont
         repo_url,
         repo_owner: owner.clone(),
         repo_name: repo,
-        branch: "main".into(),
+        branch: input
+            .branch
+            .clone()
+            .map(|b| b.trim().to_string())
+            .filter(|b| !b.is_empty())
+            .unwrap_or_else(|| "main".into()),
         node_version: input.node_version.clone().unwrap_or_else(|| "20".into()),
         build_command: input
             .build_command
             .clone()
             .unwrap_or_else(|| "npm install && npx hexo generate".into()),
-        output_dir: "public".into(),
+        output_dir: input
+            .output_dir
+            .clone()
+            .map(|d| d.trim().trim_end_matches('/').to_string())
+            .filter(|d| !d.is_empty())
+            .unwrap_or_else(|| "public".into()),
         env_vars,
         edge_provider: input
             .edge_provider
@@ -421,11 +459,21 @@ pub fn preview_all(input: &crate::models::GenerateConfigInput) -> AppResult<Vec<
             .clone()
             .unwrap_or_else(|| vec!["github".into()]),
     );
+    // 边缘层文件与「选了哪些 Pages 平台」无关：它由「启用边缘层」开关（edge_provider）决定。
+    // 此前用 platforms.contains("edge") 判断，而 ci_platforms 里永远不会有 "edge"，
+    // 于是这两个文件从未被生成过 —— 界面上却写着会生成。
+    let edge_enabled = {
+        let p = ctx.edge_provider.trim();
+        !p.is_empty() && p != "none"
+    };
 
     let mut files = Vec::new();
     for tpl in TEMPLATES {
-        // 边缘层配置与 README 始终生成（只要有 github 或任何平台）
-        let include = platforms.contains(&tpl.platform);
+        let include = match tpl.scope {
+            Scope::Platform => platforms.contains(&tpl.platform),
+            Scope::Edge => edge_enabled,
+            Scope::Common => true,
+        };
         if !include {
             continue;
         }
@@ -527,6 +575,11 @@ fn platform_meta(platform: &str) -> (&'static str, &'static str, &'static str) {
             "边缘层配置",
             "智能回源、故障转移与多源站容灾配置脚本",
             "https://developers.cloudflare.com/workers/",
+        ),
+        "common" => (
+            "通用配置",
+            "部署说明文档，所有平台通用",
+            "",
         ),
         _ => ("未知平台", "", ""),
     }

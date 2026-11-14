@@ -132,7 +132,7 @@ export function LogViewer({
         '',
       ].join('\n');
 
-      await fileService.write(target, `${header}${lines.join('\n')}\n`);
+      await fileService.write(target, `${header}${lines.join('\n')}\n`, true);
       message.success(t('日志已导出'));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));

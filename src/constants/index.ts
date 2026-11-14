@@ -224,10 +224,13 @@ export const NODE_VERSIONS = ['18', '20', '22', 'lts/*'] as const;
 
 /** 常用构建命令 */
 export const BUILD_COMMANDS = [
-  { label: 'hexo clean && hexo generate', value: 'hexo clean && hexo generate' },
+  {
+    label: 'npm install && npx hexo clean && npx hexo generate',
+    value: 'npm install && npx hexo clean && npx hexo generate',
+  },
+  { label: 'npm ci && npx hexo generate', value: 'npm ci && npx hexo generate' },
   { label: 'npm run build', value: 'npm run build' },
-  { label: 'npm ci && hexo generate', value: 'npm ci && hexo generate' },
-  { label: 'pnpm install && hexo generate', value: 'pnpm install && hexo generate' },
+  { label: 'pnpm install && pnpm hexo generate', value: 'pnpm install && pnpm hexo generate' },
 ] as const;
 
 /** 侧栏导航项 */

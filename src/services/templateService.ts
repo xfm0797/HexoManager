@@ -1,6 +1,6 @@
 /** Front Matter 模板服务层 */
 
-import { call, callSafe } from './invoke';
+import { call } from './invoke';
 import type {
   ApplyTemplateInput,
   ApplyTemplateResult,
@@ -11,7 +11,7 @@ import type {
 export const templateService = {
   /** 获取全部模板（首次调用时后端会播种内置模板） */
   list(): Promise<FrontMatterTemplate[]> {
-    return callSafe<FrontMatterTemplate[]>('get_front_matter_templates', undefined, []);
+    return call<FrontMatterTemplate[]>('get_front_matter_templates');
   },
 
   /** 新建或更新模板 */

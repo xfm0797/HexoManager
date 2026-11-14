@@ -137,18 +137,33 @@ export const useDeployStore = create<DeployState>((set, get) => ({
   },
 
   async fetchLogs(siteId, limit = 50) {
-    const logs = await deployService.logs(siteId, limit);
-    set({ logs });
+    set({ error: null });
+    try {
+      const logs = await deployService.logs(siteId, limit);
+      set({ logs });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+    }
   },
 
   async fetchGitStatus(siteId) {
-    const gitStatus = await gitService.status(siteId);
-    set({ gitStatus });
+    set({ error: null });
+    try {
+      const gitStatus = await gitService.status(siteId);
+      set({ gitStatus });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+    }
   },
 
   async fetchCommits(siteId, limit = 50) {
-    const commits = await gitService.log(siteId, limit);
-    set({ commits });
+    set({ error: null });
+    try {
+      const commits = await gitService.log(siteId, limit);
+      set({ commits });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+    }
   },
 
   async deploy(siteId, message, options) {

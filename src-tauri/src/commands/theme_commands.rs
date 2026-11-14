@@ -1,7 +1,8 @@
 //! 主题管理命令（对应大纲 7.7）。
 
-use crate::db::Db;
+use crate::db::{site_path_of, Db};
 use crate::models::{Theme, ThemeConfig, ThemeInfo};
+use crate::utils::blocking;
 use crate::utils::error::{AppError, AppResult};
 use crate::utils::{format_system_time, process};
 use crate::AppState;
@@ -10,15 +11,6 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
-fn site_path_of(db: &Db, site_id: i64) -> AppResult<String> {
-    let conn = db.conn()?;
-    conn.query_row(
-        "SELECT path FROM sites WHERE id = ?1",
-        params![site_id],
-        |r| r.get(0),
-    )
-    .map_err(|_| AppError::NotFound(format!("站点不存在：{}", site_id)))
-}
 
 /// 读取站点 _config.yml 中当前启用的主题名。
 ///
@@ -124,74 +116,83 @@ fn read_theme_meta(
 }
 
 /// 获取已安装主题列表。
+///
+/// 会遍历 `themes/` 下每个子目录并读取其 `package.json`，主题多时达几十次 IO，
+/// 因此放到阻塞线程池执行（同步命令在 Tauri 2 会跑在主线程上）。
 #[tauri::command]
-pub fn get_themes(state: State<'_, AppState>, site_id: i64) -> Result<Vec<Theme>, String> {
-    let db = &state.db;
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
-    let active = current_theme(&site_path);
+pub async fn get_themes(
+    state: State<'_, AppState>,
+    site_id: i64,
+) -> Result<Vec<Theme>, String> {
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || {
+        let site_path = site_path_of(&db, site_id).map_err(|e| e.to_string())?;
+        let active = current_theme(&site_path);
 
-    let themes_dir = Path::new(&site_path).join("themes");
-    let mut themes = Vec::new();
+        let themes_dir = Path::new(&site_path).join("themes");
+        let mut themes = Vec::new();
 
-    if themes_dir.exists() {
-        let entries = std::fs::read_dir(&themes_dir).map_err(|e| e.to_string())?;
-        for entry in entries.flatten() {
-            if !entry.path().is_dir() {
-                continue;
+        if themes_dir.exists() {
+            let entries = std::fs::read_dir(&themes_dir).map_err(|e| e.to_string())?;
+            for entry in entries.flatten() {
+                if !entry.path().is_dir() {
+                    continue;
+                }
+                let name = entry.file_name().to_string_lossy().to_string();
+                // 跳过系统目录
+                if name.starts_with('.') || name == "_config.yml" {
+                    continue;
+                }
+
+                let (version, description, author, repo) = read_theme_meta(&entry.path());
+                let has_config = entry.path().join("_config.yml").exists();
+                let installed_at = entry
+                    .metadata()
+                    .ok()
+                    .and_then(|m| m.created().or_else(|_| m.modified()).ok())
+                    .and_then(format_system_time);
+
+                themes.push(Theme {
+                    is_active: name == active,
+                    name,
+                    path: entry.path().display().to_string(),
+                    version,
+                    description,
+                    author,
+                    repo,
+                    has_config,
+                    installed_at,
+                });
             }
-            let name = entry.file_name().to_string_lossy().to_string();
-            // 跳过系统目录
-            if name.starts_with('.') || name == "_config.yml" {
-                continue;
+        }
+
+        // 即使 themes 目录为空，也把当前主题作为条目返回
+        if themes.is_empty() || !themes.iter().any(|t| t.is_active) {
+            let default_dir = themes_dir.join(&active);
+            if default_dir.exists() {
+                let (version, description, author, repo) = read_theme_meta(&default_dir);
+                themes.push(Theme {
+                    name: active.clone(),
+                    path: default_dir.display().to_string(),
+                    version,
+                    description,
+                    author,
+                    repo,
+                    is_active: true,
+                    has_config: default_dir.join("_config.yml").exists(),
+                    installed_at: None,
+                });
             }
-
-            let (version, description, author, repo) = read_theme_meta(&entry.path());
-            let has_config = entry.path().join("_config.yml").exists();
-            let installed_at = entry
-                .metadata()
-                .ok()
-                .and_then(|m| m.created().or_else(|_| m.modified()).ok())
-                .and_then(format_system_time);
-
-            themes.push(Theme {
-                is_active: name == active,
-                name,
-                path: entry.path().display().to_string(),
-                version,
-                description,
-                author,
-                repo,
-                has_config,
-                installed_at,
-            });
         }
-    }
 
-    // 即使 themes 目录为空，也把当前主题作为条目返回
-    if themes.is_empty() || !themes.iter().any(|t| t.is_active) {
-        let default_dir = themes_dir.join(&active);
-        if default_dir.exists() {
-            let (version, description, author, repo) = read_theme_meta(&default_dir);
-            themes.push(Theme {
-                name: active.clone(),
-                path: default_dir.display().to_string(),
-                version,
-                description,
-                author,
-                repo,
-                is_active: true,
-                has_config: default_dir.join("_config.yml").exists(),
-                installed_at: None,
-            });
-        }
-    }
-
-    themes.sort_by(|a, b| {
-        b.is_active
-            .cmp(&a.is_active)
-            .then_with(|| a.name.cmp(&b.name))
-    });
-    Ok(themes)
+        themes.sort_by(|a, b| {
+            b.is_active
+                .cmp(&a.is_active)
+                .then_with(|| a.name.cmp(&b.name))
+        });
+        Ok(themes)
+    })
+    .await
 }
 
 /// 安装主题。
@@ -257,14 +258,14 @@ async fn install_theme_impl(
         }
     } else if Path::new(&src).is_absolute() && Path::new(&src).exists() {
         // 本地目录复制
-        copy_dir(Path::new(&src), &target)?;
+        crate::utils::fs::copy_dir_skipping(
+            Path::new(&src),
+            &target,
+            crate::utils::fs::SKIP_VCS_AND_DEPS,
+        )?;
     } else {
         // npm 安装
-        let npm_bin = if cfg!(target_os = "windows") {
-            "npm.cmd"
-        } else {
-            "npm"
-        };
+        let npm_bin = crate::utils::node::npm();
         let out = process::run(
             npm_bin,
             &["install", &format!("{}@latest", name), "--save"],
@@ -283,7 +284,11 @@ async fn install_theme_impl(
         // npm 安装后把 node_modules 中的主题复制到 themes 目录
         let installed = Path::new(&site_path).join("node_modules").join(name);
         if installed.exists() {
-            copy_dir(&installed, &target)?;
+            crate::utils::fs::copy_dir_skipping(
+                &installed,
+                &target,
+                crate::utils::fs::SKIP_VCS_AND_DEPS,
+            )?;
         } else {
             // 部分主题通过 npm 安装后由 Hexo 直接识别，无需复制
             return Err(AppError::Other(format!(
@@ -318,26 +323,6 @@ async fn install_theme_impl(
         has_config: target.join("_config.yml").exists(),
         installed_at: Some(crate::utils::now_utc()),
     })
-}
-
-fn copy_dir(src: &Path, dst: &Path) -> AppResult<()> {
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        // 跳过版本库与依赖
-        let n = name.to_string_lossy();
-        if n == ".git" || n == "node_modules" {
-            continue;
-        }
-        let to = dst.join(&name);
-        if entry.file_type()?.is_dir() {
-            copy_dir(&entry.path(), &to)?;
-        } else {
-            std::fs::copy(entry.path(), &to)?;
-        }
-    }
-    Ok(())
 }
 
 /// 切换站点主题（写入 `_config.yml` 的 theme 字段）。
@@ -380,14 +365,48 @@ pub async fn switch_theme(
     Ok(())
 }
 
+/// 主题配置文件的候选路径，按 Hexo 的实际生效优先级排序。
+///
+/// 1. `_config.<theme>.yml`：站点级覆盖，官方推荐做法，主题升级不会丢
+/// 2. `_config.<theme>.yaml`：同上，另一种扩展名
+/// 3. `themes/<theme>/_config.yml`：主题自带默认值
+/// 4. `themes/<theme>/_config.yaml`
+///
+/// 历史 bug：主题内 `_config.yml` 曾排在站点级覆盖之前，而几乎所有主题都自带
+/// 该文件，于是 `_config.<theme>.yml` 永远读不到 —— 用户看到主题默认值，
+/// 修改又写进被覆盖的那份，表现就是「改了配置没效果」。
+fn theme_config_candidates(site_root: &Path, theme: &str) -> [std::path::PathBuf; 4] {
+    [
+        site_root.join(format!("_config.{}.yml", theme)),
+        site_root.join(format!("_config.{}.yaml", theme)),
+        site_root.join("themes").join(theme).join("_config.yml"),
+        site_root.join("themes").join(theme).join("_config.yaml"),
+    ]
+}
+
+/// 取实际生效的主题配置文件：命中的第一个候选路径。
+fn resolve_theme_config_path(site_root: &Path, theme: &str) -> Option<std::path::PathBuf> {
+    theme_config_candidates(site_root, theme)
+        .into_iter()
+        .find(|p| p.exists())
+}
+
 /// 获取主题配置（结构化 + 原始文本）。
 #[tauri::command]
-pub fn get_theme_config(
+pub async fn get_theme_config(
     state: State<'_, AppState>,
     site_id: i64,
     theme: Option<String>,
 ) -> Result<ThemeConfig, String> {
-    let db = &state.db;
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || get_theme_config_impl(&db, site_id, theme)).await
+}
+
+fn get_theme_config_impl(
+    db: &Db,
+    site_id: i64,
+    theme: Option<String>,
+) -> Result<ThemeConfig, String> {
     let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
 
     // 优先使用调用方指定的主题名（来自界面点击的那个主题卡片）
@@ -399,23 +418,21 @@ pub fn get_theme_config(
     let site_root = Path::new(&site_path);
     let active = current_theme(&site_path);
 
-    // 主题配置的常见存放位置，按 Hexo 实际约定排序：
-    // 1. themes/<theme>/_config.yml        主题自带默认配置
-    // 2. _config.<theme>.yml               站点级覆盖（官方推荐做法）
-    // 3. themes/<theme>/_config.yaml       少见的 yaml 扩展名
-    let candidates = [
-        site_root.join("themes").join(&theme_name).join("_config.yml"),
-        site_root.join(format!("_config.{}.yml", theme_name)),
-        site_root.join("themes").join(&theme_name).join("_config.yaml"),
-    ];
-
-    for path in candidates.iter() {
+    // 按 Hexo 的实际生效顺序查找：站点级覆盖优先于主题自带文件
+    for path in theme_config_candidates(site_root, &theme_name).iter() {
         if path.exists() {
-            let raw = std::fs::read_to_string(path).map_err(|e| {
-                format!("读取主题配置失败（{}）：{}", path.display(), e)
-            })?;
+            let raw = std::fs::read_to_string(path)
+                .map_err(|e| format!("读取主题配置失败（{}）：{}", path.display(), e))?;
             let config = crate::hexo::config_parser::parse_yaml_str(&raw)
                 .map_err(|e| format!("解析主题配置失败（{}）：{}", path.display(), e))?;
+
+            // 站点级覆盖文件位于站点根目录下，用于 UI 提示覆盖关系
+            let is_site_override = path.parent() == Some(site_root);
+            let source_path = path
+                .strip_prefix(site_root)
+                .unwrap_or(path)
+                .display()
+                .to_string();
 
             return Ok(ThemeConfig {
                 is_active: theme_name == active,
@@ -423,6 +440,8 @@ pub fn get_theme_config(
                 theme_name,
                 config,
                 raw,
+                source_path,
+                is_site_override,
             });
         }
     }
@@ -489,18 +508,30 @@ pub fn get_theme_config(
 
 /// 更新主题配置。
 #[tauri::command]
-pub fn update_theme_config(
+pub async fn update_theme_config(
     state: State<'_, AppState>,
     site_id: i64,
     theme: String,
     config: Option<Value>,
     raw: Option<String>,
 ) -> Result<(), String> {
-    let db = &state.db;
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || update_theme_config_impl(&db, site_id, theme, config, raw)).await
+}
+
+fn update_theme_config_impl(
+    db: &Db,
+    site_id: i64,
+    theme: String,
+    config: Option<Value>,
+    raw: Option<String>,
+) -> Result<(), String> {
     let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
 
-    let theme_dir = Path::new(&site_path).join("themes").join(&theme);
-    let cfg_path = theme_dir.join("_config.yml");
+    let site_root = Path::new(&site_path);
+    // 写回「当前实际生效」的那份文件：读哪里写哪里，否则改的是被覆盖的文件
+    let cfg_path = resolve_theme_config_path(site_root, &theme)
+        .unwrap_or_else(|| site_root.join(format!("_config.{}.yml", theme)));
 
     // 优先使用原始文本写入，保留注释与缩进风格
     if let Some(raw_text) = raw {
@@ -671,20 +702,26 @@ fn theme_info(
 }
 
 /// 卸载主题。
+///
+/// `remove_dir_all` 可能上千个文件（主题自带 assets），放到阻塞线程池。
 #[tauri::command]
-pub fn uninstall_theme(
+pub async fn uninstall_theme(
     state: State<'_, AppState>,
     site_id: i64,
     name: String,
 ) -> Result<(), String> {
-    let db = &state.db;
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || uninstall_theme_impl(&db, site_id, &name)).await
+}
+
+fn uninstall_theme_impl(db: &Db, site_id: i64, name: &str) -> Result<(), String> {
     let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
 
     if current_theme(&site_path) == name {
         return Err(format!("主题 `{}` 正在使用中，请先切换到其他主题", name));
     }
 
-    let theme_dir = Path::new(&site_path).join("themes").join(&name);
+    let theme_dir = Path::new(&site_path).join("themes").join(name);
     if !theme_dir.exists() {
         return Err(format!("主题不存在：{}", name));
     }
@@ -719,11 +756,7 @@ pub async fn update_theme(
     }
 
     // 回退到 npm 更新
-    let npm_bin = if cfg!(target_os = "windows") {
-        "npm.cmd"
-    } else {
-        "npm"
-    };
+    let npm_bin = crate::utils::node::npm();
     let pkg = format!("hexo-theme-{}", name.trim_start_matches("hexo-theme-"));
     let out = process::run(
         npm_bin,
@@ -746,14 +779,18 @@ pub async fn update_theme(
 
 /// 打开主题演示链接（返回链接供前端打开）。
 #[tauri::command]
-pub fn get_theme_preview_url(
+pub async fn get_theme_preview_url(
     state: State<'_, AppState>,
     site_id: i64,
     name: String,
 ) -> Result<String, String> {
-    let db = &state.db;
+    let db = Db::from_arc(&state.db);
+    blocking::cmd(move || get_theme_preview_url_impl(&db, site_id, &name)).await
+}
+
+fn get_theme_preview_url_impl(db: &Db, site_id: i64, name: &str) -> Result<String, String> {
     let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
-    let theme_dir = Path::new(&site_path).join("themes").join(&name);
+    let theme_dir = Path::new(&site_path).join("themes").join(name);
 
     if !theme_dir.exists() {
         return Err(format!("主题不存在：{}", name));
@@ -863,23 +900,51 @@ mod tests {
         let _ = fs::remove_dir_all(&site);
     }
 
-    /// 官方推荐做法：站点根目录的 _config.<theme>.yml 也应被找到
+    /// 官方推荐做法：站点根目录的 `_config.<theme>.yml` 是主题配置的覆盖层，
+    /// **必须优先于**主题自带的 `_config.yml`（后者只是默认值）。
+    ///
+    /// 历史 bug：顺序反了，几乎所有主题都自带 `_config.yml`，
+    /// 导致站点级覆盖永远读不到、写回也写进被覆盖的那份 →「改了没效果」。
     #[test]
-    fn test_theme_config_candidate_order_covers_site_level_override() {
+    fn test_theme_config_prefers_site_level_override() {
         let site = temp_site("override");
-        fs::create_dir_all(site.join("themes").join("next")).unwrap();
         write(
-            &site.join("_config.next.yml"),
-            "menu:\n  home: /\n",
+            &site.join("themes").join("next").join("_config.yml"),
+            "menu:\n  home: /default\n",
+        );
+        write(&site.join("_config.next.yml"), "menu:\n  home: /override\n");
+
+        let resolved = resolve_theme_config_path(&site, "next").expect("应能解析到配置文件");
+        assert_eq!(
+            resolved.file_name().unwrap().to_string_lossy(),
+            "_config.next.yml",
+            "站点级覆盖必须优先，实际取到：{}",
+            resolved.display()
+        );
+        let _ = fs::remove_dir_all(&site);
+    }
+
+    /// 没有站点级覆盖时回退到主题自带配置。
+    #[test]
+    fn test_theme_config_falls_back_to_theme_dir() {
+        let site = temp_site("theme-only");
+        write(
+            &site.join("themes").join("next").join("_config.yml"),
+            "menu:\n  home: /default\n",
         );
 
-        let candidates = [
-            site.join("themes").join("next").join("_config.yml"),
-            site.join("_config.next.yml"),
-            site.join("themes").join("next").join("_config.yaml"),
-        ];
-        let hit = candidates.iter().find(|p| p.exists()).unwrap();
-        assert!(hit.ends_with("_config.next.yml"));
+        let resolved = resolve_theme_config_path(&site, "next").expect("应能解析到配置文件");
+        assert!(resolved.starts_with(site.join("themes").join("next")));
+        let _ = fs::remove_dir_all(&site);
+    }
+
+    /// 两份都不存在时不返回任何路径（由调用方决定新建站点级覆盖）。
+    #[test]
+    fn test_theme_config_missing_returns_none() {
+        let site = temp_site("missing");
+        fs::create_dir_all(site.join("themes").join("next")).unwrap();
+
+        assert!(resolve_theme_config_path(&site, "next").is_none());
         let _ = fs::remove_dir_all(&site);
     }
 }

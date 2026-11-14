@@ -41,7 +41,7 @@ import {
 import { useArticles, useDeploy, useHexoServer, useSites } from '@/hooks';
 import { useDeployStore, useSiteStore } from '@/stores';
 import type { Article as ArticleType } from '@/types';
-import { formatCompactNumber, formatDuration, formatRelative } from '@/utils/format';
+import { formatCompactNumber, formatDuration, formatRelative, toTimestamp } from '@/utils/format';
 import { DEPLOY_STATUS_META } from '@/constants';
 import { DeployStatusBadge, StatusDot } from '@/components/StatusBadge';
 import { useI18n } from '@/i18n';
@@ -75,12 +75,10 @@ export function DashboardPage() {
   }, [currentSiteId, fetchStats]);
 
   useEffect(() => {
-    // 按最近部署时间排序，取前 6 个
-    const sorted = [...sites].sort((a, b) => {
-      const aTime = a.lastDeployAt ? new Date(a.lastDeployAt).getTime() : 0;
-      const bTime = b.lastDeployAt ? new Date(b.lastDeployAt).getTime() : 0;
-      return bTime - aTime;
-    });
+    // 按最近部署时间排序，取前 6 个（后端时间是 UTC 无时区，须统一解析）
+    const sorted = [...sites].sort(
+      (a, b) => toTimestamp(b.lastDeployAt) - toTimestamp(a.lastDeployAt),
+    );
     setRecentSites(sorted.slice(0, 6));
   }, [sites]);
 

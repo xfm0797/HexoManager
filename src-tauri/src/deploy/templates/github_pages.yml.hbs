@@ -38,11 +38,9 @@ jobs:
           node-version: '{{node_version}}'
           cache: npm
 
-      - name: 安装依赖
-        run: npm install
-
-      - name: 生成静态文件
-        run: npx hexo generate
+      # 构建命令来自「部署配置 → 构建命令」，默认 npm install && npx hexo generate
+      - name: 安装依赖并生成静态文件
+        run: {{build_command}}
 
       - name: 配置 Pages
         uses: actions/configure-pages@v5
