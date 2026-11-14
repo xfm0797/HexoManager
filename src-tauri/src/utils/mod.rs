@@ -113,23 +113,28 @@ pub fn local_time_to_utc(raw: &str) -> Option<String> {
         return None;
     }
 
-    // 1) 带时区偏移或 Z 后缀：按其自身时区解析后折算
+    // 1) RFC 3339：`Z` 后缀与 `+08:00` 形态都接受。
+    //    不能用 `%:z` 处理 `Z` —— 它只匹配 `+08:00`；而 `%Z` 匹配的是时区**名称**
+    //    （`UTC` / `GMT`），`Z` 后缀会解析失败（曾因此让 `...Z` 直接返回 None）。
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+        return Some(format_utc(dt));
+    }
+
+    // 2) RFC 3339 之外的带偏移写法：`+0800`（无冒号）、空格分隔、只有时:分
     for fmt in [
         "%Y-%m-%dT%H:%M:%S%.f%:z",
         "%Y-%m-%d %H:%M:%S%.f%:z",
-        "%Y-%m-%dT%H:%M:%S%.fZ",
-        "%Y-%m-%d %H:%M:%S%.fZ",
+        "%Y-%m-%dT%H:%M:%S%.f%z",
+        "%Y-%m-%d %H:%M:%S%.f%z",
+        "%Y-%m-%dT%H:%M%.f%:z",
+        "%Y-%m-%d %H:%M%.f%:z",
     ] {
         if let Ok(dt) = chrono::DateTime::parse_from_str(s, fmt) {
-            return Some(
-                dt.with_timezone(&chrono::Utc)
-                    .format("%Y-%m-%d %H:%M:%S")
-                    .to_string(),
-            );
+            return Some(format_utc(dt));
         }
     }
 
-    // 2) 不带时区：Hexo 惯例按本地时间解释
+    // 3) 不带时区：Hexo 惯例是本地时间，按本地时区解释后折算
     for fmt in [
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%dT%H:%M:%S",
@@ -137,32 +142,21 @@ pub fn local_time_to_utc(raw: &str) -> Option<String> {
         "%Y-%m-%dT%H:%M",
     ] {
         if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(s, fmt) {
-            return naive
-                .and_local_timezone(chrono::Local)
-                .single()
-                .map(|local| {
-                    local
-                        .with_timezone(&chrono::Utc)
-                        .format("%Y-%m-%d %H:%M:%S")
-                        .to_string()
-                });
+            return Some(format_utc(naive.and_local_timezone(chrono::Local).single()?));
         }
     }
 
-    // 3) 只有日期
-    if let Ok(date) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
-        return date
-            .and_hms_opt(0, 0, 0)
-            .and_then(|naive| naive.and_local_timezone(chrono::Local).single())
-            .map(|local| {
-                local
-                    .with_timezone(&chrono::Utc)
-                    .format("%Y-%m-%d %H:%M:%S")
-                    .to_string()
-            });
-    }
+    // 4) 只有日期
+    let date = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok()?;
+    let naive = date.and_hms_opt(0, 0, 0)?;
+    Some(format_utc(naive.and_local_timezone(chrono::Local).single()?))
+}
 
-    None
+/// 折算成数据库统一的 UTC 字符串形态（`YYYY-MM-DD HH:MM:SS`）。
+fn format_utc<Tz: chrono::TimeZone>(dt: chrono::DateTime<Tz>) -> String {
+    dt.with_timezone(&chrono::Utc)
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string()
 }
 
 /// 计算 Markdown 文本的中文字数/英文词数近似值。
@@ -230,6 +224,16 @@ mod tests {
         assert_eq!(
             local_time_to_utc("2026-11-14 22:00:00-05:00").as_deref(),
             Some("2026-11-15 03:00:00")
+        );
+        // `Z` 带小数秒：RFC 3339 解析器接受，按秒截断
+        assert_eq!(
+            local_time_to_utc("2026-11-14T22:00:00.500Z").as_deref(),
+            Some("2026-11-14 22:00:00")
+        );
+        // 无冒号偏移（`+0800`）：RFC 3339 不认，走 `%z` 兜底
+        assert_eq!(
+            local_time_to_utc("2026-11-14T22:00:00+0800").as_deref(),
+            Some("2026-11-14 14:00:00")
         );
     }
 

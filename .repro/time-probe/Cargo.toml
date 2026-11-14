@@ -1,0 +1,9 @@
+[package]
+name = "time-probe"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+chrono = "0.4"
+
+[workspace]
