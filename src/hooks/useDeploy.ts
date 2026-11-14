@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { App as AntdApp } from 'antd';
+import type { UnlistenFn } from '@tauri-apps/api/event';
 import { useDeployStore } from '@/stores';
+import { listen } from '@/services/invoke';
 import { t } from '@/i18n';
 import type {
   DeployConfig,
@@ -111,6 +113,17 @@ export function useDeploy(siteId: number | null) {
       if (siteId === null) throw new Error(t('未选择站点'));
       setLogLines([]);
 
+      // 实时追加后端进度事件（git 暂存 / 提交 / 推送），
+      // 而不是等命令返回后把 output 一次性回放。构建阶段仍以最终输出为准。
+      let unlisten: UnlistenFn | null = null;
+      try {
+        unlisten = await listen<string>('deploy:log', (event) => {
+          setLogLines((prev) => [...prev, event.payload]);
+        });
+      } catch {
+        // 事件通道不可用（非 Tauri 环境）时退化为只显示最终输出
+      }
+
       try {
         const result = await deploy(siteId, commitMessage, {
           skipBuild: options?.skipBuild,
@@ -121,6 +134,8 @@ export function useDeploy(siteId: number | null) {
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
         throw e;
+      } finally {
+        unlisten?.();
       }
     },
     [siteId, deploy, message],

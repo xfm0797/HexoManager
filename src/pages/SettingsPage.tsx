@@ -1,6 +1,6 @@
 /** 偏好设置：外观、编辑体验、默认值与更新策略 */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   App as AntdApp,
@@ -19,6 +19,7 @@ import {
   DatabaseOutlined,
   DeleteOutlined,
   EditOutlined,
+  FileTextOutlined,
   FolderOpenOutlined,
   InfoCircleOutlined,
   ReloadOutlined,
@@ -29,7 +30,8 @@ import {
 import { FrontMatterTemplatesPanel, PageContainer, SettingsPanel } from '@/components';
 import { useUiStore } from '@/stores';
 import { APP_META } from '@/constants';
-import { copyToClipboard, openWithSystem } from '@/utils/desktop';
+import { copyToClipboard, openWithSystem, pickSavePath } from '@/utils/desktop';
+import { diagnosticService } from '@/services/diagnosticService';
 import { useI18n } from '@/i18n';
 
 /** 本地存储键前缀 */
@@ -56,12 +58,47 @@ export function SettingsPage() {
   const { t, locale } = useI18n();
   const [activeTab, setActiveTab] = useState('preferences');
   const [storageKeys, setStorageKeys] = useState(() => listLocalStorage());
+  const [logDir, setLogDir] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const isDark = useUiStore((s) => s.isDark);
   const themeMode = useUiStore((s) => s.themeMode);
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
 
   const totalSize = storageKeys.reduce((sum, item) => sum + item.size, 0);
+
+  useEffect(() => {
+    // 日志目录只在需要展示时读一次；读失败（后端未就绪）静默留空
+    void diagnosticService
+      .logDir()
+      .then((dir) => setLogDir(dir))
+      .catch(() => setLogDir(null));
+  }, []);
+
+  /** 导出诊断日志：让用户挑位置，写一个可直接发送的合并文本 */
+  const handleExportLogs = async () => {
+    const stamp = new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replace(/[:T]/g, '')
+      .replace(/-/g, '');
+    const target = await pickSavePath({
+      title: '导出诊断日志',
+      defaultPath: `hexomanager-logs-${stamp}.txt`,
+      filters: [{ name: 'Text', extensions: ['txt', 'log'] }],
+    });
+    if (!target) return;
+
+    setExporting(true);
+    try {
+      const written = await diagnosticService.exportTo(target);
+      message.success(t('诊断日志已导出：{path}', { path: written }));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleClearStorage = () => {
     storageKeys.forEach((item) => {
@@ -248,6 +285,46 @@ export function SettingsPage() {
                             {t('打开工作目录')}
                           </Button>
                         </Space>
+
+                        <Card
+                          size="small"
+                          title={
+                            <Space>
+                              <FileTextOutlined />
+                              <span>{t('诊断日志')}</span>
+                            </Space>
+                          }
+                        >
+                          <div className="space-y-3">
+                            <div className="text-xs leading-relaxed hm-text-secondary">
+                              {t(
+                                '后端命令失败、预览服务启停、更新检查结果都会记录到本机日志（按天切分，保留 7 天），不含文章正文与站点路径以外的个人信息。遇到问题时导出并附在反馈里，能大幅缩短定位时间。',
+                              )}
+                            </div>
+                            {logDir ? (
+                              <div className="hm-mono truncate text-xs hm-text-secondary">
+                                {logDir}
+                              </div>
+                            ) : null}
+                            <Space wrap>
+                              <Button
+                                type="primary"
+                                icon={<FileTextOutlined />}
+                                loading={exporting}
+                                onClick={() => void handleExportLogs()}
+                              >
+                                {t('导出诊断日志')}
+                              </Button>
+                              <Button
+                                icon={<FolderOpenOutlined />}
+                                disabled={!logDir}
+                                onClick={() => logDir && void openWithSystem(logDir)}
+                              >
+                                {t('打开日志目录')}
+                              </Button>
+                            </Space>
+                          </div>
+                        </Card>
                       </div>
                     ),
                   },
