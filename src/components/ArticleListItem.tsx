@@ -16,7 +16,7 @@ import {
 } from '@ant-design/icons';
 import type { Article } from '@/types';
 import { formatRelative, truncate } from '@/utils/format';
-import { estimateReadingTime } from '@/utils/markdown';
+import { readingTimeFromWords } from '@/utils/markdown';
 import { useI18n } from '@/i18n';
 import { TagList } from './TagInput';
 
@@ -148,7 +148,8 @@ export function ArticleListItem({
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs hm-text-secondary">
             <span>{formatRelative(article.updatedAt ?? article.createdAt)}</span>
             <span>{t('{count} 字', { count: article.wordCount })}</span>
-            <span>{t('约 {min} 分钟', { min: estimateReadingTime(article.content ?? '') })}</span>
+            {/* 列表项不回传正文，阅读时长按库里的字数估算 */}
+            <span>{t('约 {min} 分钟', { min: readingTimeFromWords(article.wordCount) })}</span>
             {article.categories.length > 0 ? (
               <TagList values={article.categories} color="purple" max={2} />
             ) : null}

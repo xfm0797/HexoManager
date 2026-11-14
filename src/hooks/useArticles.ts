@@ -5,6 +5,9 @@ import { useArticleStore, useSiteStore } from '@/stores';
 import { articleService } from '@/services';
 import type { Article, CommitLog, UpdateArticleInput } from '@/types';
 
+/** 本次会话内已扫描过的站点：切换回同一站点时不重复全站扫描 */
+const scannedSites = new Set<number>();
+
 /** 文章列表（自动跟随当前站点） */
 export function useArticles(options?: { autoFetch?: boolean }) {
   const autoFetch = options?.autoFetch ?? true;
@@ -20,11 +23,6 @@ export function useArticles(options?: { autoFetch?: boolean }) {
   const fetchArticles = useArticleStore((s) => s.fetchArticles);
   const setQuery = useArticleStore((s) => s.setQuery);
 
-  useEffect(() => {
-    if (!autoFetch || siteId === null) return;
-    void fetchArticles(siteId, { reset: true });
-  }, [autoFetch, siteId, fetchArticles]);
-
   const paginate = useCallback(
     (nextPage: number, nextLimit?: number) => {
       if (siteId === null) return Promise.resolve();
@@ -32,6 +30,34 @@ export function useArticles(options?: { autoFetch?: boolean }) {
     },
     [siteId, limit, fetchArticles],
   );
+
+  /**
+   * 重新拉取列表。
+   *
+   * `rescan` 为 true 时先让后端重新扫描磁盘（手动刷新按钮）；普通翻页/搜索只读库。
+   */
+  const refresh = useCallback(
+    async (rescan = false) => {
+      if (siteId === null) return;
+      if (rescan) {
+        try {
+          await articleService.rescan(siteId);
+        } catch {
+          // 扫描失败不应阻断列表展示：库里仍会有上一次的结果
+        }
+      }
+      await fetchArticles(siteId, { reset: true });
+    },
+    [siteId, fetchArticles],
+  );
+
+  useEffect(() => {
+    if (!autoFetch || siteId === null) return;
+    // 每个站点在本次会话内首次进入时扫一次磁盘，之后只读库
+    const needsScan = !scannedSites.has(siteId);
+    if (needsScan) scannedSites.add(siteId);
+    void refresh(needsScan);
+  }, [autoFetch, siteId, refresh]);
 
   return {
     articles,
@@ -43,7 +69,7 @@ export function useArticles(options?: { autoFetch?: boolean }) {
     query,
     setQuery,
     paginate,
-    refresh: () => (siteId === null ? Promise.resolve() : fetchArticles(siteId, { reset: true })),
+    refresh,
   };
 }
 

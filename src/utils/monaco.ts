@@ -10,17 +10,19 @@
  * 彻底去掉运行时的 CDN 依赖（同时规避离线/内网环境不可用问题）。
  */
 
-import * as monaco from 'monaco-editor';
+import monaco from './monacoEntry';
 import { loader } from '@monaco-editor/react';
 
 // Vite 会把这些 worker 单独打包并返回构造函数。
 // 注意：monaco-editor@0.57 的 package.json `exports` 把子路径映射为
 // `./esm/vs/*.js`，因此这里必须去掉 `esm/vs/` 前缀并保留 `.js` 扩展名。
+//
+// 只保留真正会用到的 worker：项目里的编辑器语言只有 markdown / yaml / json /
+// ini / shell / javascript（后两者用 monarch 词法高亮，不需要语言服务）。
+// 之前同时引入了 ts（6.8MB）、css（1.1MB）、html（700KB）三个 worker，
+// 它们从未被任何文件类型触发，纯粹是安装包体积。
 import editorWorker from 'monaco-editor/editor/editor.worker.js?worker';
 import jsonWorker from 'monaco-editor/language/json/json.worker.js?worker';
-import cssWorker from 'monaco-editor/language/css/css.worker.js?worker';
-import htmlWorker from 'monaco-editor/language/html/html.worker.js?worker';
-import tsWorker from 'monaco-editor/language/typescript/ts.worker.js?worker';
 
 type MonacoWorkerFactory = (moduleId: string, label: string) => Worker;
 
@@ -28,23 +30,10 @@ type MonacoWorkerFactory = (moduleId: string, label: string) => Worker;
 (globalThis as unknown as { MonacoEnvironment: { getWorker: MonacoWorkerFactory } }).MonacoEnvironment =
   {
     getWorker(_moduleId, label) {
-      switch (label) {
-        case 'json':
-          return new jsonWorker();
-        case 'css':
-        case 'scss':
-        case 'less':
-          return new cssWorker();
-        case 'html':
-        case 'handlebars':
-        case 'razor':
-          return new htmlWorker();
-        case 'typescript':
-        case 'javascript':
-          return new tsWorker();
-        default:
-          return new editorWorker();
-      }
+      // JSON 的校验/补全跑在独立 worker 中
+      if (label === 'json') return new jsonWorker();
+      // typescript/javascript 等只做词法高亮，通用 worker 足够
+      return new editorWorker();
     },
   };
 

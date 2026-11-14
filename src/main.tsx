@@ -1,7 +1,7 @@
 /** 应用入口 */
 
-// 必须先于任何编辑器渲染：把 Monaco 指向本地打包实例，避免 CDN 被 CSP 拦截
-import '@/utils/monaco';
+// 注意：Monaco 的初始化（loader 指向本地实例 + worker 注册）已随
+// `components/MonacoEditor` 懒加载，不再在首屏求值 —— 见 utils/monaco.ts 的说明。
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';

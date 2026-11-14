@@ -1,34 +1,63 @@
 /** 应用根组件：路由、主题与全局配置 */
 
-import { useEffect } from 'react';
+import { lazy, useEffect } from 'react';
 import { App as AntdApp, ConfigProvider, Spin, theme as antdTheme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom';
-import {
-  ArticlesPage,
-  CategoriesPage,
-  ConfigPage,
-  DashboardPage,
-  DeployPage,
-  FilesPage,
-  GitPage,
-  LogsPage,
-  NotFoundPage,
-  NotificationsPage,
-  PluginsPage,
-  PreviewPage,
-  SettingsPage,
-  SitesPage,
-  ThemesPage,
-  UpdatesPage,
-} from '@/pages';
+import { NotFoundPage } from '@/pages';
 import { MainLayout } from '@/components';
 import { useUiStore } from '@/stores';
 import { APP_META } from '@/constants';
 import { useI18n } from '@/i18n';
+
+/**
+ * 页面按需加载：首屏只需要看板，没必要把另外 15 个页面（以及它们引用的
+ * Monaco 等重依赖）一起解析。`Suspense` 边界在主布局的 `<Outlet />` 外。
+ */
+const DashboardPage = lazy(() =>
+  import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+);
+const SitesPage = lazy(() =>
+  import('@/pages/SitesPage').then((m) => ({ default: m.SitesPage })),
+);
+const ArticlesPage = lazy(() =>
+  import('@/pages/ArticlesPage').then((m) => ({ default: m.ArticlesPage })),
+);
+const CategoriesPage = lazy(() =>
+  import('@/pages/CategoriesPage').then((m) => ({ default: m.CategoriesPage })),
+);
+const ConfigPage = lazy(() =>
+  import('@/pages/ConfigPage').then((m) => ({ default: m.ConfigPage })),
+);
+const ThemesPage = lazy(() =>
+  import('@/pages/ThemesPage').then((m) => ({ default: m.ThemesPage })),
+);
+const PluginsPage = lazy(() =>
+  import('@/pages/PluginsPage').then((m) => ({ default: m.PluginsPage })),
+);
+const FilesPage = lazy(() =>
+  import('@/pages/FilesPage').then((m) => ({ default: m.FilesPage })),
+);
+const PreviewPage = lazy(() =>
+  import('@/pages/PreviewPage').then((m) => ({ default: m.PreviewPage })),
+);
+const DeployPage = lazy(() =>
+  import('@/pages/DeployPage').then((m) => ({ default: m.DeployPage })),
+);
+const GitPage = lazy(() => import('@/pages/GitPage').then((m) => ({ default: m.GitPage })));
+const LogsPage = lazy(() => import('@/pages/LogsPage').then((m) => ({ default: m.LogsPage })));
+const UpdatesPage = lazy(() =>
+  import('@/pages/UpdatesPage').then((m) => ({ default: m.UpdatesPage })),
+);
+const NotificationsPage = lazy(() =>
+  import('@/pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
+);
+const SettingsPage = lazy(() =>
+  import('@/pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+);
 
 // 初始本地化在 i18n 模块加载时按系统语言设定（中文环境 zh-cn，其余 en）
 void dayjs;

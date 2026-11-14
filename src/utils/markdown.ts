@@ -72,10 +72,14 @@ export function countWords(content: string): number {
   return count;
 }
 
+/** 按「已统计的字数」估算阅读时长（分钟，中文 400 字/分钟） */
+export function readingTimeFromWords(words: number): number {
+  return Math.max(1, Math.round(words / 400));
+}
+
 /** 估算阅读时长（分钟，按中文 400 字/分钟） */
 export function estimateReadingTime(content: string): number {
-  const words = countWords(content);
-  return Math.max(1, Math.round(words / 400));
+  return readingTimeFromWords(countWords(content));
 }
 
 /**

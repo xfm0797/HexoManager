@@ -1,12 +1,18 @@
 /** 代码编辑器：Monaco 封装 + 只读代码块 */
 
-import { useMemo } from 'react';
-import Editor, { type OnMount } from '@monaco-editor/react';
+import { Suspense, lazy, useMemo } from 'react';
+import type { OnMount } from '@monaco-editor/react';
 import { CopyOutlined } from '@ant-design/icons';
-import { App as AntdApp, Button, Tooltip } from 'antd';
+import { App as AntdApp, Button, Spin, Tooltip } from 'antd';
 import { useUiStore } from '@/stores';
 import { copyToClipboard } from '@/utils/desktop';
 import { useI18n } from '@/i18n';
+
+/**
+ * Monaco 按需加载：它自带近 4MB 的编辑器与语言包，不应该出现在首屏包里。
+ * 内部组件会先执行 `@/utils/monaco`（把 loader 指向本地实例、注册 worker）。
+ */
+const MonacoEditor = lazy(() => import('./MonacoEditor'));
 
 export type EditorLanguage =
   'yaml' | 'json' | 'markdown' | 'javascript' | 'toml' | 'shell' | 'plaintext';
@@ -116,31 +122,23 @@ export function CodeEditor({
       ) : null}
 
       <div style={{ height: resolvedHeight }}>
-        <Editor
-          value={value}
-          language={LANGUAGE_MAP[language]}
-          theme={isDark ? 'hm-dark' : 'hm-light'}
-          onMount={handleMount}
-          onChange={(next) => onChange?.(next ?? '')}
-          options={{
-            readOnly,
-            domReadOnly: readOnly,
-            minimap: { enabled: false },
-            fontSize: 13,
-            fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
-            lineNumbers: 'on',
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-            tabSize: 2,
-            wordWrap: wordWrap ? 'on' : 'off',
-            renderLineHighlight: readOnly ? 'none' : 'line',
-            padding: { top: 12, bottom: 12 },
-            scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
-            smoothScrolling: true,
-            cursorBlinking: 'smooth',
-            contextmenu: !readOnly,
-          }}
-        />
+        <Suspense
+          fallback={
+            <div className="flex h-full items-center justify-center">
+              <Spin tip={t('正在加载编辑器…')} />
+            </div>
+          }
+        >
+          <MonacoEditor
+            value={value}
+            language={LANGUAGE_MAP[language]}
+            theme={isDark ? 'hm-dark' : 'hm-light'}
+            readOnly={readOnly}
+            wordWrap={wordWrap}
+            onMount={handleMount}
+            onChange={onChange}
+          />
+        </Suspense>
       </div>
 
       {showStatusBar && !readOnly ? (
