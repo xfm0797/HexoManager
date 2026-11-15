@@ -12,14 +12,15 @@
 > | 迭代 2 | P1-1 / P1-2 / P1-3 / P1-5，P1-4 部分 | ✅ 已完成 |
 > | 迭代 3 | P2-1 / P2-2 / P2-4 / P2-5 / P2-7 / P3-1 / P3-2，P2-3 部分 | ✅ 已完成 |
 > | 迭代 4 | P2-6 / P2-8 / P3-4，P2-5 收尾（`article_commands` 二次拆分） | ✅ 已完成 |
+| 迭代 5 | P3-3（后端错误码化，全模块） | ✅ 已完成 |
 >
 > 详见 `CHANGELOG.md` 的 `[Unreleased]`。实测：`dist` 16 MB → **6.9 MB**，首屏 JS 不再包含 Monaco；
-> 列表/统计接口不再触发全站扫描；所有重 IO 命令已离开主线程；`cargo check --all-targets` /
-> `tsc --noEmit` / `eslint --max-warnings 0` / `i18n:check` / `version:check` 全绿。
+> 列表/统计接口不再触发全站扫描；所有重 IO 命令已离开主线程；所有命令返回结构化错误；
+> `cargo check --all-targets` / `tsc --noEmit` / `eslint --max-warnings 0` /
+> `i18n:check`（含错误码一致性）/ `version:check` 全绿，CI 上 52 个 Rust 测试通过。
 >
-> **仍未落地**：P3-3（后端错误码化，现为过渡层 `src/i18n/backendMessages.ts`）、
-> CI 中 `cargo clippy` / `cargo fmt` 仍是软卡口（需先清历史告警并统一格式）。
-> 这两项属长期演进，不阻塞发版。
+> **仍未落地**：CI 中 `cargo clippy` / `cargo fmt` 仍是软卡口（需先清历史告警并统一格式）；
+> `backendMessages.ts` 的中文文本映射表仍作为兜底存在，待 `err!`/粗粒度错误逐步细化后即可删除。
 
 ---
 
@@ -589,9 +590,18 @@ updated: ...
 | P3-4 可观测性 | `utils/log.rs`（约 200 行，按天切分、保留 7 天、写失败不影响主流程）+ `diag_commands` + 前端失败上报 + 「导出诊断日志」 | 用户报「点了没反应」时终于有现场可查 |
 | P2-5 收尾 | `article_commands` 1252 → 323 行，命令层拆成 query/crud/publish/taxonomy | 门面只做 re-export；`lib.rs` 必须写真实路径（命令宏不会被 `pub use` 带出去） |
 
-**仍未做**：P3-3（后端错误码化）。`src/i18n/backendMessages.ts` 的「精确表 + 正则表」是
-250+ 条中文错误的过渡映射，彻底解法是给 `AppError` 每个变体加稳定 `code`、前端按 code
-查字典。可渐进：先做 `article` / `site` 两个高频模块。
+### 迭代 5：P3-3 后端错误码化（全模块）
+
+| 事项 | 做法 | 结果 |
+|---|---|---|
+| 结构化错误载荷 | `AppError::Coded { code, message, params }`，`Serialize` 改为 `{code,message,params}`，`Display` 保持中文原文 | 未迁移前 `.map_err(|e| e.to_string())` 的输出一字不变，可安全分批推进 |
+| 命令迁移 | 全部命令签名 `Result<T, String>` → `AppResult<T>`，删掉约 150 处 `map_err` | 净减 300+ 行样板；`get_article` 之类把「任何 DB 错误都说成文章不存在」的误导性提示一并修正 |
+| 具体错误码 | 17 个语义码（`site.not_found` / `path.outside_site` / `article.reload_failed` …），译文在 `src/i18n/errorCodes.ts`，`{name}` 占位符由 `params` 填充 | 改中文措辞不再让译文失效 —— 这正是旧文本映射的根本缺陷 |
+| 双形态兼容 | `invoke.ts` 先按 code 取译文，未收录再退回旧的中文文本映射 | 迁移过程中不会出现「英文界面漏中文」的中间态 |
+| 一致性卡口 | `scripts/error-codes-check.mjs`：比对 Rust `coded("…")` 与字典条目，缺失或译文含中文即失败；并入 `npm run i18n:check` 与 CI | 手写跨语言字符串最容易漏，静态核对把它变成 CI 错误 |
+
+**遗留（低优先）**：`err!` / 粗粒度变体仍输出中文原文，靠 `backendMessages.ts` 兜底。
+把这些高频消息逐个升级为语义码后，那张 292 行的过渡表即可整体删除。
 
 ### 建议不做 / 暂缓
 

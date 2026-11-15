@@ -57,6 +57,18 @@
 - 工具链（无依赖 Node 脚本，已接入 CI check job）：`npm run i18n:merge`
   （`_parts/*.json` → `en-US.ts`，增量且幂等）、`npm run i18n:check`
   （缺译文**或英文译文残留 CJK** 时退出码 1）。唯一豁免：语言选项的母语自称「简体中文」
+
+## 后端错误码（P3-3，1.2.0 之后）
+
+- **全部命令**返回 `AppResult<T>`（`Result<T, AppError>`）；`AppError::Serialize` 输出
+  `{ code, message, params }` 对象，`Display` 仍是中文原文（日志/旧路径不受影响）
+- 新增语义错误用 `AppError::coded("模块.语义", 中文原文, &[("id", …)])`；
+  临时错误用 `err!` 宏（`AppError::Other`）。前端 `invoke.ts` 先查 `src/i18n/errorCodes.ts`
+  的 code 字典，未命中再退回 `backendMessages.ts` 的中文文本映射
+- **必须**同步 `errorCodes.ts`：`npm run i18n:check` 会比对 Rust `coded("…")` 与字典条目，
+  缺失或译文含中文即失败（`scripts/error-codes-check.mjs`）
+- `#[tauri::command]` 改返回类型时注意 `blocking::cmd`（闭包返回 String）要换成
+  `blocking::run`；`rows.collect::<Result<Vec<_>,_>>()` 需补 `.map_err(AppError::from)`
 - 翻译边界：写文件/DB 的值、传给 Rust 的参数、比较与匹配用的字面量、
   枚举状态值、CSS 类名、localStorage 键、URL、正则、路径、日志内容**都不翻**
 
