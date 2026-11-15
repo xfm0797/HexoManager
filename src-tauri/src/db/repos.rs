@@ -17,9 +17,11 @@ pub fn site_path_of(db: &Db, site_id: i64) -> AppResult<String> {
         |r| r.get(0),
     )
     .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => {
-            AppError::NotFound(format!("站点不存在：{}", site_id))
-        }
+        rusqlite::Error::QueryReturnedNoRows => AppError::coded(
+            "site.not_found",
+            format!("站点不存在：{}", site_id),
+            &[("id", site_id.to_string())],
+        ),
         other => AppError::Other(format!("读取站点路径失败：{}", other)),
     })
 }

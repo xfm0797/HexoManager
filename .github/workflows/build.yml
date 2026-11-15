@@ -55,9 +55,10 @@ jobs:
       - name: ESLint 检查
         run: npm run lint
 
-      # 卡住「英文界面漏出中文」：缺译文或英文译文里残留中文都会让本步失败
-      - name: i18n 覆盖率检查
-        run: node scripts/i18n-coverage.mjs
+      # 卡住「英文界面漏出中文」：缺译文或英文译文里残留中文都会让本步失败；
+      # 同时核对 Rust 侧 `AppError::coded("…")` 的 code 都在 errorCodes.ts 里有条目
+      - name: i18n 覆盖率与错误码检查
+        run: npm run i18n:check
 
       - name: 构建前端
         run: npm run build:only

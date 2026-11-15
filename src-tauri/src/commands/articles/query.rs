@@ -7,7 +7,7 @@ use crate::commands::articles::front_matter::read_article_file;
 use crate::commands::articles::store::{row_to_article, ARTICLE_COLUMNS, ARTICLE_LIST_COLUMNS};
 use crate::db::Db;
 use crate::models::{Article, ArticleQuery, PaginatedArticles};
-use crate::utils::error::AppResult;
+use crate::utils::error::{AppError, AppResult};
 use crate::AppState;
 use rusqlite::params;
 use tauri::State;
@@ -17,11 +17,9 @@ use tauri::State;
 pub async fn get_articles(
     state: State<'_, AppState>,
     query: ArticleQuery,
-) -> Result<PaginatedArticles, String> {
+) -> AppResult<PaginatedArticles> {
     let db = Db::from_arc(&state.db);
-    get_articles_impl(&db, query)
-        .await
-        .map_err(|e| e.to_string())
+    get_articles_impl(&db, query).await
 }
 
 pub(crate) async fn get_articles_impl(db: &Db, query: ArticleQuery) -> AppResult<PaginatedArticles> {
@@ -90,13 +88,20 @@ pub(crate) async fn get_articles_impl(db: &Db, query: ArticleQuery) -> AppResult
 
 /// 获取单篇文章（含全文）。
 #[tauri::command]
-pub fn get_article(state: State<'_, AppState>, article_id: i64) -> Result<Article, String> {
+pub fn get_article(state: State<'_, AppState>, article_id: i64) -> AppResult<Article> {
     let db = &state.db;
-    let conn = db.conn().map_err(|e| e.to_string())?;
+    let conn = db.conn()?;
     let sql = format!("SELECT {} FROM articles WHERE id = ?1", ARTICLE_COLUMNS);
-    let mut article: Article = conn
-        .query_row(&sql, params![article_id], row_to_article)
-        .map_err(|_| format!("文章不存在：{}", article_id))?;
+    let mut article: Article = conn.query_row(&sql, params![article_id], row_to_article).map_err(
+        |e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::coded(
+                "article.not_found",
+                format!("文章不存在：{}", article_id),
+                &[("id", article_id.to_string())],
+            ),
+            other => AppError::Database(other),
+        },
+    )?;
 
     // 优先返回磁盘最新内容
     if let Ok((front, body)) = read_article_file(&article.file_path) {
@@ -115,7 +120,7 @@ pub async fn search_articles(
     state: State<'_, AppState>,
     site_id: i64,
     query: String,
-) -> Result<Vec<Article>, String> {
+) -> AppResult<Vec<Article>> {
     let db = Db::from_arc(&state.db);
     let q = ArticleQuery {
         site_id,
@@ -123,8 +128,5 @@ pub async fn search_articles(
         limit: Some(100),
         ..Default::default()
     };
-    get_articles_impl(&db, q)
-        .await
-        .map(|p| p.items)
-        .map_err(|e| e.to_string())
+    get_articles_impl(&db, q).await.map(|p| p.items)
 }

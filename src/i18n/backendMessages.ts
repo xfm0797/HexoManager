@@ -1,20 +1,23 @@
 /**
- * 后端消息的英文映射层。
+ * 后端消息的英文映射层（**过渡层，正在被错误码方案取代**）。
  *
- * 背景：Rust 侧的命令一律返回 `Result<T, String>`，错误文案是中文且带参数
- * （`站点不存在：3`）。要在英文界面下不留中文，有两条路：
- *   1. 把 250+ 条消息改成错误码、在前端翻译 —— 会牵动 60+ 个命令签名，
- *      还会影响日志与部署输出，改动面过大；
- *   2. **在前端拦一层**：拿到中文消息后按规则表映射成英文 —— 本文件的做法。
+ * 现在后端有两类错误：
+ *   1. **已迁移模块**（文章、站点）返回结构化载荷 `{ code, message, params }`，
+ *      由 `errorCodes.ts` 按 code 取译文 —— 改中文措辞不会让译文失效；
+ *   2. 其余模块仍返回中文原文（`Result<T, String>`），只能按**文本**匹配，
+ *      也就是本文档的两张表。
  *
- * 因此这里用「精确匹配 + 带参正则规则」两张表：
- *   - 命中 → 返回对应英文；
- *   - 未命中 → **原样返回中文**（绝不吞掉信息，只是暂时没英化）。
+ * 文本匹配天生脆弱：Rust 侧改一个字的措辞映射就静默失效（1.2.0 修过两条
+ * 少空格的键）。因此这里的定位是**兜底**：
+ *   - 精确表 / 规则表命中 → 返回英文；
+ *   - 都没命中 → 原样返回中文（绝不吞信息，只是暂时没英化）。
  *
- * 后续若要彻底解决，应把 Rust 侧的错误改为错误码枚举，本文件即成为过渡层。
+ * 迁移路径：把命令签名从 `Result<T, String>` 换成 `AppResult<T>`，错误构造改用
+ * `AppError::coded(...)`，然后在 `errorCodes.ts` 补一条译文即可，本文档不用改。
  */
 
 import { getLocale } from './index';
+import { translateErrorCode } from './errorCodes';
 
 /**
  * 精确匹配表：无参数、可整句对应的消息。
@@ -289,4 +292,51 @@ export function translateBackendMessage(message: string): string {
   }
 
   return message;
+}
+
+/** 后端错误的结构化载荷；字符串错误（未迁移模块）只有 `message`。 */
+export interface BackendErrorPayload {
+  code?: string;
+  message: string;
+  params?: Record<string, string>;
+}
+
+/**
+ * 把 Tauri 的 rejection（字符串 / Error / 结构化对象）归一成载荷。
+ *
+ * Tauri 2 会把实现了 `Serialize` 的错误原样交给前端，因此迁移后的命令
+ * 这里拿到的是对象而不是字符串。
+ */
+export function toBackendErrorPayload(error: unknown): BackendErrorPayload {
+  if (typeof error === 'string') return { message: error };
+  if (error instanceof Error) return { message: error.message };
+  if (error && typeof error === 'object') {
+    const rec = error as Record<string, unknown>;
+    const message = typeof rec.message === 'string' ? rec.message : String(error);
+    const code = typeof rec.code === 'string' && rec.code ? rec.code : undefined;
+    const params =
+      rec.params && typeof rec.params === 'object'
+        ? (rec.params as Record<string, string>)
+        : undefined;
+    return { code, message, params };
+  }
+  return { message: String(error) };
+}
+
+/**
+ * 翻译后端错误：code 优先，其次旧文本映射，最后原文。
+ *
+ * 这样即使 `errorCodes.ts` 漏了某个 code，英文界面也不会退回中文 ——
+ * 只要它的中文原文还在旧表里。
+ */
+export function translateBackendError(error: unknown): string {
+  const payload = toBackendErrorPayload(error);
+  if (getLocale() === 'zh-CN') return payload.message;
+
+  if (payload.code) {
+    const byCode = translateErrorCode(payload.code, payload.params);
+    if (byCode) return byCode;
+  }
+
+  return translateBackendMessage(payload.message);
 }

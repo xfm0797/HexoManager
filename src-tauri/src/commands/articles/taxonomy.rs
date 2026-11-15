@@ -19,15 +19,13 @@ use tauri::State;
 pub async fn get_categories(
     state: State<'_, AppState>,
     site_id: i64,
-) -> Result<Vec<Category>, String> {
+) -> AppResult<Vec<Category>> {
     let db = &state.db;
-    let conn = db.conn().map_err(|e| e.to_string())?;
+    let conn = db.conn()?;
     let mut stmt = conn
-        .prepare("SELECT categories FROM articles WHERE site_id = ?1 AND categories IS NOT NULL")
-        .map_err(|e| e.to_string())?;
+        .prepare("SELECT categories FROM articles WHERE site_id = ?1 AND categories IS NOT NULL")?;
     let rows = stmt
-        .query_map(params![site_id], |r| r.get::<_, String>(0))
-        .map_err(|e| e.to_string())?;
+        .query_map(params![site_id], |r| r.get::<_, String>(0))?;
 
     let mut counter: std::collections::BTreeMap<String, i64> = std::collections::BTreeMap::new();
     for raw in rows.flatten() {
@@ -46,15 +44,13 @@ pub async fn get_categories(
 
 /// 获取标签列表（含文章数）。
 #[tauri::command]
-pub async fn get_tags(state: State<'_, AppState>, site_id: i64) -> Result<Vec<Tag>, String> {
+pub async fn get_tags(state: State<'_, AppState>, site_id: i64) -> AppResult<Vec<Tag>> {
     let db = &state.db;
-    let conn = db.conn().map_err(|e| e.to_string())?;
+    let conn = db.conn()?;
     let mut stmt = conn
-        .prepare("SELECT tags FROM articles WHERE site_id = ?1 AND tags IS NOT NULL")
-        .map_err(|e| e.to_string())?;
+        .prepare("SELECT tags FROM articles WHERE site_id = ?1 AND tags IS NOT NULL")?;
     let rows = stmt
-        .query_map(params![site_id], |r| r.get::<_, String>(0))
-        .map_err(|e| e.to_string())?;
+        .query_map(params![site_id], |r| r.get::<_, String>(0))?;
 
     let mut counter: std::collections::BTreeMap<String, i64> = std::collections::BTreeMap::new();
     for raw in rows.flatten() {
@@ -78,11 +74,10 @@ pub async fn rename_category(
     site_id: i64,
     old_name: String,
     new_name: String,
-) -> Result<i64, String> {
+) -> AppResult<i64> {
     let db = Db::from_arc(&state.db);
     rename_taxonomy(&db, site_id, "categories", &old_name, &new_name)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// 重命名标签。
@@ -92,11 +87,10 @@ pub async fn rename_tag(
     site_id: i64,
     old_name: String,
     new_name: String,
-) -> Result<i64, String> {
+) -> AppResult<i64> {
     let db = Db::from_arc(&state.db);
     rename_taxonomy(&db, site_id, "tags", &old_name, &new_name)
         .await
-        .map_err(|e| e.to_string())
 }
 
 pub(crate) async fn rename_taxonomy(
@@ -167,11 +161,10 @@ pub async fn delete_category(
     state: State<'_, AppState>,
     site_id: i64,
     name: String,
-) -> Result<i64, String> {
+) -> AppResult<i64> {
     let db = Db::from_arc(&state.db);
     delete_taxonomy(&db, site_id, "categories", &name)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// 删除标签。
@@ -180,11 +173,10 @@ pub async fn delete_tag(
     state: State<'_, AppState>,
     site_id: i64,
     name: String,
-) -> Result<i64, String> {
+) -> AppResult<i64> {
     let db = Db::from_arc(&state.db);
     delete_taxonomy(&db, site_id, "tags", &name)
         .await
-        .map_err(|e| e.to_string())
 }
 
 pub(crate) async fn delete_taxonomy(db: &Db, site_id: i64, field: &str, name: &str) -> AppResult<i64> {

@@ -20,10 +20,9 @@ use tauri::State;
 pub async fn publish_article(
     state: State<'_, AppState>,
     article_id: i64,
-) -> Result<Article, String> {
+) -> AppResult<Article> {
     publish_article_impl(&state.db, article_id, true)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// 下架文章（移回 _drafts）。
@@ -31,10 +30,9 @@ pub async fn publish_article(
 pub async fn unpublish_article(
     state: State<'_, AppState>,
     article_id: i64,
-) -> Result<Article, String> {
+) -> AppResult<Article> {
     publish_article_impl(&state.db, article_id, false)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// 在 `dir` 下为 `file_name` 找一个不冲突的路径：`x.md` → `x-1.md` → `x-2.md`…
@@ -75,13 +73,24 @@ pub(crate) async fn publish_article_impl(db: &Db, article_id: i64, publish: bool
             params![article_id],
             |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
         )
-        .map_err(|_| AppError::NotFound(format!("文章不存在：{}", article_id)))?
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::coded(
+                "article.not_found",
+                format!("文章不存在：{}", article_id),
+                &[("id", article_id.to_string())],
+            ),
+            other => AppError::Database(other),
+        })?
     };
 
     let site_path = site_path_of(db, site_id)?;
     let src = std::path::Path::new(&file_path);
     if !src.exists() {
-        return Err(AppError::PathNotFound(file_path.clone()));
+        return Err(AppError::coded(
+            "article.file_missing",
+            format!("路径不存在: {}", file_path),
+            &[("path", file_path.clone())],
+        ));
     }
 
     let target_dir = if publish { "_posts" } else { "_drafts" };
@@ -92,7 +101,7 @@ pub(crate) async fn publish_article_impl(db: &Db, article_id: i64, publish: bool
 
     let file_name = src
         .file_name()
-        .ok_or_else(|| AppError::InvalidArgument("无法解析文件名".into()))?;
+        .ok_or_else(|| AppError::coded("article.filename_invalid", "无法解析文件名", &[]))?;
 
     // 已在目标目录（例如对已发布文章再点一次「发布」）→ 原路径处理，不产生副本
     let dst = if src.parent() == Some(dir.as_path()) {
@@ -155,7 +164,7 @@ pub(crate) async fn publish_article_impl(db: &Db, article_id: i64, publish: bool
     let conn = db.conn()?;
     let sql = format!("SELECT {} FROM articles WHERE id = ?1", ARTICLE_COLUMNS);
     conn.query_row(&sql, params![article_id], row_to_article)
-        .map_err(|_| AppError::NotFound("操作后未能读取文章".into()))
+        .map_err(|_| AppError::coded("article.reload_failed", "操作后未能读取文章", &[]))
 }
 
 /// 新建草稿。
@@ -167,9 +176,8 @@ pub async fn create_draft(
     site_id: i64,
     title: String,
     template_id: Option<i64>,
-) -> Result<Article, String> {
+) -> AppResult<Article> {
     let db = Db::from_arc(&state.db);
     create_article_impl(&db, site_id, &title, true, Vec::new(), Vec::new(), template_id)
         .await
-        .map_err(|e| e.to_string())
 }

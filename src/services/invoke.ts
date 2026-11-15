@@ -2,7 +2,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { errorMessage } from '@/utils/validator';
-import { translateBackendMessage } from '@/i18n/backendMessages';
+import { toBackendErrorPayload, translateBackendError } from '@/i18n/backendMessages';
 
 /** 同一条失败消息的重复上报间隔（毫秒），避免轮询类接口刷爆日志文件 */
 const LOG_DEDUPE_MS = 5000;
@@ -34,22 +34,21 @@ function reportToLog(command: string, message: string): void {
 /**
  * 调用 Tauri 后端命令。
  *
- * - 统一把 Rust 侧错误字符串转为 Error 抛出
- * - 英文界面下把后端的中文错误消息映射为英文（未收录的回退原文）
- * - 失败同时写入后端日志（原文，不做翻译），便于事后排查
+ * - 统一把 Rust 侧错误（字符串或 `{ code, message, params }` 结构）转为 Error 抛出
+ * - 英文界面下按 code 取译文，未收录时退回中文原文的旧映射（见 `i18n/errorCodes.ts`）
+ * - 失败同时写入后端日志（中文原文，不做翻译），便于事后排查
  */
 export async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
     return await invoke<T>(command, args);
   } catch (error) {
-    const raw = errorMessage(error);
-    const message = translateBackendMessage(raw);
+    const payload = toBackendErrorPayload(error);
     // 开发期保留原始日志，便于定位后端错误
     if (import.meta.env.DEV) {
-      console.error(`[invoke:${command}]`, raw, args);
+      console.error(`[invoke:${command}]`, payload, args);
     }
-    reportToLog(command, raw);
-    throw new Error(message);
+    reportToLog(command, payload.code ? `[${payload.code}] ${payload.message}` : payload.message);
+    throw new Error(translateBackendError(payload));
   }
 }
 

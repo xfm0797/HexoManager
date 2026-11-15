@@ -28,7 +28,7 @@ pub async fn create_article(
     categories: Option<Vec<String>>,
     tags: Option<Vec<String>>,
     template_id: Option<i64>,
-) -> Result<Article, String> {
+) -> AppResult<Article> {
     let db = Db::from_arc(&state.db);
     create_article_impl(
         &db,
@@ -40,7 +40,6 @@ pub async fn create_article(
         template_id,
     )
     .await
-    .map_err(|e| e.to_string())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -169,11 +168,10 @@ pub async fn update_article(
     state: State<'_, AppState>,
     article_id: i64,
     updates: UpdateArticleInput,
-) -> Result<Article, String> {
+) -> AppResult<Article> {
     let db = Db::from_arc(&state.db);
     update_article_impl(&db, article_id, updates)
         .await
-        .map_err(|e| e.to_string())
 }
 
 pub(crate) async fn update_article_impl(
@@ -195,7 +193,14 @@ pub(crate) async fn update_article_impl(
                 ))
             },
         )
-        .map_err(|_| AppError::NotFound(format!("文章不存在：{}", article_id)))?
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::coded(
+                "article.not_found",
+                format!("文章不存在：{}", article_id),
+                &[("id", article_id.to_string())],
+            ),
+            other => AppError::Database(other),
+        })?
     };
 
     // 只读一次原文：既用于解析，也用于判断「这次保存到底有没有改东西」
@@ -260,7 +265,7 @@ pub(crate) async fn update_article_impl(
         let sql = format!("SELECT {} FROM articles WHERE id = ?1", ARTICLE_COLUMNS);
         return conn
             .query_row(&sql, params![article_id], row_to_article)
-            .map_err(|_| AppError::NotFound("更新后未能读取文章".into()));
+            .map_err(|_| AppError::coded("article.reload_failed", "更新后未能读取文章", &[]));
     }
 
     // 确有改动：才写入 updated 并落盘
@@ -355,10 +360,10 @@ pub(crate) async fn update_article_impl(
 
 /// 删除文章（同时删除磁盘文件）。
 #[tauri::command]
-pub async fn delete_article(state: State<'_, AppState>, article_id: i64) -> Result<(), String> {
+pub async fn delete_article(state: State<'_, AppState>, article_id: i64) -> AppResult<()> {
     let db = &state.db;
     let (site_id, file_path) = {
-        let conn = db.conn().map_err(|e| e.to_string())?;
+        let conn = db.conn()?;
         conn.query_row(
             "SELECT site_id, file_path FROM articles WHERE id = ?1",
             params![article_id],
@@ -373,9 +378,8 @@ pub async fn delete_article(state: State<'_, AppState>, article_id: i64) -> Resu
     }
 
     {
-        let conn = db.conn().map_err(|e| e.to_string())?;
-        conn.execute("DELETE FROM articles WHERE id = ?1", params![article_id])
-            .map_err(|e| e.to_string())?;
+        let conn = db.conn()?;
+        conn.execute("DELETE FROM articles WHERE id = ?1", params![article_id])?;
     }
 
     // 同步站点计数
@@ -392,14 +396,14 @@ pub async fn import_articles(
     state: State<'_, AppState>,
     site_id: i64,
     files: Vec<String>,
-) -> Result<Vec<Article>, String> {
+) -> AppResult<Vec<Article>> {
     let db = Db::from_arc(&state.db);
     let db = &db;
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+    let site_path = site_path_of(db, site_id)?;
     let posts_dir = std::path::Path::new(&site_path)
         .join("source")
         .join("_posts");
-    std::fs::create_dir_all(&posts_dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&posts_dir)?;
 
     let mut imported = Vec::new();
     for file in files {
@@ -431,26 +435,24 @@ pub async fn import_articles(
     }
 
     crate::commands::site_commands::rescan_articles(db, site_id, &site_path)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     // 返回新导入文章的记录
     let mut result = Vec::new();
     for path in imported {
         let (_, article_id) = {
-            let conn = db.conn().map_err(|e| e.to_string())?;
+            let conn = db.conn()?;
             let id: Option<i64> = conn
                 .query_row(
                     "SELECT id FROM articles WHERE site_id = ?1 AND file_path = ?2",
                     params![site_id, path],
                     |r| r.get(0),
                 )
-                .optional()
-                .map_err(|e| e.to_string())?;
+                .optional()?;
             ((), id)
         };
         if let Some(id) = article_id {
-            let conn = db.conn().map_err(|e| e.to_string())?;
+            let conn = db.conn()?;
             let sql = format!("SELECT {} FROM articles WHERE id = ?1", ARTICLE_COLUMNS);
             if let Ok(a) = conn.query_row(&sql, params![id], row_to_article) {
                 result.push(a);

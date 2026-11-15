@@ -35,11 +35,17 @@ const SITE_COLUMNS: &str = "id, name, description, domain, path, node_version, t
 fn validate_hexo_site(path: &str) -> AppResult<()> {
     let p = std::path::Path::new(path);
     if !p.exists() {
-        return Err(AppError::InvalidArgument(format!("目录不存在：{}", path)));
+        return Err(AppError::coded(
+            "site.dir_missing",
+            format!("目录不存在：{}", path),
+            &[("path", path.to_string())],
+        ));
     }
     if !p.join("_config.yml").exists() {
-        return Err(AppError::InvalidArgument(
-            "该目录不是有效的 Hexo 站点：缺少 _config.yml".into(),
+        return Err(AppError::coded(
+            "site.not_hexo",
+            "该目录不是有效的 Hexo 站点：缺少 _config.yml",
+            &[],
         ));
     }
     Ok(())
@@ -52,18 +58,17 @@ fn validate_hexo_site(path: &str) -> AppResult<()> {
 pub async fn create_site(
     state: State<'_, AppState>,
     input: CreateSiteInput,
-) -> Result<Site, String> {
+) -> AppResult<Site> {
     // 取出数据库句柄的独立所有权，避免在 await 期间持有 State 借用（否则 future 不满足 Send）
     let db = Db::from_arc(&state.db);
     create_site_impl(&db, input)
         .await
-        .map_err(|e| e.to_string())
 }
 
 async fn create_site_impl(db: &Db, input: CreateSiteInput) -> AppResult<Site> {
     let path = input.path.trim().to_string();
     if path.is_empty() {
-        return Err(AppError::InvalidArgument("站点路径不能为空".into()));
+        return Err(AppError::coded("site.path_empty", "站点路径不能为空", &[]));
     }
 
     // 路径唯一性校验
@@ -75,10 +80,11 @@ async fn create_site_impl(db: &Db, input: CreateSiteInput) -> AppResult<Site> {
             })
             .optional()?;
         if exists.is_some() {
-            return Err(AppError::InvalidArgument(format!(
-                "该路径已被其他站点占用：{}",
-                path
-            )));
+            return Err(AppError::coded(
+                "site.path_taken",
+                format!("该路径已被其他站点占用：{}", path),
+                &[("path", path.clone())],
+            ));
         }
     }
 
@@ -156,20 +162,23 @@ async fn create_site_impl(db: &Db, input: CreateSiteInput) -> AppResult<Site> {
 
 /// 导入已有站点。
 #[tauri::command]
-pub async fn import_site(state: State<'_, AppState>, path: String) -> Result<Site, String> {
+pub async fn import_site(state: State<'_, AppState>, path: String) -> AppResult<Site> {
     let db = &state.db;
-    validate_hexo_site(&path).map_err(|e| e.to_string())?;
+    validate_hexo_site(&path)?;
 
     {
-        let conn = db.conn().map_err(|e| e.to_string())?;
+        let conn = db.conn()?;
         let exists: Option<i64> = conn
             .query_row("SELECT id FROM sites WHERE path = ?1", params![path], |r| {
                 r.get(0)
             })
-            .optional()
-            .map_err(|e| e.to_string())?;
+            .optional()?;
         if exists.is_some() {
-            return Err(format!("该路径已被导入：{}", path));
+            return Err(AppError::coded(
+                "site.already_imported",
+                format!("该路径已被导入：{}", path),
+                &[("path", path.clone())],
+            ));
         }
     }
 
@@ -204,13 +213,12 @@ pub async fn import_site(state: State<'_, AppState>, path: String) -> Result<Sit
     }
 
     let id = {
-        let conn = db.conn().map_err(|e| e.to_string())?;
+        let conn = db.conn()?;
         conn.execute(
             "INSERT INTO sites (name, description, domain, path, node_version, theme, status)
              VALUES (?1, NULL, ?2, ?3, 'system', ?4, 'active')",
             params![name, domain, path, theme],
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
         conn.last_insert_rowid()
     };
 
@@ -219,7 +227,7 @@ pub async fn import_site(state: State<'_, AppState>, path: String) -> Result<Sit
         if let Ok(status) = crate::git::status::git_status(&path).await {
             if let Some(remote) = status.remote {
                 let branch = status.branch.unwrap_or_else(|| "main".into());
-                let conn = db.conn().map_err(|e| e.to_string())?;
+                let conn = db.conn()?;
                 let _ = conn.execute(
                     "INSERT OR REPLACE INTO git_configs (site_id, remote_url, branch, auto_deploy)
                      VALUES (?1, ?2, ?3, 1)",
@@ -230,9 +238,8 @@ pub async fn import_site(state: State<'_, AppState>, path: String) -> Result<Sit
     }
 
     rescan_articles(db, id, &path)
-        .await
-        .map_err(|e| e.to_string())?;
-    get_site_by_id(db, id).map_err(|e| e.to_string())
+        .await?;
+    get_site_by_id(db, id)
 }
 
 /// 删除站点（可选是否删除磁盘文件）。
@@ -241,11 +248,11 @@ pub async fn delete_site(
     state: State<'_, AppState>,
     site_id: i64,
     delete_files: Option<bool>,
-) -> Result<Option<String>, String> {
+) -> AppResult<Option<String>> {
     let db = Db::from_arc(&state.db);
     let db = &db;
     let path: String = {
-        let conn = db.conn().map_err(|e| e.to_string())?;
+        let conn = db.conn()?;
         conn.query_row(
             "SELECT path FROM sites WHERE id = ?1",
             params![site_id],
@@ -271,9 +278,8 @@ pub async fn delete_site(
         None
     };
 
-    let conn = db.conn().map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM sites WHERE id = ?1", params![site_id])
-        .map_err(|e| e.to_string())?;
+    let conn = db.conn()?;
+    conn.execute("DELETE FROM sites WHERE id = ?1", params![site_id])?;
     Ok(quarantined)
 }
 
@@ -297,32 +303,37 @@ fn quarantine_dir(dir: &std::path::Path) -> std::io::Result<String> {
 
 /// 获取全部站点。
 #[tauri::command]
-pub fn get_sites(state: State<'_, AppState>) -> Result<Vec<Site>, String> {
-    let conn = state.db.conn().map_err(|e| e.to_string())?;
+pub fn get_sites(state: State<'_, AppState>) -> AppResult<Vec<Site>> {
+    let conn = state.db.conn()?;
     let sql = format!(
         "SELECT {} FROM sites ORDER BY updated_at DESC, id DESC",
         SITE_COLUMNS
     );
-    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(&sql)?;
     let rows = stmt
-        .query_map([], row_to_site)
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+        .query_map([], row_to_site)?
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
 }
 
 /// 获取单个站点。
 #[tauri::command]
-pub fn get_site(state: State<'_, AppState>, site_id: i64) -> Result<Site, String> {
-    get_site_by_id(&state.db, site_id).map_err(|e| e.to_string())
+pub fn get_site(state: State<'_, AppState>, site_id: i64) -> AppResult<Site> {
+    get_site_by_id(&state.db, site_id)
 }
 
 fn get_site_by_id(db: &Db, site_id: i64) -> AppResult<Site> {
     let conn = db.conn()?;
     let sql = format!("SELECT {} FROM sites WHERE id = ?1", SITE_COLUMNS);
     conn.query_row(&sql, params![site_id], row_to_site)
-        .map_err(|_| AppError::NotFound(format!("站点不存在：{}", site_id)))
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::coded(
+                "site.not_found",
+                format!("站点不存在：{}", site_id),
+                &[("id", site_id.to_string())],
+            ),
+            other => AppError::Database(other),
+        })
 }
 
 /// 更新站点信息。
@@ -331,10 +342,10 @@ pub fn update_site(
     state: State<'_, AppState>,
     site_id: i64,
     updates: UpdateSiteInput,
-) -> Result<Site, String> {
+) -> AppResult<Site> {
     let db = &state.db;
     {
-        let conn = db.conn().map_err(|e| e.to_string())?;
+        let conn = db.conn()?;
         let now = now_utc();
 
         // 逐字段构建更新（使用 COALESCE 保留原值）
@@ -358,11 +369,10 @@ pub fn update_site(
                 updates.node_version,
                 now
             ],
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
     }
 
-    crate::commands::site_commands::get_site_by_id(db, site_id).map_err(|e| e.to_string())
+    crate::commands::site_commands::get_site_by_id(db, site_id)
 }
 
 /// 复制站点为模板。
@@ -372,11 +382,10 @@ pub async fn duplicate_site(
     site_id: i64,
     new_name: String,
     new_path: String,
-) -> Result<Site, String> {
+) -> AppResult<Site> {
     let db = Db::from_arc(&state.db);
     duplicate_site_impl(&db, site_id, &new_name, &new_path)
         .await
-        .map_err(|e| e.to_string())
 }
 
 async fn duplicate_site_impl(
@@ -388,10 +397,11 @@ async fn duplicate_site_impl(
     let source = get_site_by_id(db, site_id)?;
 
     if std::path::Path::new(new_path).exists() {
-        return Err(AppError::InvalidArgument(format!(
-            "目标路径已存在：{}",
-            new_path
-        )));
+        return Err(AppError::coded(
+            "site.target_exists",
+            format!("目标路径已存在：{}", new_path),
+            &[("path", new_path.to_string())],
+        ));
     }
 
     // 整站复制是几十秒级的重 IO，绝不能占着 tokio worker 线程
@@ -436,21 +446,20 @@ async fn duplicate_site_impl(
     };
 
     rescan_articles(db, id, new_path)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     get_site_by_id(db, id)
 }
 
 /// 获取站点统计。
 #[tauri::command]
-pub async fn get_site_stats(state: State<'_, AppState>, site_id: i64) -> Result<SiteStats, String> {
+pub async fn get_site_stats(state: State<'_, AppState>, site_id: i64) -> AppResult<SiteStats> {
     let db = &state.db;
-    let site = get_site_by_id(db, site_id).map_err(|e| e.to_string())?;
+    let site = get_site_by_id(db, site_id)?;
 
     // 统计全部取自库中的派生数据；磁盘同步由 refresh_articles / 构建等显式动作触发
 
     let (article_count, draft_count, published_count, total_words, categories, tags) = {
-        let conn = db.conn().map_err(|e| e.to_string())?;
+        let conn = db.conn()?;
 
         let article_count: i64 = conn
             .query_row(
@@ -488,16 +497,14 @@ pub async fn get_site_stats(state: State<'_, AppState>, site_id: i64) -> Result<
             std::collections::BTreeMap::new();
 
         let mut stmt = conn
-            .prepare("SELECT categories, tags FROM articles WHERE site_id = ?1")
-            .map_err(|e| e.to_string())?;
+            .prepare("SELECT categories, tags FROM articles WHERE site_id = ?1")?;
         let rows = stmt
             .query_map(params![site_id], |r| {
                 Ok((
                     r.get::<_, Option<String>>(0)?,
                     r.get::<_, Option<String>>(1)?,
                 ))
-            })
-            .map_err(|e| e.to_string())?;
+            })?;
 
         for row in rows.flatten() {
             for (raw, counter) in [(row.0, &mut cat_counter), (row.1, &mut tag_counter)] {
@@ -566,11 +573,10 @@ pub async fn backup_site(
     state: State<'_, AppState>,
     site_id: i64,
     backup_path: String,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     backup_site_impl(&db, site_id, &backup_path)
         .await
-        .map_err(|e| e.to_string())
 }
 
 async fn backup_site_impl(db: &Db, site_id: i64, backup_path: &str) -> AppResult<String> {
@@ -814,12 +820,11 @@ pub async fn rescan_articles(db: &Db, site_id: i64, site_path: &str) -> AppResul
 ///
 /// 前端在「刷新」按钮与切换站点时调用；普通分页/搜索只读库。
 #[tauri::command]
-pub async fn refresh_articles(state: State<'_, AppState>, site_id: i64) -> Result<(), String> {
+pub async fn refresh_articles(state: State<'_, AppState>, site_id: i64) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
-    let site = get_site_by_id(&db, site_id).map_err(|e| e.to_string())?;
+    let site = get_site_by_id(&db, site_id)?;
     rescan_articles(&db, site_id, &site.path)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// 获取站点的文件树（供文件管理页使用）。
@@ -830,13 +835,17 @@ pub async fn get_site_file_tree(
     state: State<'_, AppState>,
     site_id: i64,
     max_depth: Option<usize>,
-) -> Result<FileTreeNode, String> {
+) -> AppResult<FileTreeNode> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || {
-        let site = get_site_by_id(&db, site_id).map_err(|e| e.to_string())?;
+    blocking::run(move || {
+        let site = get_site_by_id(&db, site_id)?;
         let root = std::path::Path::new(&site.path);
         if !root.exists() {
-            return Err(format!("站点目录不存在：{}", site.path));
+            return Err(AppError::coded(
+                "site.path_missing",
+                format!("站点目录不存在：{}", site.path),
+                &[("path", site.path.clone())],
+            ));
         }
         Ok(FileTreeNode::from_path(root, 0, max_depth.unwrap_or(4)))
     })

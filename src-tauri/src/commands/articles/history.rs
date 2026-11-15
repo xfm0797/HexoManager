@@ -2,6 +2,7 @@
 
 use crate::db::{site_path_of, Db};
 use crate::models::CommitLog;
+use crate::utils::error::{AppError, AppResult};
 use crate::AppState;
 use rusqlite::params;
 use tauri::State;
@@ -12,20 +13,27 @@ pub async fn get_article_history(
     state: State<'_, AppState>,
     article_id: i64,
     limit: Option<i64>,
-) -> Result<Vec<CommitLog>, String> {
+) -> AppResult<Vec<CommitLog>> {
     let db = Db::from_arc(&state.db);
     let db = &db;
     let (site_id, file_path) = {
-        let conn = db.conn().map_err(|e| e.to_string())?;
+        let conn = db.conn()?;
         conn.query_row(
             "SELECT site_id, file_path FROM articles WHERE id = ?1",
             params![article_id],
             |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
         )
-        .map_err(|_| format!("文章不存在：{}", article_id))?
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::coded(
+                "article.not_found",
+                format!("文章不存在：{}", article_id),
+                &[("id", article_id.to_string())],
+            ),
+            other => AppError::Database(other),
+        })?
     };
 
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+    let site_path = site_path_of(db, site_id)?;
     if !crate::git::status::is_repo(&site_path).await {
         return Ok(Vec::new());
     }
@@ -51,8 +59,7 @@ pub async fn get_article_history(
         Some(root),
         Some(60),
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(crate::git::operations::parse_log_lines(&out.stdout))
 }
@@ -63,20 +70,27 @@ pub async fn get_article_at_commit(
     state: State<'_, AppState>,
     article_id: i64,
     commit_hash: String,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     let db = &db;
     let (site_id, file_path) = {
-        let conn = db.conn().map_err(|e| e.to_string())?;
+        let conn = db.conn()?;
         conn.query_row(
             "SELECT site_id, file_path FROM articles WHERE id = ?1",
             params![article_id],
             |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
         )
-        .map_err(|_| format!("文章不存在：{}", article_id))?
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::coded(
+                "article.not_found",
+                format!("文章不存在：{}", article_id),
+                &[("id", article_id.to_string())],
+            ),
+            other => AppError::Database(other),
+        })?
     };
 
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+    let site_path = site_path_of(db, site_id)?;
     let root = std::path::Path::new(&site_path);
     let rel = std::path::Path::new(&file_path)
         .strip_prefix(root)
@@ -85,11 +99,14 @@ pub async fn get_article_at_commit(
 
     let spec = format!("{}:{}", commit_hash, rel);
     let out = crate::utils::process::run("git", &["show", &spec], Some(root), Some(60))
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     if !out.success {
-        return Err(format!("读取历史版本失败：{}", out.combined()));
+        return Err(AppError::coded(
+            "git.show_failed",
+            format!("读取历史版本失败：{}", out.combined()),
+            &[("commit", commit_hash.clone())],
+        ));
     }
 
     Ok(out.stdout)

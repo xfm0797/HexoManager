@@ -398,7 +398,7 @@ pub async fn hexo_new_post_article(
     title: String,
     is_draft: Option<bool>,
     template_id: Option<i64>,
-) -> Result<Article, String> {
+) -> AppResult<Article> {
     crate::commands::article_commands::create_article(
         state,
         site_id,

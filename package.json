@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "i18n:merge": "node scripts/i18n-merge.mjs",
-    "i18n:check": "node scripts/i18n-coverage.mjs",
+    "i18n:check": "node scripts/i18n-coverage.mjs && node scripts/error-codes-check.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
