@@ -113,12 +113,21 @@ jobs:
         run: cargo fmt --check
 
   # ===== 多平台打包 =====
+  #
+  # **必须串行执行（max-parallel: 1）**：四个 job 共用同一个 Release，而
+  # `tauri-action` 写 `latest.json` 的方式是「读已有资产 → 删同名 → 传新内容」。
+  # 并行时 A 拿到的资产 id 在删除前已被 B 替换，GitHub 返回 404，报
+  # `Not Found - .../delete-a-release-asset`。v1.2.1 就栽在这里：三个平台成功、
+  # Windows job 失败，`latest.json` 缺 `windows-*` 键 —— 安装包齐全，但 Windows
+  # 用户收不到自动更新（静默失效，最难发现）。
+  # 串行后每个 job 基于上一个 job 的产物合并，代价是总时长从 ~9 分钟变成 ~35 分钟。
   build:
     name: 打包 (${{ matrix.platform }})
     needs: check
     if: startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - platform: ubuntu-22.04
@@ -175,3 +184,43 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  # ===== 发布产物自检 =====
+  #
+  # 为什么需要这一步：`latest.json` 少一个平台键**不会**让任何 job 变红 —— 安装包
+  # 都在，Release 看起来正常，只有那个平台的自动更新静默失效（v1.2.1 就是这样丢掉
+  # windows-* 的）。这里按 tauri v2 的规范键逐个校验，缺哪个就点名报错。
+  # `always()` 保证即使某个打包 job 失败，也能拿到「到底缺什么」的结论。
+  verify:
+    name: 校验更新清单
+    needs: build
+    if: always() && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检查 latest.json 是否覆盖所有平台
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          url="https://github.com/${REPO}/releases/download/${TAG}/latest.json"
+          curl -fsSL "$url" -o latest.json
+          node - <<'JS'
+          const manifest = require('./latest.json');
+          const required = [
+            'darwin-aarch64',
+            'darwin-x86_64',
+            'linux-x86_64',
+            'windows-x86_64',
+            'windows-x86_64-msi',
+            'windows-x86_64-nsis',
+          ];
+          const platforms = manifest.platforms || {};
+          const missing = required.filter((k) => !platforms[k] || !platforms[k].signature);
+          if (missing.length) {
+            console.error(`::error::latest.json 缺少平台键或签名为空：${missing.join(', ')}`);
+            console.error(`实际包含：${Object.keys(platforms).join(', ') || '(空)'}`);
+            process.exit(1);
+          }
+          console.log(`更新清单版本 ${manifest.version}，平台齐全：${Object.keys(platforms).join(', ')}`);
+          JS
