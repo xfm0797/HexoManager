@@ -49,9 +49,15 @@ mod tests {
     #[test]
     fn test_site_path_of_missing_site() {
         let err = site_path_of(&db(), 99).unwrap_err();
+        // 断言**稳定错误码**而不是枚举变体：前端按 code 取译文，这个值就是对外的契约
+        assert_eq!(
+            err.code(),
+            "site.not_found",
+            "站点不存在必须带稳定码，前端才能区分「没选站点」与「读表失败」"
+        );
         assert!(
-            matches!(err, AppError::NotFound(_)),
-            "站点不存在必须是 NotFound，便于前端区分「没选站点」与「读表失败」"
+            err.message().contains("站点不存在：99"),
+            "中文原文要保留 id，日志与诊断导出靠它定位"
         );
     }
 }

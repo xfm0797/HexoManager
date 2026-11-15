@@ -85,7 +85,18 @@ jobs:
       # 因此这一步是 Rust 侧 20+ 个回归测试唯一的执行机会
       - name: Rust 单元测试
         working-directory: ./src-tauri
-        run: cargo test --all-targets
+        # pipefail 由 bash 的 -eo pipefail 保证：tee 不吞掉 cargo 的退出码
+        run: cargo test --all-targets 2>&1 | tee /tmp/cargo-test.log
+
+      # 单元测试失败时，把失败的用例名与断言写进**注解**。
+      # 原因：job 日志的 REST 接口需要认证（403），而 annotations 是公开的 ——
+      # 没有本地可跑测试的机器上排查 CI 失败，这是唯一不用登录就能拿到细节的路。
+      - name: 汇总失败的单元测试
+        if: failure()
+        run: |
+          echo "以下用例失败（详见上一步日志）："
+          grep -E '^(---- |thread .* panicked|assertion|  left:|  right:|test result:)' /tmp/cargo-test.log \
+            | head -60 | sed 's/^/::error::/'
 
       # 本仓库自身的代码当前 0 clippy 告警；`-- -D warnings` 让告警直接变成失败标记，
       # 但保留 continue-on-error，避免某个工具链版本新增的 lint 卡住整条发布流水线。
