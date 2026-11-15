@@ -29,8 +29,20 @@
   **`curl` 必须加 `--ssl-no-revoke`**：本机 schannel 吊销服务器不可达，否则报
   `0x80092013 吊销功能无法检查吊销`（HTTP 000）。另：Git Bash 的 `/tmp` 与 Windows 原生 Python
   **不互通**，临时 json 落到仓库目录再用 Read 读（README 场景记得事后删除，避免污染工作区）
-- `latest.json` 是自动更新的关键产物，须含 **darwin-aarch64 / darwin-x86_64 / windows-* / linux-***
-  各键且 `signature` 非空（约 428~444 字符）；缺 macOS 键说明 macOS job 失败
+- `latest.json` 是自动更新的关键产物，须含 11 个规范键（v1.2.0 起的完整集合）：
+  `darwin-aarch64` / `darwin-aarch64-app` / `darwin-x86_64` / `darwin-x86_64-app` /
+  `linux-x86_64` / `linux-x86_64-appimage` / `linux-x86_64-deb` / `linux-x86_64-rpm` /
+  `windows-x86_64` / `windows-x86_64-msi` / `windows-x86_64-nsis`，且 `signature` 非空
+  （约 428~444 字符）
+- **`latest.json` 缺平台键是「静默失效」级故障**：安装包都在、Release 正常，只有那个平台
+  的自动更新拿不到更新。v1.2.1 首次发布就丢了 `windows-*` 三键（Windows job 报
+  `Not Found - .../delete-a-release-asset` 失败）。**看到 delete-a-release-asset 的 404，
+  先怀疑清单不完整，而不是「包没传上去」**
+- 发版归档 CHANGELOG 时：顶部留回一个空的 `## [Unreleased]`（底部 `[Unreleased]: compare/vX…HEAD`
+  链接引用要有着落），并补 `[x.y.z]: compare/v前一个...vx.y.z`；重复的分类小节按
+  `新增 → 变更 → 修复 → 性能 → 安全 → 工程化` 合并，**条目逐条保留**
+- ⚠️ `git tag -a` 也要带 `-c user.name/-c user.email`：本机无全局身份，只给 commit 加 `-c`
+  时打 tag 会 `Committer identity unknown`
 
 ## Monaco 编辑器
 - 编辑器统一走 `src/components/CodeEditor.tsx`（封装 `@monaco-editor/react`）
@@ -85,6 +97,13 @@
   ubuntu / windows-latest 为 16GB（默认 4144MB）故不受影响。**改动该 env 前先想清楚**
 - **重跑失败的 workflow 无法修复此类问题**：GitHub 重跑用的是该 commit/tag 当时保存的
   workflow 定义，旧文件里的缺陷会原样复现 → 必须让新提交带上修复后重新触发
+- **打包 job 必须串行（`strategy.max-parallel: 1`）**：四个 job 共用同一个 Release，
+  `tauri-action` 写 `latest.json` 是「读已有资产 → 删同名 → 传新内容」；并行时 A 拿到的
+  资产 id 在删除前已被 B 替换 → 404 `delete-a-release-asset`。串行后每个 job 基于上一个
+  的产物合并，逐平台补全；代价 ~9 分钟 → ~35 分钟。**不能**改成「只让一个 job 写清单」
+  （`includeUpdaterJson: false`）：清单是「自己的平台 + 合并已有资产」，只一个写反而更不全
+- 新增 `verify` job（`needs: build` + `always()`）按 6 个必备键校验 `latest.json`，
+  缺键或签名为空即 `::error::` 点名 —— 专门兜住上面那种「不报错但少平台」的故障
 - 复现脚本：`.repro/vite-oom-repro.sh <MB>`（复跑 vite build 并判定）；跑前先前台 `rm -rf dist`
 - `tauri-action` 步骤自带 `env`（GITHUB_TOKEN 等）与 workflow 级 `env` 是**合并**关系，
   同名才覆盖 → workflow 级变量在 beforeBuildCommand 里仍生效
