@@ -1,12 +1,12 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "major": 1,
   "minor": 2,
-  "patch": 0,
+  "patch": 1,
   "prerelease": null,
   "buildMetadata": null,
-  "lastUpdated": "2026-10-10T00:00:00Z",
-  "description": "中英双语界面：非中文环境默认英文，中文环境保持中文，偏好设置可手动切换",
+  "lastUpdated": "2026-11-15T12:09:33Z",
+  "description": "修复保存文章误删同站记录、发布草稿覆盖同名文章、主题配置读写不一致等缺陷；后端错误全面码化，英文界面按错误码取译文",
   "isLocked": false,
   "history": [
     {
@@ -44,6 +44,12 @@
       "type": "minor",
       "description": "中英双语界面：跟随系统语言，非中文环境默认英文（满足 AppImage 目录收录要求），偏好设置可手动切换",
       "createdAt": "2026-10-10T00:00:00Z"
+    },
+    {
+      "version": "1.2.1",
+      "type": "patch",
+      "description": "修复保存文章误删同站记录、发布草稿覆盖同名文章、主题配置读写不一致等缺陷；后端错误全面码化，英文界面按错误码取译文",
+      "createdAt": "2026-11-15T12:09:33Z"
     }
   ]
 }
