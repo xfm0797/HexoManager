@@ -3,6 +3,8 @@
 use crate::db::Db;
 use crate::models::{AppInfo, Changelog, UpdateInfo, UpdateSettings};
 use crate::utils::blocking;
+use crate::err;
+use crate::utils::error::{AppError, AppResult};
 use crate::AppState;
 use rusqlite::params;
 use tauri::State;
@@ -14,11 +16,10 @@ use tauri::State;
 pub async fn check_update(
     state: State<'_, AppState>,
     manifest_url: Option<String>,
-) -> Result<UpdateInfo, String> {
+) -> AppResult<UpdateInfo> {
     let db = Db::from_arc(&state.db);
     let result = crate::update::check::check_update(manifest_url)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     // 记录检查时间与版本，并同步「跳过版本」设置
     if let Ok(conn) = db.conn() {
@@ -70,8 +71,8 @@ fn read_settings_inner(conn: &rusqlite::Connection) -> UpdateSettings {
 
 /// 获取更新设置。
 #[tauri::command]
-pub fn get_update_settings(state: State<'_, AppState>) -> Result<UpdateSettings, String> {
-    let conn = state.db.conn().map_err(|e| e.to_string())?;
+pub fn get_update_settings(state: State<'_, AppState>) -> AppResult<UpdateSettings> {
+    let conn = state.db.conn()?;
     Ok(read_settings_inner(&conn))
 }
 
@@ -80,8 +81,8 @@ pub fn get_update_settings(state: State<'_, AppState>) -> Result<UpdateSettings,
 pub fn save_update_settings(
     state: State<'_, AppState>,
     settings: UpdateSettings,
-) -> Result<(), String> {
-    let conn = state.db.conn().map_err(|e| e.to_string())?;
+) -> AppResult<()> {
+    let conn = state.db.conn()?;
     conn.execute(
         "UPDATE update_settings SET auto_check = ?1, skip_version = ?2, updated_at = ?3 WHERE id = 1",
         params![
@@ -89,8 +90,7 @@ pub fn save_update_settings(
             settings.skip_version,
             crate::utils::now_utc()
         ],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(())
 }
 
@@ -99,10 +99,9 @@ pub fn save_update_settings(
 pub async fn download_update(
     url: String,
     target_dir: Option<String>,
-) -> Result<crate::update::download::DownloadResult, String> {
+) -> AppResult<crate::update::download::DownloadResult> {
     crate::update::download::download_update(&url, target_dir)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// 安装更新包（校验签名后启动系统安装器）。
@@ -115,7 +114,7 @@ pub async fn install_update(
     app: tauri::AppHandle,
     path: String,
     signature: Option<String>,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let pubkey = app
         .config()
         .plugins
@@ -127,13 +126,12 @@ pub async fn install_update(
 
     crate::update::install::install_update(&path, signature.as_deref(), pubkey.as_deref())
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// 获取更新日志。
 #[tauri::command]
 pub async fn get_changelog(project_root: Option<String>) -> Vec<Changelog> {
-    blocking::cmd(move || {
+    blocking::run(move || {
         // 优先读取项目根目录的 CHANGELOG.md
         let root = project_root.or_else(|| {
             // 尝试从当前工作目录向上查找
@@ -155,7 +153,7 @@ pub fn get_app_info() -> AppInfo {
 
 /// 打开外部链接（反馈入口、开源许可等）。
 #[tauri::command]
-pub fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
+pub fn open_external(app: tauri::AppHandle, url: String) -> AppResult<()> {
     use tauri_plugin_opener::OpenerExt;
 
     if !url.starts_with("http://") && !url.starts_with("https://") {
@@ -164,24 +162,24 @@ pub fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
 
     app.opener()
         .open_url(url, None::<&str>)
-        .map_err(|e| format!("打开链接失败：{}", e))
+        .map_err(|e| err!("打开链接失败：{}", e))
 }
 
 /// 读取本地版本号文件 `version.json`（仅开发期使用）。
 #[tauri::command]
 pub async fn get_local_version(
     project_root: Option<String>,
-) -> Result<serde_json::Value, String> {
-    blocking::cmd(move || {
+) -> AppResult<serde_json::Value> {
+    blocking::run(move || {
         crate::update::check::read_local_version(project_root.as_deref())
-            .map_err(|e| e.to_string())
+            
     })
     .await
 }
 
 /// 更新源配置（供「关于与更新」页展示检查链路）。
 #[tauri::command]
-pub fn get_update_config() -> Result<serde_json::Value, String> {
+pub fn get_update_config() -> AppResult<serde_json::Value> {
     Ok(serde_json::json!({
         "currentVersion": crate::update::check::APP_VERSION,
         "endpoints": crate::update::check::update_source_info(),
@@ -196,22 +194,19 @@ pub fn get_update_config() -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub fn get_app_settings(
     state: State<'_, AppState>,
-) -> Result<Vec<crate::models::AppSetting>, String> {
-    let conn = state.db.conn().map_err(|e| e.to_string())?;
+) -> AppResult<Vec<crate::models::AppSetting>> {
+    let conn = state.db.conn()?;
     let mut stmt = conn
-        .prepare("SELECT key, value FROM app_settings")
-        .map_err(|e| e.to_string())?;
+        .prepare("SELECT key, value FROM app_settings")?;
     let rows = stmt
         .query_map([], |r| {
             Ok(crate::models::AppSetting {
                 key: r.get(0)?,
                 value: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
             })
-        })
-        .map_err(|e| e.to_string())?;
+        })?;
 
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
 /// 写入单个应用设置。
@@ -220,13 +215,12 @@ pub fn set_app_setting(
     state: State<'_, AppState>,
     key: String,
     value: String,
-) -> Result<(), String> {
-    let conn = state.db.conn().map_err(|e| e.to_string())?;
+) -> AppResult<()> {
+    let conn = state.db.conn()?;
     conn.execute(
         "INSERT INTO app_settings (key, value, updated_at) VALUES (?1, ?2, ?3)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
         params![key, value, crate::utils::now_utc()],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(())
 }

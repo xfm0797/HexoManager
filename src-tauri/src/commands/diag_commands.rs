@@ -9,6 +9,7 @@
 //! 用户在「偏好设置 → 关于」里点「导出诊断日志」即可拿到一个可直接发送的文本。
 
 use crate::utils::blocking;
+use crate::utils::error::AppResult;
 use crate::utils::log;
 use std::path::Path;
 
@@ -37,6 +38,6 @@ pub fn get_log_dir() -> Option<String> {
 
 /// 把最近日志合并导出到 `target`，返回实际写入的文件路径。
 #[tauri::command]
-pub async fn export_logs(target: String) -> Result<String, String> {
-    blocking::cmd(move || log::export_to(Path::new(&target)).map_err(|e| e.to_string())).await
+pub async fn export_logs(target: String) -> AppResult<String> {
+    blocking::run(move || log::export_to(Path::new(&target))).await
 }

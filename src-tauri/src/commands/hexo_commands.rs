@@ -52,14 +52,13 @@ pub async fn hexo_build(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     site_id: i64,
-) -> Result<BuildResult, String> {
+) -> AppResult<BuildResult> {
     let db = Db::from_arc(&state.db);
-    let path = site_path_of(&db, site_id).map_err(|e| e.to_string())?;
+    let path = site_path_of(&db, site_id)?;
 
     let _ = app.emit("hexo:build-start", serde_json::json!({ "siteId": site_id }));
     let result = crate::hexo::builder::build(&path)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     let _ = app.emit(
         "hexo:build-finish",
         serde_json::json!({
@@ -74,11 +73,10 @@ pub async fn hexo_build(
 
 /// 清理缓存：`hexo clean`。
 #[tauri::command]
-pub async fn hexo_clean(state: State<'_, AppState>, site_id: i64) -> Result<BuildResult, String> {
-    let path = site_path_of(&state.db, site_id).map_err(|e| e.to_string())?;
+pub async fn hexo_clean(state: State<'_, AppState>, site_id: i64) -> AppResult<BuildResult> {
+    let path = site_path_of(&state.db, site_id)?;
     crate::hexo::builder::clean(&path)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// 生成静态文件：`hexo generate`。
@@ -87,16 +85,15 @@ pub async fn hexo_generate(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     site_id: i64,
-) -> Result<BuildResult, String> {
+) -> AppResult<BuildResult> {
     let db = Db::from_arc(&state.db);
-    let path = site_path_of(&db, site_id).map_err(|e| e.to_string())?;
+    let path = site_path_of(&db, site_id)?;
     let _ = app.emit(
         "hexo:generate-start",
         serde_json::json!({ "siteId": site_id }),
     );
     let result = crate::hexo::builder::generate(&path)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     let _ = app.emit(
         "hexo:generate-finish",
         serde_json::json!({ "siteId": site_id, "success": result.success }),
@@ -110,9 +107,9 @@ pub async fn hexo_server_start(
     state: State<'_, AppState>,
     site_id: i64,
     port: Option<u16>,
-) -> Result<PreviewServer, String> {
+) -> AppResult<PreviewServer> {
     let db = Db::from_arc(&state.db);
-    let path = site_path_of(&db, site_id).map_err(|e| e.to_string())?;
+    let path = site_path_of(&db, site_id)?;
 
     // 已在运行则直接返回（`get` 会顺手清理已退出的条目）
     if let Some(existing) = state.servers.get(site_id) {
@@ -123,8 +120,7 @@ pub async fn hexo_server_start(
     let actual_port = crate::hexo::server::find_free_port(desired).await;
 
     let server = crate::hexo::server::spawn_server(site_id, &path, actual_port)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     let info = server.info.clone();
 
     // 句柄交给注册表持有：退出应用时由 `stop_all` 统一回收
@@ -134,7 +130,7 @@ pub async fn hexo_server_start(
 
 /// 停止本地预览服务。
 #[tauri::command]
-pub fn hexo_server_stop(state: State<'_, AppState>, pid: u32) -> Result<(), String> {
+pub fn hexo_server_stop(state: State<'_, AppState>, pid: u32) -> AppResult<()> {
     // 结束进程树并回收句柄，同时清理注册表条目
     let had_handle = state.servers.stop_by_pid(pid);
     if !had_handle && !crate::hexo::server::is_running(pid) {
@@ -146,7 +142,7 @@ pub fn hexo_server_stop(state: State<'_, AppState>, pid: u32) -> Result<(), Stri
 
 /// 列出全部运行中的预览服务。
 #[tauri::command]
-pub fn hexo_server_list(state: State<'_, AppState>) -> Result<Vec<PreviewServer>, String> {
+pub fn hexo_server_list(state: State<'_, AppState>) -> AppResult<Vec<PreviewServer>> {
     // `list` 内部按句柄存活情况过滤，并清理已退出的条目
     Ok(state.servers.list())
 }
@@ -157,13 +153,12 @@ pub async fn hexo_new_post(
     state: State<'_, AppState>,
     site_id: i64,
     title: String,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     let db = &db;
-    let path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+    let path = site_path_of(db, site_id)?;
     let out = crate::hexo::builder::new_post(&path, "post", &title)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     let _ = crate::commands::site_commands::rescan_articles(db, site_id, &path).await;
     Ok(out)
 }
@@ -174,13 +169,12 @@ pub async fn hexo_new_draft(
     state: State<'_, AppState>,
     site_id: i64,
     title: String,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     let db = &db;
-    let path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+    let path = site_path_of(db, site_id)?;
     let out = crate::hexo::builder::new_post(&path, "draft", &title)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     let _ = crate::commands::site_commands::rescan_articles(db, site_id, &path).await;
     Ok(out)
 }
@@ -191,13 +185,12 @@ pub async fn hexo_publish(
     state: State<'_, AppState>,
     site_id: i64,
     slug: String,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     let db = &db;
-    let path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+    let path = site_path_of(db, site_id)?;
     let out = crate::hexo::builder::publish_post(&path, &slug)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     let _ = crate::commands::site_commands::rescan_articles(db, site_id, &path).await;
     Ok(out)
 }
@@ -208,18 +201,17 @@ pub async fn hexo_deploy(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     site_id: i64,
-) -> Result<BuildResult, String> {
+) -> AppResult<BuildResult> {
     let db = Db::from_arc(&state.db);
     let db = &db;
-    let path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+    let path = site_path_of(db, site_id)?;
 
     let _ = app.emit(
         "hexo:deploy-start",
         serde_json::json!({ "siteId": site_id }),
     );
     let result = crate::hexo::builder::deploy_local(&path)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     let _ = record_deploy_log(
         db,
@@ -256,23 +248,21 @@ pub async fn check_hexo_env(
     state: State<'_, AppState>,
     path: Option<String>,
     site_id: Option<i64>,
-) -> Result<EnvCheck, String> {
+) -> AppResult<EnvCheck> {
     let target = match (path, site_id) {
         (Some(p), _) => p,
-        (None, Some(id)) => site_path_of(&state.db, id).map_err(|e| e.to_string())?,
+        (None, Some(id)) => site_path_of(&state.db, id)?,
         (None, None) => ".".to_string(),
     };
     crate::hexo::installer::check_env(&target)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// 安装 Hexo CLI。
 #[tauri::command]
-pub async fn install_hexo(path: Option<String>) -> Result<String, String> {
+pub async fn install_hexo(path: Option<String>) -> AppResult<String> {
     crate::hexo::installer::install_hexo(path.as_deref())
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// 一键部署：git add + commit + push。
@@ -282,11 +272,10 @@ pub async fn deploy_site(
     state: State<'_, AppState>,
     site_id: i64,
     message: String,
-) -> Result<DeployResult, String> {
+) -> AppResult<DeployResult> {
     let db = Db::from_arc(&state.db);
     deploy_site_impl(&app, &db, site_id, &message)
         .await
-        .map_err(|e| e.to_string())
 }
 
 async fn deploy_site_impl(

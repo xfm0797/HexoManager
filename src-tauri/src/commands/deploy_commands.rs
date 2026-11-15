@@ -5,6 +5,7 @@ use crate::models::{
     DeployConfig, DeployLog, DeployTemplate, EnvVar, GenerateConfigInput, GeneratedFile,
 };
 use crate::utils::blocking;
+use crate::err;
 use crate::utils::error::{AppError, AppResult};
 use crate::AppState;
 use rusqlite::params;
@@ -17,10 +18,10 @@ use tauri::State;
 #[tauri::command]
 pub async fn generate_deploy_config(
     input: GenerateConfigInput,
-) -> Result<Vec<GeneratedFile>, String> {
-    blocking::cmd(move || {
-        validate_input(&input).map_err(|e| e.to_string())?;
-        crate::deploy::config_generator::generate_all(&input).map_err(|e| e.to_string())
+) -> AppResult<Vec<GeneratedFile>> {
+    blocking::run(move || {
+        validate_input(&input)?;
+        crate::deploy::config_generator::generate_all(&input)
     })
     .await
 }
@@ -29,9 +30,9 @@ pub async fn generate_deploy_config(
 #[tauri::command]
 pub async fn preview_deploy_config(
     input: GenerateConfigInput,
-) -> Result<Vec<GeneratedFile>, String> {
-    blocking::cmd(move || {
-        crate::deploy::config_generator::preview_all(&input).map_err(|e| e.to_string())
+) -> AppResult<Vec<GeneratedFile>> {
+    blocking::run(move || {
+        crate::deploy::config_generator::preview_all(&input)
     })
     .await
 }
@@ -41,10 +42,10 @@ pub async fn preview_deploy_config(
 pub async fn generate_pages_config(
     input: GenerateConfigInput,
     platform: String,
-) -> Result<Vec<GeneratedFile>, String> {
-    blocking::cmd(move || {
+) -> AppResult<Vec<GeneratedFile>> {
+    blocking::run(move || {
         crate::deploy::pages_generator::generate_for_platform(&input, &platform)
-            .map_err(|e| e.to_string())
+            
     })
     .await
 }
@@ -61,9 +62,9 @@ pub fn save_deploy_config(
     state: State<'_, AppState>,
     site_id: i64,
     config: Value,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = &state.db;
-    let conn = db.conn().map_err(|e| e.to_string())?;
+    let conn = db.conn()?;
 
     let repo_platform = config
         .get("repoPlatform")
@@ -132,16 +133,15 @@ pub fn save_deploy_config(
             branch,
             output_dir
         ],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     Ok(())
 }
 
 /// 读取部署配置。
 #[tauri::command]
-pub fn get_deploy_config(state: State<'_, AppState>, site_id: i64) -> Result<DeployConfig, String> {
-    let conn = state.db.conn().map_err(|e| e.to_string())?;
+pub fn get_deploy_config(state: State<'_, AppState>, site_id: i64) -> AppResult<DeployConfig> {
+    let conn = state.db.conn()?;
 
     let result = conn
         .query_row(
@@ -213,17 +213,17 @@ pub async fn get_deploy_logs(
     state: State<'_, AppState>,
     site_id: i64,
     limit: Option<i64>,
-) -> Result<Vec<DeployLog>, String> {
+) -> AppResult<Vec<DeployLog>> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || get_deploy_logs_impl(&db, site_id, limit)).await
+    blocking::run(move || get_deploy_logs_impl(&db, site_id, limit)).await
 }
 
 fn get_deploy_logs_impl(
     db: &Db,
     site_id: i64,
     limit: Option<i64>,
-) -> Result<Vec<DeployLog>, String> {
-    let conn = db.conn().map_err(|e| e.to_string())?;
+) -> AppResult<Vec<DeployLog>> {
+    let conn = db.conn()?;
     let n = limit.unwrap_or(50);
 
     let mut stmt = conn
@@ -231,8 +231,7 @@ fn get_deploy_logs_impl(
             "SELECT id, site_id, status, commit_message, commit_hash, branch, duration_ms,
                     error_message, output, created_at
              FROM deploy_logs WHERE site_id = ?1 ORDER BY id DESC LIMIT ?2",
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
 
     let rows = stmt
         .query_map(params![site_id, n], |r| {
@@ -248,11 +247,9 @@ fn get_deploy_logs_impl(
                 output: r.get(8)?,
                 created_at: r.get(9)?,
             })
-        })
-        .map_err(|e| e.to_string())?;
+        })?;
 
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
 /// 回滚部署到指定提交。
@@ -261,25 +258,24 @@ pub async fn rollback_deploy(
     state: State<'_, AppState>,
     site_id: i64,
     commit_hash: String,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     let db = &db;
     let path: String = {
-        let conn = db.conn().map_err(|e| e.to_string())?;
+        let conn = db.conn()?;
         conn.query_row(
             "SELECT path FROM sites WHERE id = ?1",
             params![site_id],
             |r| r.get(0),
         )
-        .map_err(|_| format!("站点不存在：{}", site_id))?
+        .map_err(|_| err!("站点不存在：{}", site_id))?
     };
 
     // 回滚前先暂存当前改动，避免丢失
     let _ = crate::git::operations::stash(&path).await;
 
     let out = crate::git::operations::reset_hard(&path, &commit_hash)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     // 记录一条回滚日志
     if let Ok(conn) = db.conn() {
@@ -295,12 +291,12 @@ pub async fn rollback_deploy(
 
 /// 触发 Webhook（用于通知 CI/CD 平台重建）。
 #[tauri::command]
-pub async fn trigger_webhook(url: String, payload: Option<Value>) -> Result<String, String> {
+pub async fn trigger_webhook(url: String, payload: Option<Value>) -> AppResult<String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .user_agent("HexoManager-Webhook/1.0")
         .build()
-        .map_err(|e| format!("创建请求客户端失败：{}", e))?;
+        .map_err(|e| err!("创建请求客户端失败：{}", e))?;
 
     let body = payload.unwrap_or_else(|| serde_json::json!({ "triggeredBy": "HexoManager" }));
 
@@ -309,13 +305,13 @@ pub async fn trigger_webhook(url: String, payload: Option<Value>) -> Result<Stri
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Webhook 请求失败：{}", e))?;
+        .map_err(|e| err!("Webhook 请求失败：{}", e))?;
 
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
 
     if !status.is_success() {
-        return Err(format!("Webhook 返回状态码 {}：{}", status, text));
+        return Err(err!("Webhook 返回状态码 {}：{}", status, text));
     }
 
     Ok(format!("状态码 {}：{}", status, text))
@@ -338,8 +334,8 @@ fn validate_input(input: &GenerateConfigInput) -> AppResult<()> {
 
 /// 校验域名格式（供前端即时提示）。
 #[tauri::command]
-pub fn validate_domain(domain: String) -> Result<(), String> {
-    crate::deploy::pages_generator::validate_domain(&domain)
+pub fn validate_domain(domain: String) -> AppResult<()> {
+    crate::deploy::pages_generator::validate_domain(&domain).map_err(AppError::from)
 }
 
 /// 检查部署配置文件是否已存在（避免覆盖用户手写内容）。
@@ -348,10 +344,10 @@ pub fn validate_domain(domain: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn check_deploy_files(
     input: GenerateConfigInput,
-) -> Result<Vec<(String, bool)>, String> {
-    blocking::cmd(move || {
+) -> AppResult<Vec<(String, bool)>> {
+    blocking::run(move || {
         let files =
-            crate::deploy::config_generator::preview_all(&input).map_err(|e| e.to_string())?;
+            crate::deploy::config_generator::preview_all(&input)?;
         let root = std::path::Path::new(&input.site_path);
 
         Ok(files

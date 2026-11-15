@@ -11,6 +11,7 @@ use crate::db::Db;
 use crate::models::{
     ApplyTemplateInput, ApplyTemplateResult, FrontMatterTemplate, SaveFrontMatterTemplateInput,
 };
+use crate::err;
 use crate::utils::error::{AppError, AppResult};
 use crate::utils::{now_utc, slugify};
 use crate::AppState;
@@ -229,20 +230,18 @@ pub fn load_template(conn: &Connection, template_id: i64) -> AppResult<FrontMatt
 #[tauri::command]
 pub fn get_front_matter_templates(
     state: State<'_, AppState>,
-) -> Result<Vec<FrontMatterTemplate>, String> {
-    let conn = state.db.conn().map_err(|e| e.to_string())?;
-    ensure_seeded(&conn).map_err(|e| e.to_string())?;
+) -> AppResult<Vec<FrontMatterTemplate>> {
+    let conn = state.db.conn()?;
+    ensure_seeded(&conn)?;
 
     let sql = format!(
         "SELECT {} FROM front_matter_templates ORDER BY sort_order ASC, id ASC",
         TEMPLATE_COLUMNS
     );
-    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(&sql)?;
     let rows = stmt
-        .query_map([], row_to_template)
-        .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())
+        .query_map([], row_to_template)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
 /// 新建或更新模板（`id` 为空即新建）。返回保存后的模板。
@@ -250,9 +249,9 @@ pub fn get_front_matter_templates(
 pub fn save_front_matter_template(
     state: State<'_, AppState>,
     input: SaveFrontMatterTemplateInput,
-) -> Result<FrontMatterTemplate, String> {
-    let conn = state.db.conn().map_err(|e| e.to_string())?;
-    save_front_matter_template_impl(&conn, input).map_err(|e| e.to_string())
+) -> AppResult<FrontMatterTemplate> {
+    let conn = state.db.conn()?;
+    save_front_matter_template_impl(&conn, input)
 }
 
 fn save_front_matter_template_impl(
@@ -346,15 +345,15 @@ fn save_front_matter_template_impl(
 pub fn delete_front_matter_template(
     state: State<'_, AppState>,
     template_id: i64,
-) -> Result<(), String> {
-    let conn = state.db.conn().map_err(|e| e.to_string())?;
+) -> AppResult<()> {
+    let conn = state.db.conn()?;
     let builtin: Option<i64> = conn
         .query_row(
             "SELECT is_builtin FROM front_matter_templates WHERE id = ?1",
             params![template_id],
             |r| r.get(0),
         )
-        .map_err(|_| format!("模板不存在：{}", template_id))?;
+        .map_err(|_| err!("模板不存在：{}", template_id))?;
 
     if builtin.unwrap_or(0) != 0 {
         return Err("内置模板不可删除，可编辑它或另存为新模板".into());
@@ -363,8 +362,7 @@ pub fn delete_front_matter_template(
     conn.execute(
         "DELETE FROM front_matter_templates WHERE id = ?1",
         params![template_id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(())
 }
 
@@ -375,11 +373,10 @@ pub fn delete_front_matter_template(
 pub async fn apply_front_matter_template(
     state: State<'_, AppState>,
     input: ApplyTemplateInput,
-) -> Result<ApplyTemplateResult, String> {
+) -> AppResult<ApplyTemplateResult> {
     let db = Db::from_arc(&state.db);
     apply_front_matter_template_impl(&db, input)
         .await
-        .map_err(|e| e.to_string())
 }
 
 async fn apply_front_matter_template_impl(

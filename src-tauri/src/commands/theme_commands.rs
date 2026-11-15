@@ -3,6 +3,7 @@
 use crate::db::{site_path_of, Db};
 use crate::models::{Theme, ThemeConfig, ThemeInfo};
 use crate::utils::blocking;
+use crate::err;
 use crate::utils::error::{AppError, AppResult};
 use crate::utils::{format_system_time, process};
 use crate::AppState;
@@ -123,17 +124,17 @@ fn read_theme_meta(
 pub async fn get_themes(
     state: State<'_, AppState>,
     site_id: i64,
-) -> Result<Vec<Theme>, String> {
+) -> AppResult<Vec<Theme>> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || {
-        let site_path = site_path_of(&db, site_id).map_err(|e| e.to_string())?;
+    blocking::run(move || {
+        let site_path = site_path_of(&db, site_id)?;
         let active = current_theme(&site_path);
 
         let themes_dir = Path::new(&site_path).join("themes");
         let mut themes = Vec::new();
 
         if themes_dir.exists() {
-            let entries = std::fs::read_dir(&themes_dir).map_err(|e| e.to_string())?;
+            let entries = std::fs::read_dir(&themes_dir)?;
             for entry in entries.flatten() {
                 if !entry.path().is_dir() {
                     continue;
@@ -207,11 +208,10 @@ pub async fn install_theme(
     site_id: i64,
     name: String,
     source: Option<String>,
-) -> Result<Theme, String> {
+) -> AppResult<Theme> {
     let db = Db::from_arc(&state.db);
     install_theme_impl(&db, site_id, &name, source.as_deref())
         .await
-        .map_err(|e| e.to_string())
 }
 
 async fn install_theme_impl(
@@ -331,19 +331,19 @@ pub async fn switch_theme(
     state: State<'_, AppState>,
     site_id: i64,
     name: String,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
     let db = &db;
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+    let site_path = site_path_of(db, site_id)?;
 
     // 校验主题已安装
     let theme_dir = Path::new(&site_path).join("themes").join(&name);
     if !theme_dir.exists() {
-        return Err(format!("主题未安装：{}", name));
+        return Err(err!("主题未安装：{}", name));
     }
 
     let cfg = format!("{}/_config.yml", site_path.trim_end_matches('/'));
-    let mut value = crate::hexo::config_parser::parse_yaml_file(&cfg).map_err(|e| e.to_string())?;
+    let mut value = crate::hexo::config_parser::parse_yaml_file(&cfg)?;
 
     if let Some(obj) = value.as_object_mut() {
         obj.insert("theme".into(), Value::String(name.clone()));
@@ -351,15 +351,14 @@ pub async fn switch_theme(
         return Err("站点配置文件格式异常，无法写入 theme 字段".into());
     }
 
-    crate::hexo::config_parser::write_yaml_file(&cfg, &value).map_err(|e| e.to_string())?;
+    crate::hexo::config_parser::write_yaml_file(&cfg, &value)?;
 
     {
-        let conn = db.conn().map_err(|e| e.to_string())?;
+        let conn = db.conn()?;
         conn.execute(
             "UPDATE sites SET theme = ?2, updated_at = ?3 WHERE id = ?1",
             params![site_id, name, crate::utils::now_utc()],
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
     }
 
     Ok(())
@@ -397,17 +396,17 @@ pub async fn get_theme_config(
     state: State<'_, AppState>,
     site_id: i64,
     theme: Option<String>,
-) -> Result<ThemeConfig, String> {
+) -> AppResult<ThemeConfig> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || get_theme_config_impl(&db, site_id, theme)).await
+    blocking::run(move || get_theme_config_impl(&db, site_id, theme)).await
 }
 
 fn get_theme_config_impl(
     db: &Db,
     site_id: i64,
     theme: Option<String>,
-) -> Result<ThemeConfig, String> {
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+) -> AppResult<ThemeConfig> {
+    let site_path = site_path_of(db, site_id)?;
 
     // 优先使用调用方指定的主题名（来自界面点击的那个主题卡片）
     let theme_name = theme
@@ -422,9 +421,9 @@ fn get_theme_config_impl(
     for path in theme_config_candidates(site_root, &theme_name).iter() {
         if path.exists() {
             let raw = std::fs::read_to_string(path)
-                .map_err(|e| format!("读取主题配置失败（{}）：{}", path.display(), e))?;
+                .map_err(|e| err!("读取主题配置失败（{}）：{}", path.display(), e))?;
             let config = crate::hexo::config_parser::parse_yaml_str(&raw)
-                .map_err(|e| format!("解析主题配置失败（{}）：{}", path.display(), e))?;
+                .map_err(|e| err!("解析主题配置失败（{}）：{}", path.display(), e))?;
 
             // 站点级覆盖文件位于站点根目录下，用于 UI 提示覆盖关系
             let is_site_override = path.parent() == Some(site_root);
@@ -500,7 +499,7 @@ fn get_theme_config_impl(
         }
     };
 
-    Err(format!(
+    Err(err!(
         "{}（主题名：{}，站点路径：{}）",
         hint, theme_name, site_path
     ))
@@ -514,9 +513,9 @@ pub async fn update_theme_config(
     theme: String,
     config: Option<Value>,
     raw: Option<String>,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || update_theme_config_impl(&db, site_id, theme, config, raw)).await
+    blocking::run(move || update_theme_config_impl(&db, site_id, theme, config, raw)).await
 }
 
 fn update_theme_config_impl(
@@ -525,8 +524,8 @@ fn update_theme_config_impl(
     theme: String,
     config: Option<Value>,
     raw: Option<String>,
-) -> Result<(), String> {
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+) -> AppResult<()> {
+    let site_path = site_path_of(db, site_id)?;
 
     let site_root = Path::new(&site_path);
     // 写回「当前实际生效」的那份文件：读哪里写哪里，否则改的是被覆盖的文件
@@ -535,12 +534,10 @@ fn update_theme_config_impl(
 
     // 优先使用原始文本写入，保留注释与缩进风格
     if let Some(raw_text) = raw {
-        crate::hexo::config_parser::validate_yaml(&raw_text).map_err(|e| e.to_string())?;
-        crate::hexo::config_parser::write_raw(&cfg_path.display().to_string(), &raw_text)
-            .map_err(|e| e.to_string())?;
+        crate::hexo::config_parser::validate_yaml(&raw_text)?;
+        crate::hexo::config_parser::write_raw(&cfg_path.display().to_string(), &raw_text)?;
     } else if let Some(value) = config {
-        crate::hexo::config_parser::write_yaml_file(&cfg_path.display().to_string(), &value)
-            .map_err(|e| e.to_string())?;
+        crate::hexo::config_parser::write_yaml_file(&cfg_path.display().to_string(), &value)?;
     } else {
         return Err("必须提供 config 或 raw 其中之一".into());
     }
@@ -548,7 +545,7 @@ fn update_theme_config_impl(
     // 同步到主题配置表
     let stored = std::fs::read_to_string(&cfg_path).unwrap_or_default();
     {
-        let conn = db.conn().map_err(|e| e.to_string())?;
+        let conn = db.conn()?;
         conn.execute(
             "INSERT INTO theme_configs (site_id, theme_name, config, is_active)
              VALUES (?1, ?2, ?3, 0)
@@ -563,10 +560,9 @@ fn update_theme_config_impl(
 
 /// 搜索主题（基于公开主题清单，离线回退为内置列表）。
 #[tauri::command]
-pub async fn search_themes(query: Option<String>) -> Result<Vec<ThemeInfo>, String> {
+pub async fn search_themes(query: Option<String>) -> AppResult<Vec<ThemeInfo>> {
     search_themes_impl(query.as_deref())
         .await
-        .map_err(|e| e.to_string())
 }
 
 async fn search_themes_impl(query: Option<&str>) -> AppResult<Vec<ThemeInfo>> {
@@ -709,24 +705,24 @@ pub async fn uninstall_theme(
     state: State<'_, AppState>,
     site_id: i64,
     name: String,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || uninstall_theme_impl(&db, site_id, &name)).await
+    blocking::run(move || uninstall_theme_impl(&db, site_id, &name)).await
 }
 
-fn uninstall_theme_impl(db: &Db, site_id: i64, name: &str) -> Result<(), String> {
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+fn uninstall_theme_impl(db: &Db, site_id: i64, name: &str) -> AppResult<()> {
+    let site_path = site_path_of(db, site_id)?;
 
     if current_theme(&site_path) == name {
-        return Err(format!("主题 `{}` 正在使用中，请先切换到其他主题", name));
+        return Err(err!("主题 `{}` 正在使用中，请先切换到其他主题", name));
     }
 
     let theme_dir = Path::new(&site_path).join("themes").join(name);
     if !theme_dir.exists() {
-        return Err(format!("主题不存在：{}", name));
+        return Err(err!("主题不存在：{}", name));
     }
 
-    std::fs::remove_dir_all(&theme_dir).map_err(|e| format!("卸载主题失败：{}", e))
+    std::fs::remove_dir_all(&theme_dir).map_err(|e| err!("卸载主题失败：{}", e))
 }
 
 /// 更新主题（Git 拉取或 npm 更新）。
@@ -735,14 +731,14 @@ pub async fn update_theme(
     state: State<'_, AppState>,
     site_id: i64,
     name: String,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     let db = &db;
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+    let site_path = site_path_of(db, site_id)?;
     let theme_dir = PathBuf::from(&site_path).join("themes").join(&name);
 
     if !theme_dir.exists() {
-        return Err(format!("主题不存在：{}", name));
+        return Err(err!("主题不存在：{}", name));
     }
 
     // 优先 Git 拉取
@@ -764,11 +760,10 @@ pub async fn update_theme(
         Some(Path::new(&site_path)),
         Some(600),
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     if !out.success {
-        return Err(format!(
+        return Err(err!(
             "主题更新失败，该主题可能既非 Git 仓库也无法通过 npm 更新：\n{}",
             out.combined()
         ));
@@ -783,17 +778,17 @@ pub async fn get_theme_preview_url(
     state: State<'_, AppState>,
     site_id: i64,
     name: String,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || get_theme_preview_url_impl(&db, site_id, &name)).await
+    blocking::run(move || get_theme_preview_url_impl(&db, site_id, &name)).await
 }
 
-fn get_theme_preview_url_impl(db: &Db, site_id: i64, name: &str) -> Result<String, String> {
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+fn get_theme_preview_url_impl(db: &Db, site_id: i64, name: &str) -> AppResult<String> {
+    let site_path = site_path_of(db, site_id)?;
     let theme_dir = Path::new(&site_path).join("themes").join(name);
 
     if !theme_dir.exists() {
-        return Err(format!("主题不存在：{}", name));
+        return Err(err!("主题不存在：{}", name));
     }
 
     // 从 README 中提取第一个演示链接

@@ -151,6 +151,29 @@
 - CI 的 ESLint 步骤从 `continue-on-error` 改为硬卡口（源码已 0 警告）；
   Clippy 加 `-- -D warnings` 让新增告警以失败标记暴露，暂保留 `continue-on-error`
 
+### 变更
+
+- **后端错误改为结构化载荷（全模块）**：此前 `AppError` 只序列化成中文原文，
+  `src/i18n/backendMessages.ts` 用「精确表 + 正则表」按文本匹配翻译 —— Rust 侧改一个字的
+  措辞映射就静默失效（1.2.0 修过两条少空格的键）。现在：
+  - `AppError::Coded { code, message, params }` 序列化为 `{ code, message, params }`，
+    `Display` 仍是中文原文，因此日志与未迁移路径的输出不受影响
+  - **全部命令**的签名从 `Result<T, String>` 改为 `AppResult<T>`，删掉约 150 处
+    `map_err(|e| e.to_string())`，净减 300 余行样板代码
+  - 17 个语义错误码带参数（`site.not_found` / `site.path_taken` / `path.outside_site` /
+    `article.not_found` / `article.file_missing` / `git.show_failed` …），
+    译文集中在新增的 `src/i18n/errorCodes.ts`，用 `{name}` 占位符插值
+  - 前端 `invoke.ts` 先按 code 取译文，未收录再退回旧的中文文本映射 —— 迁移期间不会出现
+    「英文界面漏中文」的中间态，旧表因此可以慢慢收缩
+  - 顺带修正语义：`get_article` / `update_article` 原本把**任何**数据库错误都报成
+    「文章不存在」，现在只有 `QueryReturnedNoRows` 才算不存在，其余保留原始错误
+
+### 工程化
+
+- 新增 `scripts/error-codes-check.mjs`：静态比对 Rust 里 `AppError::coded("…")` 用到的
+  code 与 `errorCodes.ts` 的条目，缺失或有中文残留即退出码 1；并入 `npm run i18n:check`，
+  CI 的检查步骤相应改为跑 `npm run i18n:check`（含覆盖率 + 错误码两项）
+
 ## [1.2.0] - 2026-10-10
 
 ### 新增

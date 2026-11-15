@@ -3,6 +3,7 @@
 use crate::db::{site_path_of, Db};
 use crate::models::Plugin;
 use crate::utils::blocking;
+use crate::err;
 use crate::utils::error::AppResult;
 use crate::AppState;
 use rusqlite::params;
@@ -21,11 +22,11 @@ fn config_path_of(db: &Db, site_id: i64) -> AppResult<(String, String)> {
 pub async fn get_site_config(
     state: State<'_, AppState>,
     site_id: i64,
-) -> Result<Value, String> {
+) -> AppResult<Value> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || {
-        let (_, cfg) = config_path_of(&db, site_id).map_err(|e| e.to_string())?;
-        crate::hexo::config_parser::parse_yaml_file(&cfg).map_err(|e| e.to_string())
+    blocking::run(move || {
+        let (_, cfg) = config_path_of(&db, site_id)?;
+        crate::hexo::config_parser::parse_yaml_file(&cfg)
     })
     .await
 }
@@ -35,11 +36,11 @@ pub async fn get_site_config(
 pub async fn get_site_config_raw(
     state: State<'_, AppState>,
     site_id: i64,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || {
-        let (_, cfg) = config_path_of(&db, site_id).map_err(|e| e.to_string())?;
-        crate::hexo::config_parser::read_raw(&cfg).map_err(|e| e.to_string())
+    blocking::run(move || {
+        let (_, cfg) = config_path_of(&db, site_id)?;
+        crate::hexo::config_parser::read_raw(&cfg)
     })
     .await
 }
@@ -53,9 +54,9 @@ pub async fn save_site_config(
     site_id: i64,
     config: Option<Value>,
     raw: Option<String>,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || save_site_config_impl(&db, site_id, config, raw)).await
+    blocking::run(move || save_site_config_impl(&db, site_id, config, raw)).await
 }
 
 fn save_site_config_impl(
@@ -63,8 +64,8 @@ fn save_site_config_impl(
     site_id: i64,
     config: Option<Value>,
     raw: Option<String>,
-) -> Result<(), String> {
-    let (_, cfg) = config_path_of(db, site_id).map_err(|e| e.to_string())?;
+) -> AppResult<()> {
+    let (_, cfg) = config_path_of(db, site_id)?;
 
     // 写入前先备份一次，便于误操作恢复
     if std::path::Path::new(&cfg).exists() {
@@ -73,10 +74,10 @@ fn save_site_config_impl(
     }
 
     if let Some(text) = raw {
-        crate::hexo::config_parser::validate_yaml(&text).map_err(|e| e.to_string())?;
-        crate::hexo::config_parser::write_raw(&cfg, &text).map_err(|e| e.to_string())?;
+        crate::hexo::config_parser::validate_yaml(&text)?;
+        crate::hexo::config_parser::write_raw(&cfg, &text)?;
     } else if let Some(value) = config {
-        crate::hexo::config_parser::write_yaml_file(&cfg, &value).map_err(|e| e.to_string())?;
+        crate::hexo::config_parser::write_yaml_file(&cfg, &value)?;
     } else {
         return Err("必须提供 config 或 raw 其中之一".into());
     }
@@ -111,14 +112,14 @@ fn save_site_config_impl(
 
 /// 校验配置合法性。
 #[tauri::command]
-pub fn validate_config(content: String, config_type: Option<String>) -> Result<(), String> {
+pub fn validate_config(content: String, config_type: Option<String>) -> AppResult<()> {
     match config_type.as_deref() {
         Some("json") => serde_json::from_str::<Value>(&content)
             .map(|_| ())
-            .map_err(|e| format!("JSON 格式错误：{}", e)),
+            .map_err(|e| err!("JSON 格式错误：{}", e)),
         Some("toml") => Err("TOML 校验暂未内置，请在保存前自行确认格式".into()),
         // 默认按 YAML 校验
-        _ => crate::hexo::config_parser::validate_yaml(&content).map_err(|e| e.to_string()),
+        _ => crate::hexo::config_parser::validate_yaml(&content),
     }
 }
 
@@ -127,10 +128,10 @@ pub fn validate_config(content: String, config_type: Option<String>) -> Result<(
 pub async fn diff_site_config(
     state: State<'_, AppState>,
     site_id: i64,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || {
-        let (_, cfg) = config_path_of(&db, site_id).map_err(|e| e.to_string())?;
+    blocking::run(move || {
+        let (_, cfg) = config_path_of(&db, site_id)?;
         let backup = format!("{}.bak", cfg);
 
         if !std::path::Path::new(&backup).exists() {
@@ -169,17 +170,17 @@ pub async fn diff_site_config(
 pub async fn restore_site_config(
     state: State<'_, AppState>,
     site_id: i64,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || {
-        let (_, cfg) = config_path_of(&db, site_id).map_err(|e| e.to_string())?;
+    blocking::run(move || {
+        let (_, cfg) = config_path_of(&db, site_id)?;
         let backup = format!("{}.bak", cfg);
 
         if !std::path::Path::new(&backup).exists() {
             return Err("没有可恢复的配置备份".into());
         }
 
-        std::fs::copy(&backup, &cfg).map_err(|e| format!("恢复配置失败：{}", e))?;
+        std::fs::copy(&backup, &cfg).map_err(|e| err!("恢复配置失败：{}", e))?;
         Ok(())
     })
     .await
@@ -187,10 +188,10 @@ pub async fn restore_site_config(
 
 /// 导出配置为 JSON（供迁移备份）。
 #[tauri::command]
-pub async fn export_config(state: State<'_, AppState>, site_id: i64) -> Result<String, String> {
+pub async fn export_config(state: State<'_, AppState>, site_id: i64) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || {
-        let (site_path, cfg) = config_path_of(&db, site_id).map_err(|e| e.to_string())?;
+    blocking::run(move || {
+        let (site_path, cfg) = config_path_of(&db, site_id)?;
 
         let site_config =
             crate::hexo::config_parser::parse_yaml_file(&cfg).unwrap_or(Value::Null);
@@ -215,7 +216,7 @@ pub async fn export_config(state: State<'_, AppState>, site_id: i64) -> Result<S
             "themeConfig": theme_config,
         });
 
-        serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())
+        Ok(serde_json::to_string_pretty(&payload)?)
     })
     .await
 }
@@ -226,20 +227,19 @@ pub async fn import_config(
     state: State<'_, AppState>,
     site_id: i64,
     payload: String,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || import_config_impl(&db, site_id, &payload)).await
+    blocking::run(move || import_config_impl(&db, site_id, &payload)).await
 }
 
-fn import_config_impl(db: &Db, site_id: i64, payload: &str) -> Result<(), String> {
-    let (site_path, cfg) = config_path_of(db, site_id).map_err(|e| e.to_string())?;
+fn import_config_impl(db: &Db, site_id: i64, payload: &str) -> AppResult<()> {
+    let (site_path, cfg) = config_path_of(db, site_id)?;
 
     let value: Value =
-        serde_json::from_str(payload).map_err(|e| format!("解析导入内容失败：{}", e))?;
+        serde_json::from_str(payload).map_err(|e| err!("解析导入内容失败：{}", e))?;
 
     if let Some(site_config) = value.get("siteConfig").filter(|v| !v.is_null()) {
-        crate::hexo::config_parser::write_yaml_file(&cfg, site_config)
-            .map_err(|e| e.to_string())?;
+        crate::hexo::config_parser::write_yaml_file(&cfg, site_config)?;
     }
 
     if let (Some(theme_name), Some(theme_config)) = (
@@ -349,13 +349,13 @@ pub fn get_config_templates() -> Vec<Value> {
 pub async fn get_plugins(
     state: State<'_, AppState>,
     site_id: i64,
-) -> Result<Vec<Plugin>, String> {
+) -> AppResult<Vec<Plugin>> {
     let db = Db::from_arc(&state.db);
-    blocking::cmd(move || get_plugins_impl(&db, site_id)).await
+    blocking::run(move || get_plugins_impl(&db, site_id)).await
 }
 
-fn get_plugins_impl(db: &Db, site_id: i64) -> Result<Vec<Plugin>, String> {
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+fn get_plugins_impl(db: &Db, site_id: i64) -> AppResult<Vec<Plugin>> {
+    let site_path = site_path_of(db, site_id)?;
     let pkg_path = std::path::Path::new(&site_path).join("package.json");
 
     let mut plugins = Vec::new();
@@ -398,10 +398,10 @@ pub async fn install_plugin(
     state: State<'_, AppState>,
     site_id: i64,
     name: String,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     let db = &db;
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+    let site_path = site_path_of(db, site_id)?;
     let npm_bin = crate::utils::node::npm();
 
     let out = crate::utils::process::run(
@@ -410,11 +410,10 @@ pub async fn install_plugin(
         Some(std::path::Path::new(&site_path)),
         Some(900),
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     if !out.success {
-        return Err(format!("安装插件失败：\n{}", out.combined()));
+        return Err(err!("安装插件失败：\n{}", out.combined()));
     }
 
     // 记录到插件表
@@ -434,10 +433,10 @@ pub async fn uninstall_plugin(
     state: State<'_, AppState>,
     site_id: i64,
     name: String,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     let db = &db;
-    let site_path = site_path_of(db, site_id).map_err(|e| e.to_string())?;
+    let site_path = site_path_of(db, site_id)?;
     let npm_bin = crate::utils::node::npm();
 
     let out = crate::utils::process::run(
@@ -446,11 +445,10 @@ pub async fn uninstall_plugin(
         Some(std::path::Path::new(&site_path)),
         Some(600),
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     if !out.success {
-        return Err(format!("卸载插件失败：\n{}", out.combined()));
+        return Err(err!("卸载插件失败：\n{}", out.combined()));
     }
 
     if let Ok(conn) = db.conn() {
@@ -470,11 +468,11 @@ pub fn toggle_plugin(
     site_id: i64,
     name: String,
     enabled: bool,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = &state.db;
-    let (_, cfg) = config_path_of(db, site_id).map_err(|e| e.to_string())?;
+    let (_, cfg) = config_path_of(db, site_id)?;
 
-    let mut value = crate::hexo::config_parser::parse_yaml_file(&cfg).map_err(|e| e.to_string())?;
+    let mut value = crate::hexo::config_parser::parse_yaml_file(&cfg)?;
     if !value.is_object() {
         value = serde_json::json!({});
     }
@@ -505,7 +503,7 @@ pub fn toggle_plugin(
         );
     }
 
-    crate::hexo::config_parser::write_yaml_file(&cfg, &value).map_err(|e| e.to_string())?;
+    crate::hexo::config_parser::write_yaml_file(&cfg, &value)?;
 
     if let Ok(conn) = db.conn() {
         let _ = conn.execute(

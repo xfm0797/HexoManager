@@ -17,6 +17,7 @@
 use crate::AppState;
 use crate::db::Db;
 use crate::utils::blocking;
+use crate::err;
 use crate::utils::error::{AppError, AppResult};
 use crate::utils::{FileInfo, FileTreeNode};
 use std::path::{Path, PathBuf};
@@ -76,16 +77,17 @@ fn is_within_roots(path: &Path, roots: &[PathBuf]) -> bool {
 fn ensure_safe(db: &Db, path: &str, allow_outside: bool) -> AppResult<()> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
-        return Err(AppError::InvalidArgument("路径不能为空".into()));
+        return Err(AppError::coded("path.empty", "路径不能为空", &[]));
     }
 
     let p = Path::new(trimmed);
     // 禁止操作根目录，避免误删系统文件
     if p.parent().is_none() {
-        return Err(AppError::Forbidden(format!(
-            "出于安全考虑，不允许直接操作根目录：{}",
-            path
-        )));
+        return Err(AppError::coded(
+            "path.root_forbidden",
+            format!("出于安全考虑，不允许直接操作根目录：{}", path),
+            &[("path", path.to_string())],
+        ));
     }
 
     if allow_outside {
@@ -97,10 +99,11 @@ fn ensure_safe(db: &Db, path: &str, allow_outside: bool) -> AppResult<()> {
         return Ok(());
     }
 
-    Err(AppError::Forbidden(format!(
-        "路径不在任何站点目录内，已拒绝操作：{}",
-        path
-    )))
+    Err(AppError::coded(
+        "path.outside_site",
+        format!("路径不在任何站点目录内，已拒绝操作：{}", path),
+        &[("path", path.to_string())],
+    ))
 }
 
 /// 读取文件内容。
@@ -109,20 +112,20 @@ pub async fn read_file(
     state: State<'_, AppState>,
     path: String,
     allow_outside: Option<bool>,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     let outside = allow_outside.unwrap_or(false);
-    blocking::cmd(move || {
-        ensure_safe(&db, &path, outside).map_err(|e| e.to_string())?;
+    blocking::run(move || {
+        ensure_safe(&db, &path, outside)?;
 
         let p = Path::new(&path);
         if !p.exists() {
-            return Err(format!("文件不存在：{}", path));
+            return Err(err!("文件不存在：{}", path));
         }
         if p.is_dir() {
-            return Err(format!("目标是一个目录，无法作为文件读取：{}", path));
+            return Err(err!("目标是一个目录，无法作为文件读取：{}", path));
         }
-        std::fs::read_to_string(p).map_err(|e| format!("读取文件失败：{}", e))
+        std::fs::read_to_string(p).map_err(|e| err!("读取文件失败：{}", e))
     })
     .await
 }
@@ -134,16 +137,16 @@ pub async fn write_file(
     path: String,
     content: String,
     allow_outside: Option<bool>,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
     let outside = allow_outside.unwrap_or(false);
-    blocking::cmd(move || {
-        ensure_safe(&db, &path, outside).map_err(|e| e.to_string())?;
+    blocking::run(move || {
+        ensure_safe(&db, &path, outside)?;
         let p = Path::new(&path);
         if let Some(parent) = p.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败：{}", e))?;
+            std::fs::create_dir_all(parent).map_err(|e| err!("创建目录失败：{}", e))?;
         }
-        std::fs::write(p, content).map_err(|e| format!("写入文件失败：{}", e))
+        std::fs::write(p, content).map_err(|e| err!("写入文件失败：{}", e))
     })
     .await
 }
@@ -154,20 +157,20 @@ pub async fn delete_file(
     state: State<'_, AppState>,
     path: String,
     allow_outside: Option<bool>,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
     let outside = allow_outside.unwrap_or(false);
-    blocking::cmd(move || {
-        ensure_safe(&db, &path, outside).map_err(|e| e.to_string())?;
+    blocking::run(move || {
+        ensure_safe(&db, &path, outside)?;
         let p = Path::new(&path);
         if !p.exists() {
             return Ok(());
         }
         if p.is_dir() {
             // 仅删除空目录，避免误删整个站点
-            std::fs::remove_dir(p).map_err(|e| format!("删除目录失败（目录可能非空）：{}", e))
+            std::fs::remove_dir(p).map_err(|e| err!("删除目录失败（目录可能非空）：{}", e))
         } else {
-            std::fs::remove_file(p).map_err(|e| format!("删除文件失败：{}", e))
+            std::fs::remove_file(p).map_err(|e| err!("删除文件失败：{}", e))
         }
     })
     .await
@@ -180,22 +183,22 @@ pub async fn list_files(
     path: String,
     pattern: Option<String>,
     allow_outside: Option<bool>,
-) -> Result<Vec<FileInfo>, String> {
+) -> AppResult<Vec<FileInfo>> {
     let db = Db::from_arc(&state.db);
     let outside = allow_outside.unwrap_or(false);
-    blocking::cmd(move || {
-        ensure_safe(&db, &path, outside).map_err(|e| e.to_string())?;
+    blocking::run(move || {
+        ensure_safe(&db, &path, outside)?;
 
         let p = Path::new(&path);
         if !p.exists() {
-            return Err(format!("目录不存在：{}", path));
+            return Err(err!("目录不存在：{}", path));
         }
         if !p.is_dir() {
-            return Err(format!("目标不是目录：{}", path));
+            return Err(err!("目标不是目录：{}", path));
         }
 
         let mut files = Vec::new();
-        let entries = std::fs::read_dir(p).map_err(|e| format!("读取目录失败：{}", e))?;
+        let entries = std::fs::read_dir(p).map_err(|e| err!("读取目录失败：{}", e))?;
 
         for entry in entries.flatten() {
             let meta = match entry.metadata() {
@@ -247,12 +250,12 @@ pub async fn create_directory(
     state: State<'_, AppState>,
     path: String,
     allow_outside: Option<bool>,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
     let outside = allow_outside.unwrap_or(false);
-    blocking::cmd(move || {
-        ensure_safe(&db, &path, outside).map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(&path).map_err(|e| format!("创建目录失败：{}", e))
+    blocking::run(move || {
+        ensure_safe(&db, &path, outside)?;
+        std::fs::create_dir_all(&path).map_err(|e| err!("创建目录失败：{}", e))
     })
     .await
 }
@@ -273,16 +276,16 @@ pub async fn get_file_tree(
     path: String,
     max_depth: Option<usize>,
     allow_outside: Option<bool>,
-) -> Result<FileTreeNode, String> {
+) -> AppResult<FileTreeNode> {
     let db = Db::from_arc(&state.db);
     let outside = allow_outside.unwrap_or(false);
     let depth = max_depth.unwrap_or(4);
-    blocking::cmd(move || {
-        ensure_safe(&db, &path, outside).map_err(|e| e.to_string())?;
+    blocking::run(move || {
+        ensure_safe(&db, &path, outside)?;
 
         let p = Path::new(&path);
         if !p.exists() {
-            return Err(format!("路径不存在：{}", path));
+            return Err(err!("路径不存在：{}", path));
         }
         Ok(FileTreeNode::from_path(p, 0, depth))
     })
@@ -291,12 +294,12 @@ pub async fn get_file_tree(
 
 /// 在系统文件管理器中打开路径。
 #[tauri::command]
-pub fn open_in_explorer(app: tauri::AppHandle, path: String) -> Result<(), String> {
+pub fn open_in_explorer(app: tauri::AppHandle, path: String) -> AppResult<()> {
     use tauri_plugin_opener::OpenerExt;
 
     let target = Path::new(&path);
     if !target.exists() {
-        return Err(format!("路径不存在：{}", path));
+        return Err(err!("路径不存在：{}", path));
     }
 
     // 文件则打开其所在目录并选中
@@ -311,7 +314,7 @@ pub fn open_in_explorer(app: tauri::AppHandle, path: String) -> Result<(), Strin
 
     app.opener()
         .open_path(to_open, None::<&str>)
-        .map_err(|e| format!("打开目录失败：{}", e))
+        .map_err(|e| err!("打开目录失败：{}", e))
 }
 
 /// 复制文件或目录。
@@ -321,25 +324,25 @@ pub async fn copy_path(
     from: String,
     to: String,
     allow_outside: Option<bool>,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
     let outside = allow_outside.unwrap_or(false);
     // 目录复制可能是几百 MB（node_modules / themes），必须在阻塞线程池里跑
-    blocking::cmd(move || {
-        ensure_safe(&db, &from, outside).map_err(|e| e.to_string())?;
-        ensure_safe(&db, &to, outside).map_err(|e| e.to_string())?;
+    blocking::run(move || {
+        ensure_safe(&db, &from, outside)?;
+        ensure_safe(&db, &to, outside)?;
 
         let src = Path::new(&from);
         if !src.exists() {
-            return Err(format!("源路径不存在：{}", from));
+            return Err(err!("源路径不存在：{}", from));
         }
         if src.is_dir() {
-            crate::utils::fs::copy_dir(src, Path::new(&to)).map_err(|e| e.to_string())
+            crate::utils::fs::copy_dir(src, Path::new(&to))
         } else {
             if let Some(parent) = Path::new(&to).parent() {
-                std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败：{}", e))?;
+                std::fs::create_dir_all(parent).map_err(|e| err!("创建目录失败：{}", e))?;
             }
-            std::fs::copy(src, Path::new(&to)).map_err(|e| format!("复制文件失败：{}", e))?;
+            std::fs::copy(src, Path::new(&to)).map_err(|e| err!("复制文件失败：{}", e))?;
             Ok(())
         }
     })
@@ -353,13 +356,13 @@ pub async fn rename_path(
     from: String,
     to: String,
     allow_outside: Option<bool>,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
     let outside = allow_outside.unwrap_or(false);
-    blocking::cmd(move || {
-        ensure_safe(&db, &from, outside).map_err(|e| e.to_string())?;
-        ensure_safe(&db, &to, outside).map_err(|e| e.to_string())?;
-        std::fs::rename(&from, &to).map_err(|e| format!("重命名失败：{}", e))
+    blocking::run(move || {
+        ensure_safe(&db, &from, outside)?;
+        ensure_safe(&db, &to, outside)?;
+        std::fs::rename(&from, &to).map_err(|e| err!("重命名失败：{}", e))
     })
     .await
 }
@@ -370,19 +373,19 @@ pub async fn read_file_base64(
     state: State<'_, AppState>,
     path: String,
     allow_outside: Option<bool>,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     let outside = allow_outside.unwrap_or(false);
-    blocking::cmd(move || {
+    blocking::run(move || {
         use base64_encode::encode;
 
-        ensure_safe(&db, &path, outside).map_err(|e| e.to_string())?;
+        ensure_safe(&db, &path, outside)?;
 
         let p = Path::new(&path);
         if !p.exists() {
-            return Err(format!("文件不存在：{}", path));
+            return Err(err!("文件不存在：{}", path));
         }
-        let bytes = std::fs::read(p).map_err(|e| format!("读取文件失败：{}", e))?;
+        let bytes = std::fs::read(p).map_err(|e| err!("读取文件失败：{}", e))?;
         Ok(encode(&bytes))
     })
     .await

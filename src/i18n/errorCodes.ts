@@ -32,8 +32,14 @@ export const ERROR_CODES: Record<string, string> = {
   'article.filename_invalid': 'Could not parse the file name',
   'article.reload_failed': 'Could not read the article after the operation',
 
+  // ===== 文件与路径（白名单拒绝） =====
+  'path.empty': 'The path cannot be empty',
+  'path.root_forbidden': 'Refusing to operate on a filesystem root for safety: {path}',
+  'path.outside_site': 'That path is outside every site directory, so the operation was refused: {path}',
+
   // ===== Git =====
   'git.show_failed': 'Failed to read the historical version: {commit}',
+  'git.commit_read_failed': 'The commit succeeded but its record could not be read',
 };
 
 /** 占位符形态：`{name}`；不做嵌套与函数式替换，保持可静态检查。 */
