@@ -33,7 +33,7 @@ impl Db {
     pub fn conn(&self) -> AppResult<std::sync::MutexGuard<'_, Connection>> {
         self.0
             .lock()
-            .map_err(|_| AppError::Other("数据库连接锁已损坏".into()))
+            .map_err(|_| AppError::coded("db.lock_corrupted", "数据库连接锁已损坏", &[]))
     }
 
     /// 从已注入的 `Db` 派生一个独立所有权句柄，供异步命令跨 `.await` 使用。

@@ -1,7 +1,6 @@
 //! 更新管理命令（对应大纲 7.8）。
 
 use crate::db::Db;
-use crate::err;
 use crate::models::{AppInfo, Changelog, UpdateInfo, UpdateSettings};
 use crate::utils::blocking;
 use crate::utils::error::{AppError, AppResult};
@@ -151,12 +150,20 @@ pub fn open_external(app: tauri::AppHandle, url: String) -> AppResult<()> {
     use tauri_plugin_opener::OpenerExt;
 
     if !url.starts_with("http://") && !url.starts_with("https://") {
-        return Err("仅支持打开 http/https 链接".into());
+        return Err(AppError::coded(
+            "link.unsupported_scheme",
+            "仅支持打开 http/https 链接",
+            &[],
+        ));
     }
 
-    app.opener()
-        .open_url(url, None::<&str>)
-        .map_err(|e| err!("打开链接失败：{}", e))
+    app.opener().open_url(url, None::<&str>).map_err(|e| {
+        AppError::coded(
+            "link.open_failed",
+            format!("打开链接失败：{}", e),
+            &[("detail", e.to_string())],
+        )
+    })
 }
 
 /// 读取本地版本号文件 `version.json`（仅开发期使用）。

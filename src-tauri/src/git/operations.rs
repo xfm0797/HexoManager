@@ -54,7 +54,11 @@ pub async fn add(site_path: &str, files: Option<Vec<String>>) -> AppResult<()> {
 pub async fn commit(site_path: &str, message: &str) -> AppResult<String> {
     let cwd = cwd_of(site_path);
     if message.trim().is_empty() {
-        return Err(AppError::InvalidArgument("提交信息不能为空".into()));
+        return Err(AppError::coded(
+            "git.empty_message",
+            "提交信息不能为空",
+            &[],
+        ));
     }
 
     let out = process::run("git", &["commit", "-m", message], Some(cwd), Some(120)).await?;

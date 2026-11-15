@@ -4,7 +4,7 @@
 //! 项目配置文件内容与说明，供前端「Pages 服务配置」页面直接展示。
 
 use crate::models::{GenerateConfigInput, GeneratedFile};
-use crate::utils::error::AppResult;
+use crate::utils::error::{AppError, AppResult};
 
 /// Pages 平台标识。
 pub const PAGES_PLATFORMS: &[&str] = &[
@@ -46,30 +46,57 @@ pub fn generate_all_platforms(input: &GenerateConfigInput) -> AppResult<Vec<Gene
 }
 
 /// 自定义域名校验：仅允许合法域名格式。
-pub fn validate_domain(domain: &str) -> Result<(), String> {
+///
+/// 每条失败都有自己的错误码（`deploy.domain_*`），前端可以做即时提示；
+/// 中文原文保留在 `message` 里，只进日志。
+pub fn validate_domain(domain: &str) -> AppResult<()> {
     if domain.trim().is_empty() {
-        return Err("域名不能为空".into());
+        return Err(AppError::coded("deploy.domain_empty", "域名不能为空", &[]));
     }
     let d = domain.trim();
     if d.contains("://") || d.contains('/') {
-        return Err("请填写纯域名，不要包含协议或路径（例如 blog.example.com）".into());
+        return Err(AppError::coded(
+            "deploy.domain_bare",
+            "请填写纯域名，不要包含协议或路径（例如 blog.example.com）",
+            &[],
+        ));
     }
     let labels: Vec<&str> = d.split('.').collect();
     if labels.len() < 2 {
-        return Err("域名格式不正确，至少应包含一个点号".into());
+        return Err(AppError::coded(
+            "deploy.domain_need_dot",
+            "域名格式不正确，至少应包含一个点号",
+            &[],
+        ));
     }
     for label in &labels {
         if label.is_empty() {
-            return Err("域名中存在空的标签段".into());
+            return Err(AppError::coded(
+                "deploy.domain_empty_label",
+                "域名中存在空的标签段",
+                &[],
+            ));
         }
         if label.len() > 63 {
-            return Err("域名标签段过长（超过 63 字符）".into());
+            return Err(AppError::coded(
+                "deploy.domain_label_long",
+                format!("域名标签段过长（超过 63 字符）：{}", label),
+                &[("label", (*label).to_string())],
+            ));
         }
         if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-            return Err(format!("域名标签段 `{}` 含非法字符", label));
+            return Err(AppError::coded(
+                "deploy.domain_label_char",
+                format!("域名标签段 `{}` 含非法字符", label),
+                &[("label", (*label).to_string())],
+            ));
         }
         if label.starts_with('-') || label.ends_with('-') {
-            return Err(format!("域名标签段 `{}` 不能以连字符开头或结尾", label));
+            return Err(AppError::coded(
+                "deploy.domain_label_hyphen",
+                format!("域名标签段 `{}` 不能以连字符开头或结尾", label),
+                &[("label", (*label).to_string())],
+            ));
         }
     }
     Ok(())

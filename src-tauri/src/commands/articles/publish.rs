@@ -132,12 +132,20 @@ pub(crate) async fn publish_article_impl(
     std::fs::write(&dst, content)?;
     if dst != src {
         std::fs::remove_file(src).map_err(|e| {
-            AppError::Other(format!(
-                "已写入 {}，但删除源文件 {} 失败：{}",
-                dst.display(),
-                src.display(),
-                e
-            ))
+            AppError::coded(
+                "article.source_cleanup_failed",
+                format!(
+                    "已写入 {}，但删除源文件 {} 失败：{}",
+                    dst.display(),
+                    src.display(),
+                    e
+                ),
+                &[
+                    ("to", dst.display().to_string()),
+                    ("from", src.display().to_string()),
+                    ("detail", e.to_string()),
+                ],
+            )
         })?;
     }
 

@@ -181,10 +181,11 @@ pub async fn spawn_server(site_id: i64, site_path: &str, port: u16) -> AppResult
 
     // 端口占用检测
     if is_port_in_use(port).await {
-        return Err(AppError::InvalidArgument(format!(
-            "端口 {} 已被占用，请更换端口",
-            port
-        )));
+        return Err(AppError::coded(
+            "preview.port_in_use",
+            format!("端口 {} 已被占用，请更换端口", port),
+            &[("port", port.to_string())],
+        ));
     }
 
     let npx_bin = crate::utils::node::npx();
@@ -203,9 +204,13 @@ pub async fn spawn_server(site_id: i64, site_path: &str, port: u16) -> AppResult
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| AppError::Process(format!("启动预览服务失败：{}", e)))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        AppError::coded(
+            "preview.spawn_failed",
+            format!("启动预览服务失败：{}", e),
+            &[("detail", e.to_string())],
+        )
+    })?;
     let pid = child.id();
 
     // 后台线程读走输出：不读会把管道写满，进程阻塞在 write 上（"预览卡死"）
@@ -288,10 +293,24 @@ pub async fn spawn_server(site_id: i64, site_path: &str, port: u16) -> AppResult
                 site_id, port, pid, hint
             ),
         );
-        return Err(AppError::Process(format!(
-            "预览服务未能监听端口 {}。{}",
-            port, hint
-        )));
+        // 错误码分两支：无输出是「八成没装依赖」，有输出则把 tail 当诊断详情透传
+        return Err(if tail.is_empty() {
+            AppError::coded(
+                "preview.listen_timeout_no_output",
+                format!(
+                    "预览服务未能监听端口 {}。没有捕获到任何输出，\
+                     请确认站点目录已安装依赖（npm install）",
+                    port
+                ),
+                &[("port", port.to_string())],
+            )
+        } else {
+            AppError::coded(
+                "preview.listen_timeout",
+                format!("预览服务未能监听端口 {}。最近输出：\n{}", port, tail),
+                &[("port", port.to_string()), ("detail", tail)],
+            )
+        });
     }
 
     crate::utils::log::info(
@@ -335,7 +354,11 @@ pub fn kill_by_pid(pid: u32) -> AppResult<()> {
             .status()
             .map_err(AppError::Io)?;
         if !status.success() {
-            return Err(AppError::Process(format!("结束进程 {} 失败", pid)));
+            return Err(AppError::coded(
+                "preview.kill_failed",
+                format!("结束进程 {} 失败", pid),
+                &[("pid", pid.to_string())],
+            ));
         }
         Ok(())
     }
@@ -343,7 +366,11 @@ pub fn kill_by_pid(pid: u32) -> AppResult<()> {
     #[cfg(not(any(unix, windows)))]
     {
         let _ = pid;
-        Err(AppError::Other("当前平台不支持进程终止".into()))
+        Err(AppError::coded(
+            "preview.kill_unsupported",
+            "当前平台不支持进程终止",
+            &[],
+        ))
     }
 }
 

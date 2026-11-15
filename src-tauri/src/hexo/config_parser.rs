@@ -28,8 +28,16 @@ pub fn parse_yaml_str(raw: &str) -> AppResult<Value> {
         Ok(v) => Ok(v),
         Err(first_err) => {
             let sanitized = sanitize_custom_tags(raw);
-            serde_yaml::from_str::<Value>(&sanitized)
-                .map_err(|e| AppError::Yaml(format!("{}（原始错误：{}）", e, first_err)))
+            serde_yaml::from_str::<Value>(&sanitized).map_err(|e| {
+                AppError::coded(
+                    "config.yaml_parse_failed",
+                    format!("{}（原始错误：{}）", e, first_err),
+                    &[
+                        ("detail", e.to_string()),
+                        ("original", first_err.to_string()),
+                    ],
+                )
+            })
         }
     }
 }

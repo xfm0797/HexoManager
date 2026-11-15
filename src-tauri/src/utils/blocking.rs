@@ -13,6 +13,9 @@
 use crate::utils::error::{AppError, AppResult};
 
 /// 在阻塞线程池里执行 `f`，并把任务 join 失败也归一成 `AppResult`。
+///
+/// join 失败意味着闭包 panic 了（工作线程被丢弃），属于程序缺陷；
+/// 归一成错误而不是再次 panic，至少能让界面给出可读提示、日志留下现场。
 pub async fn run<T, F>(f: F) -> AppResult<T>
 where
     F: FnOnce() -> AppResult<T> + Send + 'static,
@@ -20,37 +23,17 @@ where
 {
     match tauri::async_runtime::spawn_blocking(f).await {
         Ok(result) => result,
-        Err(e) => Err(AppError::Other(format!("后台任务异常终止：{}", e))),
-    }
-}
-
-/// 命令层便捷版：闭包直接返回 `Result<T, String>`，省掉每处 `.map_err`。
-pub async fn cmd<T, F>(f: F) -> Result<T, String>
-where
-    F: FnOnce() -> Result<T, String> + Send + 'static,
-    T: Send + 'static,
-{
-    match tauri::async_runtime::spawn_blocking(f).await {
-        Ok(result) => result,
-        Err(e) => Err(format!("后台任务异常终止：{}", e)),
+        Err(e) => Err(AppError::coded(
+            "proc.join_failed",
+            format!("后台任务异常终止：{}", e),
+            &[("detail", e.to_string())],
+        )),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[tokio::test]
-    async fn test_cmd_propagates_value() {
-        let value = cmd(|| Ok::<_, String>(7)).await.unwrap();
-        assert_eq!(value, 7);
-    }
-
-    #[tokio::test]
-    async fn test_cmd_propagates_error() {
-        let err = cmd(|| Err::<(), _>("炸了".to_string())).await.unwrap_err();
-        assert_eq!(err, "炸了");
-    }
 
     #[tokio::test]
     async fn test_run_maps_error() {

@@ -1,7 +1,6 @@
 //! 部署配置命令（对应大纲 7.5）。
 
 use crate::db::Db;
-use crate::err;
 use crate::models::{
     DeployConfig, DeployLog, DeployTemplate, EnvVar, GenerateConfigInput, GeneratedFile,
 };
@@ -255,7 +254,13 @@ pub async fn rollback_deploy(
             params![site_id],
             |r| r.get(0),
         )
-        .map_err(|_| err!("站点不存在：{}", site_id))?
+        .map_err(|_| {
+            AppError::coded(
+                "site.not_found",
+                format!("站点不存在：{}", site_id),
+                &[("id", site_id.to_string())],
+            )
+        })?
     };
 
     // 回滚前先暂存当前改动，避免丢失
@@ -282,22 +287,33 @@ pub async fn trigger_webhook(url: String, payload: Option<Value>) -> AppResult<S
         .timeout(std::time::Duration::from_secs(30))
         .user_agent("HexoManager-Webhook/1.0")
         .build()
-        .map_err(|e| err!("创建请求客户端失败：{}", e))?;
+        .map_err(|e| {
+            AppError::coded(
+                "deploy.webhook_client_failed",
+                format!("创建请求客户端失败：{}", e),
+                &[("detail", e.to_string())],
+            )
+        })?;
 
     let body = payload.unwrap_or_else(|| serde_json::json!({ "triggeredBy": "HexoManager" }));
 
-    let resp = client
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| err!("Webhook 请求失败：{}", e))?;
+    let resp = client.post(&url).json(&body).send().await.map_err(|e| {
+        AppError::coded(
+            "deploy.webhook_failed",
+            format!("Webhook 请求失败：{}", e),
+            &[("detail", e.to_string())],
+        )
+    })?;
 
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
 
     if !status.is_success() {
-        return Err(err!("Webhook 返回状态码 {}：{}", status, text));
+        return Err(AppError::coded(
+            "deploy.webhook_status",
+            format!("Webhook 返回状态码 {}：{}", status, text),
+            &[("status", status.to_string()), ("detail", text)],
+        ));
     }
 
     Ok(format!("状态码 {}：{}", status, text))
@@ -306,14 +322,13 @@ pub async fn trigger_webhook(url: String, payload: Option<Value>) -> AppResult<S
 /// 校验生成入参。
 fn validate_input(input: &GenerateConfigInput) -> AppResult<()> {
     if input.site_path.trim().is_empty() {
-        return Err(AppError::InvalidArgument("站点路径不能为空".into()));
+        return Err(AppError::coded("site.path_empty", "站点路径不能为空", &[]));
     }
     if let Some(domain) = input.domain.as_ref().filter(|d| !d.trim().is_empty()) {
-        crate::deploy::pages_generator::validate_domain(domain)
-            .map_err(AppError::InvalidArgument)?;
+        crate::deploy::pages_generator::validate_domain(domain)?;
     }
     if let Some(edge) = input.edge_domain.as_ref().filter(|d| !d.trim().is_empty()) {
-        crate::deploy::pages_generator::validate_domain(edge).map_err(AppError::InvalidArgument)?;
+        crate::deploy::pages_generator::validate_domain(edge)?;
     }
     Ok(())
 }
@@ -321,7 +336,7 @@ fn validate_input(input: &GenerateConfigInput) -> AppResult<()> {
 /// 校验域名格式（供前端即时提示）。
 #[tauri::command]
 pub fn validate_domain(domain: String) -> AppResult<()> {
-    crate::deploy::pages_generator::validate_domain(&domain).map_err(AppError::from)
+    crate::deploy::pages_generator::validate_domain(&domain)
 }
 
 /// 检查部署配置文件是否已存在（避免覆盖用户手写内容）。

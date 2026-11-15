@@ -24,17 +24,20 @@ pub async fn download_update(url: &str, target_dir: Option<String>) -> AppResult
         .build()
         .map_err(|e| AppError::Network(e.to_string()))?;
 
-    let resp = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| AppError::Network(format!("下载失败：{}", e)))?;
+    let resp = client.get(url).send().await.map_err(|e| {
+        AppError::coded(
+            "update.download_failed",
+            format!("下载失败：{}", e),
+            &[("detail", e.to_string())],
+        )
+    })?;
 
     if !resp.status().is_success() {
-        return Err(AppError::Network(format!(
-            "下载失败，服务返回状态码 {}",
-            resp.status()
-        )));
+        return Err(AppError::coded(
+            "update.download_status",
+            format!("下载失败，服务返回状态码 {}", resp.status()),
+            &[("status", resp.status().to_string())],
+        ));
     }
 
     // 推断文件名
@@ -60,11 +63,13 @@ pub async fn download_update(url: &str, target_dir: Option<String>) -> AppResult
     let mut file = std::fs::File::create(&target)?;
     let mut size: u64 = 0;
     let mut resp = resp;
-    while let Some(chunk) = resp
-        .chunk()
-        .await
-        .map_err(|e| AppError::Network(format!("读取下载内容失败：{}", e)))?
-    {
+    while let Some(chunk) = resp.chunk().await.map_err(|e| {
+        AppError::coded(
+            "update.download_read_failed",
+            format!("读取下载内容失败：{}", e),
+            &[("detail", e.to_string())],
+        )
+    })? {
         file.write_all(&chunk)?;
         size += chunk.len() as u64;
     }

@@ -101,12 +101,19 @@ pub async fn run(
             match tokio::time::timeout(std::time::Duration::from_secs(secs), future).await {
                 Ok(res) => res.map_err(AppError::Io)?,
                 Err(_) => {
-                    return Err(AppError::Process(format!(
-                        "命令 `{} {}` 执行超时（{} 秒）",
-                        program,
-                        args.join(" "),
-                        secs
-                    )))
+                    return Err(AppError::coded(
+                        "proc.timeout",
+                        format!(
+                            "命令 `{} {}` 执行超时（{} 秒）",
+                            program,
+                            args.join(" "),
+                            secs
+                        ),
+                        &[
+                            ("cmd", format!("{} {}", program, args.join(" "))),
+                            ("secs", secs.to_string()),
+                        ],
+                    ));
                 }
             }
         }
@@ -159,11 +166,11 @@ where
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| AppError::Process("无法捕获 stdout".into()))?;
+        .ok_or_else(|| AppError::coded("proc.stdout_missing", "无法捕获 stdout", &[]))?;
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| AppError::Process("无法捕获 stderr".into()))?;
+        .ok_or_else(|| AppError::coded("proc.stderr_missing", "无法捕获 stderr", &[]))?;
 
     let mut out_lines = BufReader::new(stdout).lines();
     let mut err_lines = BufReader::new(stderr).lines();

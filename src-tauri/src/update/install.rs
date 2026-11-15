@@ -15,17 +15,39 @@ use std::path::Path;
 ///   `.sig` 文件内容，含 untrusted/trusted comment 行）
 /// - `pubkey_b64`：`plugins.updater.pubkey`（`.pub` 文件内容的 base64）
 pub fn verify_signature(path: &Path, signature: &str, pubkey_b64: &str) -> AppResult<()> {
-    let public_key = minisign_verify::PublicKey::from_base64(pubkey_b64.trim())
-        .map_err(|e| AppError::Other(format!("更新公钥无效：{}", e)))?;
-    let sig = minisign_verify::Signature::decode(signature)
-        .map_err(|e| AppError::Other(format!("更新包签名格式无效：{}", e)))?;
-    let data = std::fs::read(path)
-        .map_err(|e| AppError::Other(format!("读取更新包失败（{}）：{}", path.display(), e)))?;
+    let public_key = minisign_verify::PublicKey::from_base64(pubkey_b64.trim()).map_err(|e| {
+        AppError::coded(
+            "update.pubkey_invalid",
+            format!("更新公钥无效：{}", e),
+            &[("detail", e.to_string())],
+        )
+    })?;
+    let sig = minisign_verify::Signature::decode(signature).map_err(|e| {
+        AppError::coded(
+            "update.signature_malformed",
+            format!("更新包签名格式无效：{}", e),
+            &[("detail", e.to_string())],
+        )
+    })?;
+    let data = std::fs::read(path).map_err(|e| {
+        AppError::coded(
+            "update.package_read_failed",
+            format!("读取更新包失败（{}）：{}", path.display(), e),
+            &[
+                ("path", path.display().to_string()),
+                ("detail", e.to_string()),
+            ],
+        )
+    })?;
 
     // allow_legacy = false：只接受预哈希（BLAKE2b）签名，与 tauri 打包产物一致
-    public_key
-        .verify(&data, &sig, false)
-        .map_err(|e| AppError::Other(format!("更新包签名校验失败，已中止安装：{}", e)))
+    public_key.verify(&data, &sig, false).map_err(|e| {
+        AppError::coded(
+            "update.signature_mismatch",
+            format!("更新包签名校验失败，已中止安装：{}", e),
+            &[("detail", e.to_string())],
+        )
+    })
 }
 
 /// 安装更新包：按文件扩展名选择系统安装器。
@@ -55,10 +77,11 @@ pub async fn install_update(
                 "update",
                 format!("更新包缺失签名或本地缺少公钥，已拒绝安装：{}", path),
             );
-            return Err(AppError::Forbidden(
+            return Err(AppError::coded(
+                "update.signature_unavailable",
                 "无法校验更新包签名（更新清单未提供签名或本地缺少公钥），已中止安装。\
-                 请前往 GitHub Releases 页面手动下载安装包。"
-                    .into(),
+                 请前往 GitHub Releases 页面手动下载安装包。",
+                &[],
             ));
         }
     }
@@ -110,7 +133,11 @@ pub async fn install_update(
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
         let _ = ext;
-        Err(AppError::Other("当前平台不支持自动安装".into()))
+        Err(AppError::coded(
+            "update.install_unsupported",
+            "当前平台不支持自动安装",
+            &[],
+        ))
     }
 }
 

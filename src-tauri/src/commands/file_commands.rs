@@ -15,7 +15,6 @@
 //! 都会让窗口假死 —— 详见 `utils::blocking` 的模块注释。
 
 use crate::db::Db;
-use crate::err;
 use crate::utils::blocking;
 use crate::utils::error::{AppError, AppResult};
 use crate::utils::{FileInfo, FileTreeNode};
@@ -120,12 +119,26 @@ pub async fn read_file(
 
         let p = Path::new(&path);
         if !p.exists() {
-            return Err(err!("文件不存在：{}", path));
+            return Err(AppError::coded(
+                "file.not_found",
+                format!("文件不存在：{}", path),
+                &[("path", path.clone())],
+            ));
         }
         if p.is_dir() {
-            return Err(err!("目标是一个目录，无法作为文件读取：{}", path));
+            return Err(AppError::coded(
+                "file.is_dir",
+                format!("目标是一个目录，无法作为文件读取：{}", path),
+                &[("path", path.clone())],
+            ));
         }
-        std::fs::read_to_string(p).map_err(|e| err!("读取文件失败：{}", e))
+        std::fs::read_to_string(p).map_err(|e| {
+            AppError::coded(
+                "file.read_failed",
+                format!("读取文件失败：{}", e),
+                &[("detail", e.to_string())],
+            )
+        })
     })
     .await
 }
@@ -144,9 +157,21 @@ pub async fn write_file(
         ensure_safe(&db, &path, outside)?;
         let p = Path::new(&path);
         if let Some(parent) = p.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| err!("创建目录失败：{}", e))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                AppError::coded(
+                    "file.dir_create_failed",
+                    format!("创建目录失败：{}", e),
+                    &[("detail", e.to_string())],
+                )
+            })?;
         }
-        std::fs::write(p, content).map_err(|e| err!("写入文件失败：{}", e))
+        std::fs::write(p, content).map_err(|e| {
+            AppError::coded(
+                "file.write_failed",
+                format!("写入文件失败：{}", e),
+                &[("detail", e.to_string())],
+            )
+        })
     })
     .await
 }
@@ -168,9 +193,21 @@ pub async fn delete_file(
         }
         if p.is_dir() {
             // 仅删除空目录，避免误删整个站点
-            std::fs::remove_dir(p).map_err(|e| err!("删除目录失败（目录可能非空）：{}", e))
+            std::fs::remove_dir(p).map_err(|e| {
+                AppError::coded(
+                    "file.dir_remove_failed",
+                    format!("删除目录失败（目录可能非空）：{}", e),
+                    &[("detail", e.to_string())],
+                )
+            })
         } else {
-            std::fs::remove_file(p).map_err(|e| err!("删除文件失败：{}", e))
+            std::fs::remove_file(p).map_err(|e| {
+                AppError::coded(
+                    "file.remove_failed",
+                    format!("删除文件失败：{}", e),
+                    &[("detail", e.to_string())],
+                )
+            })
         }
     })
     .await
@@ -191,14 +228,28 @@ pub async fn list_files(
 
         let p = Path::new(&path);
         if !p.exists() {
-            return Err(err!("目录不存在：{}", path));
+            return Err(AppError::coded(
+                "file.dir_not_found",
+                format!("目录不存在：{}", path),
+                &[("path", path.clone())],
+            ));
         }
         if !p.is_dir() {
-            return Err(err!("目标不是目录：{}", path));
+            return Err(AppError::coded(
+                "file.not_a_dir",
+                format!("目标不是目录：{}", path),
+                &[("path", path.clone())],
+            ));
         }
 
         let mut files = Vec::new();
-        let entries = std::fs::read_dir(p).map_err(|e| err!("读取目录失败：{}", e))?;
+        let entries = std::fs::read_dir(p).map_err(|e| {
+            AppError::coded(
+                "file.dir_read_failed",
+                format!("读取目录失败：{}", e),
+                &[("detail", e.to_string())],
+            )
+        })?;
 
         for entry in entries.flatten() {
             let meta = match entry.metadata() {
@@ -255,7 +306,13 @@ pub async fn create_directory(
     let outside = allow_outside.unwrap_or(false);
     blocking::run(move || {
         ensure_safe(&db, &path, outside)?;
-        std::fs::create_dir_all(&path).map_err(|e| err!("创建目录失败：{}", e))
+        std::fs::create_dir_all(&path).map_err(|e| {
+            AppError::coded(
+                "file.dir_create_failed",
+                format!("创建目录失败：{}", e),
+                &[("detail", e.to_string())],
+            )
+        })
     })
     .await
 }
@@ -285,7 +342,11 @@ pub async fn get_file_tree(
 
         let p = Path::new(&path);
         if !p.exists() {
-            return Err(err!("路径不存在：{}", path));
+            return Err(AppError::coded(
+                "file.path_missing",
+                format!("路径不存在：{}", path),
+                &[("path", path.clone())],
+            ));
         }
         Ok(FileTreeNode::from_path(p, 0, depth))
     })
@@ -299,7 +360,11 @@ pub fn open_in_explorer(app: tauri::AppHandle, path: String) -> AppResult<()> {
 
     let target = Path::new(&path);
     if !target.exists() {
-        return Err(err!("路径不存在：{}", path));
+        return Err(AppError::coded(
+            "file.path_missing",
+            format!("路径不存在：{}", path),
+            &[("path", path.clone())],
+        ));
     }
 
     // 文件则打开其所在目录并选中
@@ -312,9 +377,13 @@ pub fn open_in_explorer(app: tauri::AppHandle, path: String) -> AppResult<()> {
             .unwrap_or(path.clone())
     };
 
-    app.opener()
-        .open_path(to_open, None::<&str>)
-        .map_err(|e| err!("打开目录失败：{}", e))
+    app.opener().open_path(to_open, None::<&str>).map_err(|e| {
+        AppError::coded(
+            "file.dir_open_failed",
+            format!("打开目录失败：{}", e),
+            &[("detail", e.to_string())],
+        )
+    })
 }
 
 /// 复制文件或目录。
@@ -334,15 +403,31 @@ pub async fn copy_path(
 
         let src = Path::new(&from);
         if !src.exists() {
-            return Err(err!("源路径不存在：{}", from));
+            return Err(AppError::coded(
+                "file.src_missing",
+                format!("源路径不存在：{}", from),
+                &[("path", from.clone())],
+            ));
         }
         if src.is_dir() {
             crate::utils::fs::copy_dir(src, Path::new(&to))
         } else {
             if let Some(parent) = Path::new(&to).parent() {
-                std::fs::create_dir_all(parent).map_err(|e| err!("创建目录失败：{}", e))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    AppError::coded(
+                        "file.dir_create_failed",
+                        format!("创建目录失败：{}", e),
+                        &[("detail", e.to_string())],
+                    )
+                })?;
             }
-            std::fs::copy(src, Path::new(&to)).map_err(|e| err!("复制文件失败：{}", e))?;
+            std::fs::copy(src, Path::new(&to)).map_err(|e| {
+                AppError::coded(
+                    "file.copy_failed",
+                    format!("复制文件失败：{}", e),
+                    &[("detail", e.to_string())],
+                )
+            })?;
             Ok(())
         }
     })
@@ -362,7 +447,13 @@ pub async fn rename_path(
     blocking::run(move || {
         ensure_safe(&db, &from, outside)?;
         ensure_safe(&db, &to, outside)?;
-        std::fs::rename(&from, &to).map_err(|e| err!("重命名失败：{}", e))
+        std::fs::rename(&from, &to).map_err(|e| {
+            AppError::coded(
+                "file.rename_failed",
+                format!("重命名失败：{}", e),
+                &[("detail", e.to_string())],
+            )
+        })
     })
     .await
 }
@@ -383,9 +474,19 @@ pub async fn read_file_base64(
 
         let p = Path::new(&path);
         if !p.exists() {
-            return Err(err!("文件不存在：{}", path));
+            return Err(AppError::coded(
+                "file.not_found",
+                format!("文件不存在：{}", path),
+                &[("path", path.clone())],
+            ));
         }
-        let bytes = std::fs::read(p).map_err(|e| err!("读取文件失败：{}", e))?;
+        let bytes = std::fs::read(p).map_err(|e| {
+            AppError::coded(
+                "file.read_failed",
+                format!("读取文件失败：{}", e),
+                &[("detail", e.to_string())],
+            )
+        })?;
         Ok(encode(&bytes))
     })
     .await

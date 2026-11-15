@@ -1,7 +1,7 @@
 //! 更新检查：版本比对、变更日志解析、应用信息。
 
 use crate::models::{AppInfo, Changelog, TechItem, UpdateInfo};
-use crate::utils::error::AppResult;
+use crate::utils::error::{AppError, AppResult};
 use serde_json::Value;
 
 /// 当前应用版本（与 `tauri.conf.json` / `Cargo.toml` 保持同步）。
@@ -212,7 +212,7 @@ pub async fn check_update(manifest_url: Option<String>) -> AppResult<UpdateInfo>
         .timeout(std::time::Duration::from_secs(FETCH_TIMEOUT_SECS))
         .user_agent(format!("{}/{}", APP_NAME, APP_VERSION))
         .build()
-        .map_err(|e| crate::utils::error::AppError::Network(e.to_string()))?;
+        .map_err(|e| AppError::Network(e.to_string()))?;
 
     let mut last_error: Option<String> = None;
 
@@ -258,18 +258,30 @@ async fn fetch_and_parse(
     current: &str,
 ) -> AppResult<UpdateInfo> {
     let resp = client.get(url).send().await.map_err(|e| {
-        crate::utils::error::AppError::Network(format!("请求更新清单失败（{url}）：{e}"))
+        AppError::coded(
+            "update.manifest_request_failed",
+            format!("请求更新清单失败（{url}）：{e}"),
+            &[("url", url.to_string()), ("detail", e.to_string())],
+        )
     })?;
 
     if !resp.status().is_success() {
-        return Err(crate::utils::error::AppError::Network(format!(
-            "更新源返回状态码 {}（{url}）",
-            resp.status()
-        )));
+        return Err(AppError::coded(
+            "update.source_status",
+            format!("更新源返回状态码 {}（{url}）", resp.status()),
+            &[
+                ("status", resp.status().to_string()),
+                ("url", url.to_string()),
+            ],
+        ));
     }
 
     let body: Value = resp.json().await.map_err(|e| {
-        crate::utils::error::AppError::Network(format!("解析更新清单失败（{url}）：{e}"))
+        AppError::coded(
+            "update.manifest_parse_failed",
+            format!("解析更新清单失败（{url}）：{e}"),
+            &[("url", url.to_string()), ("detail", e.to_string())],
+        )
     })?;
 
     Ok(parse_manifest(&body, current))

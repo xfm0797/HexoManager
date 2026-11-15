@@ -8,7 +8,6 @@
 //! - `article_commands` 负责把合并结果写回文章文件（新建 / 套用到已有文章）。
 
 use crate::db::Db;
-use crate::err;
 use crate::models::{
     ApplyTemplateInput, ApplyTemplateResult, FrontMatterTemplate, SaveFrontMatterTemplateInput,
 };
@@ -227,7 +226,13 @@ pub fn load_template(conn: &Connection, template_id: i64) -> AppResult<FrontMatt
         TEMPLATE_COLUMNS
     );
     conn.query_row(&sql, params![template_id], row_to_template)
-        .map_err(|_| AppError::NotFound(format!("模板不存在：{}", template_id)))
+        .map_err(|_| {
+            AppError::coded(
+                "template.not_found",
+                format!("模板不存在：{}", template_id),
+                &[("id", template_id.to_string())],
+            )
+        })
 }
 
 // ==================== Tauri 命令 ====================
@@ -265,7 +270,11 @@ fn save_front_matter_template_impl(
 ) -> AppResult<FrontMatterTemplate> {
     let name = input.name.trim().to_string();
     if name.is_empty() {
-        return Err(AppError::InvalidArgument("模板名称不能为空".into()));
+        return Err(AppError::coded(
+            "template.name_empty",
+            "模板名称不能为空",
+            &[],
+        ));
     }
 
     // 字段必须是对象：模板最终会被写进 front matter，数组/标量无处安放
@@ -273,8 +282,10 @@ fn save_front_matter_template_impl(
         Some(v) if v.is_object() => v,
         Some(Value::Null) | None => serde_json::json!({}),
         Some(_) => {
-            return Err(AppError::InvalidArgument(
-                "模板字段必须是一个 YAML 对象（键值对）".into(),
+            return Err(AppError::coded(
+                "template.fields_not_object",
+                "模板字段必须是一个 YAML 对象（键值对）",
+                &[],
             ))
         }
     };
@@ -295,10 +306,11 @@ fn save_front_matter_template_impl(
         None => conn.query_row(dup_sql, params![name], |r| r.get(0)).ok(),
     };
     if dup.is_some() {
-        return Err(AppError::InvalidArgument(format!(
-            "已存在同名模板「{}」，请换一个名称",
-            name
-        )));
+        return Err(AppError::coded(
+            "template.name_taken",
+            format!("已存在同名模板「{}」，请换一个名称", name),
+            &[("name", name.clone())],
+        ));
     }
 
     let now = now_utc();
@@ -321,7 +333,11 @@ fn save_front_matter_template_impl(
                 ],
             )?;
             if affected == 0 {
-                return Err(AppError::NotFound(format!("模板不存在：{}", id)));
+                return Err(AppError::coded(
+                    "template.not_found",
+                    format!("模板不存在：{}", id),
+                    &[("id", id.to_string())],
+                ));
             }
             id
         }
@@ -364,10 +380,20 @@ pub fn delete_front_matter_template(state: State<'_, AppState>, template_id: i64
             params![template_id],
             |r| r.get(0),
         )
-        .map_err(|_| err!("模板不存在：{}", template_id))?;
+        .map_err(|_| {
+            AppError::coded(
+                "template.not_found",
+                format!("模板不存在：{}", template_id),
+                &[("id", template_id.to_string())],
+            )
+        })?;
 
     if builtin.unwrap_or(0) != 0 {
-        return Err("内置模板不可删除，可编辑它或另存为新模板".into());
+        return Err(AppError::coded(
+            "template.builtin_undeletable",
+            "内置模板不可删除，可编辑它或另存为新模板",
+            &[],
+        ));
     }
 
     conn.execute(
@@ -400,7 +426,13 @@ async fn apply_front_matter_template_impl(
             params![input.article_id],
             |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
         )
-        .map_err(|_| AppError::NotFound(format!("文章不存在：{}", input.article_id)))?
+        .map_err(|_| {
+            AppError::coded(
+                "article.not_found",
+                format!("文章不存在：{}", input.article_id),
+                &[("id", input.article_id.to_string())],
+            )
+        })?
     };
 
     let template = {
@@ -487,7 +519,13 @@ async fn apply_front_matter_template_impl(
             params![site_id],
             |r| r.get::<_, String>(0),
         )
-        .map_err(|_| AppError::NotFound(format!("站点不存在：{}", site_id)))?
+        .map_err(|_| {
+            AppError::coded(
+                "site.not_found",
+                format!("站点不存在：{}", site_id),
+                &[("id", site_id.to_string())],
+            )
+        })?
     };
     crate::commands::site_commands::rescan_articles(db, site_id, &site_path).await?;
 
@@ -502,7 +540,7 @@ async fn apply_front_matter_template_impl(
             params![input.article_id],
             crate::commands::article_commands::row_to_article,
         )
-        .map_err(|_| AppError::NotFound("套用模板后未能读取文章".into()))?;
+        .map_err(|_| AppError::coded("article.reload_failed", "套用模板后未能读取文章", &[]))?;
 
     Ok(ApplyTemplateResult {
         article,

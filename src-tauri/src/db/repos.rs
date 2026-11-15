@@ -22,7 +22,11 @@ pub fn site_path_of(db: &Db, site_id: i64) -> AppResult<String> {
             format!("站点不存在：{}", site_id),
             &[("id", site_id.to_string())],
         ),
-        other => AppError::Other(format!("读取站点路径失败：{}", other)),
+        other => AppError::coded(
+            "db.site_path_read_failed",
+            format!("读取站点路径失败：{}", other),
+            &[("detail", other.to_string())],
+        ),
     })
 }
 

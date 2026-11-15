@@ -1,7 +1,6 @@
 //! 主题管理命令（对应大纲 7.7）。
 
 use crate::db::{site_path_of, Db};
-use crate::err;
 use crate::models::{Theme, ThemeConfig, ThemeInfo};
 use crate::utils::blocking;
 use crate::utils::error::{AppError, AppResult};
@@ -228,10 +227,11 @@ async fn install_theme_impl(
     let target = themes_dir.join(&dir_name);
 
     if target.exists() {
-        return Err(AppError::InvalidArgument(format!(
-            "主题已存在：{}",
-            dir_name
-        )));
+        return Err(AppError::coded(
+            "theme.exists",
+            format!("主题已存在：{}", dir_name),
+            &[("name", dir_name.clone())],
+        ));
     }
 
     let src = source.unwrap_or(name).trim().to_string();
@@ -246,10 +246,11 @@ async fn install_theme_impl(
         )
         .await?;
         if !out.success {
-            return Err(AppError::Process(format!(
-                "克隆主题失败：{}",
-                out.combined()
-            )));
+            return Err(AppError::coded(
+                "theme.clone_failed",
+                format!("克隆主题失败：{}", out.combined()),
+                &[("detail", out.combined())],
+            ));
         }
     } else if Path::new(&src).is_absolute() && Path::new(&src).exists() {
         // 本地目录复制
@@ -270,10 +271,11 @@ async fn install_theme_impl(
         .await?;
 
         if !out.success {
-            return Err(AppError::Process(format!(
-                "npm 安装主题失败：{}",
-                out.combined()
-            )));
+            return Err(AppError::coded(
+                "theme.npm_install_failed",
+                format!("npm 安装主题失败：{}", out.combined()),
+                &[("detail", out.combined())],
+            ));
         }
 
         // npm 安装后把 node_modules 中的主题复制到 themes 目录
@@ -286,10 +288,14 @@ async fn install_theme_impl(
             )?;
         } else {
             // 部分主题通过 npm 安装后由 Hexo 直接识别，无需复制
-            return Err(AppError::Other(format!(
-                "npm 安装完成，但未在 node_modules 中找到主题 `{}`，请检查包名是否正确",
-                name
-            )));
+            return Err(AppError::coded(
+                "theme.npm_missing",
+                format!(
+                    "npm 安装完成，但未在 node_modules 中找到主题 `{}`，请检查包名是否正确",
+                    name
+                ),
+                &[("name", name.to_string())],
+            ));
         }
     }
 
@@ -330,7 +336,11 @@ pub async fn switch_theme(state: State<'_, AppState>, site_id: i64, name: String
     // 校验主题已安装
     let theme_dir = Path::new(&site_path).join("themes").join(&name);
     if !theme_dir.exists() {
-        return Err(err!("主题未安装：{}", name));
+        return Err(AppError::coded(
+            "theme.not_installed",
+            format!("主题未安装：{}", name),
+            &[("name", name.clone())],
+        ));
     }
 
     let cfg = format!("{}/_config.yml", site_path.trim_end_matches('/'));
@@ -339,7 +349,11 @@ pub async fn switch_theme(state: State<'_, AppState>, site_id: i64, name: String
     if let Some(obj) = value.as_object_mut() {
         obj.insert("theme".into(), Value::String(name.clone()));
     } else {
-        return Err("站点配置文件格式异常，无法写入 theme 字段".into());
+        return Err(AppError::coded(
+            "config.theme_field_unwritable",
+            "站点配置文件格式异常，无法写入 theme 字段",
+            &[],
+        ));
     }
 
     crate::hexo::config_parser::write_yaml_file(&cfg, &value)?;
@@ -407,10 +421,26 @@ fn get_theme_config_impl(db: &Db, site_id: i64, theme: Option<String>) -> AppRes
     // 按 Hexo 的实际生效顺序查找：站点级覆盖优先于主题自带文件
     for path in theme_config_candidates(site_root, &theme_name).iter() {
         if path.exists() {
-            let raw = std::fs::read_to_string(path)
-                .map_err(|e| err!("读取主题配置失败（{}）：{}", path.display(), e))?;
-            let config = crate::hexo::config_parser::parse_yaml_str(&raw)
-                .map_err(|e| err!("解析主题配置失败（{}）：{}", path.display(), e))?;
+            let raw = std::fs::read_to_string(path).map_err(|e| {
+                AppError::coded(
+                    "theme.config_read_failed",
+                    format!("读取主题配置失败（{}）：{}", path.display(), e),
+                    &[
+                        ("path", path.display().to_string()),
+                        ("detail", e.to_string()),
+                    ],
+                )
+            })?;
+            let config = crate::hexo::config_parser::parse_yaml_str(&raw).map_err(|e| {
+                AppError::coded(
+                    "theme.config_parse_failed",
+                    format!("解析主题配置失败（{}）：{}", path.display(), e),
+                    &[
+                        ("path", path.display().to_string()),
+                        ("detail", e.message()),
+                    ],
+                )
+            })?;
 
             // 站点级覆盖文件位于站点根目录下，用于 UI 提示覆盖关系
             let is_site_override = path.parent() == Some(site_root);
@@ -435,7 +465,7 @@ fn get_theme_config_impl(db: &Db, site_id: i64, theme: Option<String>) -> AppRes
     // 都找不到：给出可操作的诊断信息，而不是只有一句「文件不存在」
     let theme_dir = site_root.join("themes").join(&theme_name);
 
-    let hint = if !theme_dir.exists() {
+    if !theme_dir.exists() {
         // 主题目录本身不存在 —— 列出现有主题帮助定位
         let mut installed: Vec<String> = Vec::new();
         if let Ok(entries) = std::fs::read_dir(site_root.join("themes")) {
@@ -447,50 +477,57 @@ fn get_theme_config_impl(db: &Db, site_id: i64, theme: Option<String>) -> AppRes
                 .collect();
         }
 
-        if installed.is_empty() {
-            format!(
-                "主题目录不存在：{}。该站点尚未安装任何主题，请先在「主题管理」中安装。",
-                theme_dir.display()
+        let dir = theme_dir.display().to_string();
+        return Err(if installed.is_empty() {
+            AppError::coded(
+                "theme.config_dir_missing_any",
+                format!(
+                    "主题目录不存在：{}。该站点尚未安装任何主题，请先在「主题管理」中安装。",
+                    dir
+                ),
+                &[("path", dir)],
             )
         } else {
-            format!(
-                "主题目录不存在：{}。当前已安装的主题：{}。",
-                theme_dir.display(),
-                installed.join("、")
+            let list = installed.join(", ");
+            AppError::coded(
+                "theme.config_dir_missing",
+                format!("主题目录不存在：{}。当前已安装的主题：{}。", dir, list),
+                &[("path", dir), ("name", theme_name.clone()), ("list", list)],
             )
-        }
-    } else {
-        // 主题目录在但没配置文件 —— 列出目录内实际文件
-        let mut files: Vec<String> = Vec::new();
-        if let Ok(entries) = std::fs::read_dir(&theme_dir) {
-            files = entries
-                .flatten()
-                .map(|e| e.file_name().to_string_lossy().to_string())
-                .filter(|n| !n.starts_with('.'))
-                .take(20)
-                .collect();
-        }
+        });
+    }
 
-        if files.is_empty() {
+    // 主题目录在但没配置文件 —— 列出目录内实际文件
+    let mut files: Vec<String> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&theme_dir) {
+        files = entries
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| !n.starts_with('.'))
+            .take(20)
+            .collect();
+    }
+
+    let dir = theme_dir.display().to_string();
+    if files.is_empty() {
+        return Err(AppError::coded(
+            "theme.config_dir_empty",
             format!(
                 "主题「{}」目录为空，主题可能未完整安装（{}）。",
-                theme_name,
-                theme_dir.display()
-            )
-        } else {
-            format!(
-                "主题「{}」目录中未找到 _config.yml（目录内容：{}）。",
-                theme_name,
-                files.join("、")
-            )
-        }
-    };
+                theme_name, dir
+            ),
+            &[("name", theme_name.clone()), ("path", dir)],
+        ));
+    }
 
-    Err(err!(
-        "{}（主题名：{}，站点路径：{}）",
-        hint,
-        theme_name,
-        site_path
+    let contents = files.join(", ");
+    Err(AppError::coded(
+        "theme.config_no_config",
+        format!(
+            "主题「{}」目录中未找到 _config.yml（目录内容：{}）。",
+            theme_name, contents
+        ),
+        &[("name", theme_name), ("detail", contents)],
     ))
 }
 
@@ -528,7 +565,11 @@ fn update_theme_config_impl(
     } else if let Some(value) = config {
         crate::hexo::config_parser::write_yaml_file(&cfg_path.display().to_string(), &value)?;
     } else {
-        return Err("必须提供 config 或 raw 其中之一".into());
+        return Err(AppError::coded(
+            "config.payload_missing",
+            "必须提供 config 或 raw 其中之一",
+            &[],
+        ));
     }
 
     // 同步到主题配置表
@@ -702,15 +743,29 @@ fn uninstall_theme_impl(db: &Db, site_id: i64, name: &str) -> AppResult<()> {
     let site_path = site_path_of(db, site_id)?;
 
     if current_theme(&site_path) == name {
-        return Err(err!("主题 `{}` 正在使用中，请先切换到其他主题", name));
+        return Err(AppError::coded(
+            "theme.in_use",
+            format!("主题 `{}` 正在使用中，请先切换到其他主题", name),
+            &[("name", name.to_string())],
+        ));
     }
 
     let theme_dir = Path::new(&site_path).join("themes").join(name);
     if !theme_dir.exists() {
-        return Err(err!("主题不存在：{}", name));
+        return Err(AppError::coded(
+            "theme.not_found",
+            format!("主题不存在：{}", name),
+            &[("name", name.to_string())],
+        ));
     }
 
-    std::fs::remove_dir_all(&theme_dir).map_err(|e| err!("卸载主题失败：{}", e))
+    std::fs::remove_dir_all(&theme_dir).map_err(|e| {
+        AppError::coded(
+            "theme.uninstall_failed",
+            format!("卸载主题失败：{}", e),
+            &[("detail", e.to_string())],
+        )
+    })
 }
 
 /// 更新主题（Git 拉取或 npm 更新）。
@@ -726,7 +781,11 @@ pub async fn update_theme(
     let theme_dir = PathBuf::from(&site_path).join("themes").join(&name);
 
     if !theme_dir.exists() {
-        return Err(err!("主题不存在：{}", name));
+        return Err(AppError::coded(
+            "theme.not_found",
+            format!("主题不存在：{}", name),
+            &[("name", name.to_string())],
+        ));
     }
 
     // 优先 Git 拉取
@@ -751,9 +810,13 @@ pub async fn update_theme(
     .await?;
 
     if !out.success {
-        return Err(err!(
-            "主题更新失败，该主题可能既非 Git 仓库也无法通过 npm 更新：\n{}",
-            out.combined()
+        return Err(AppError::coded(
+            "theme.update_failed",
+            format!(
+                "主题更新失败，该主题可能既非 Git 仓库也无法通过 npm 更新：\n{}",
+                out.combined()
+            ),
+            &[("detail", out.combined())],
         ));
     }
 
@@ -776,7 +839,11 @@ fn get_theme_preview_url_impl(db: &Db, site_id: i64, name: &str) -> AppResult<St
     let theme_dir = Path::new(&site_path).join("themes").join(name);
 
     if !theme_dir.exists() {
-        return Err(err!("主题不存在：{}", name));
+        return Err(AppError::coded(
+            "theme.not_found",
+            format!("主题不存在：{}", name),
+            &[("name", name.to_string())],
+        ));
     }
 
     // 从 README 中提取第一个演示链接
@@ -807,7 +874,11 @@ fn get_theme_preview_url_impl(db: &Db, site_id: i64, name: &str) -> AppResult<St
         }
     }
 
-    Err("未在主题文档中找到演示链接".into())
+    Err(AppError::coded(
+        "theme.demo_missing",
+        "未在主题文档中找到演示链接",
+        &[],
+    ))
 }
 
 #[cfg(test)]

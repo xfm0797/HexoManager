@@ -1,15 +1,29 @@
 //! 统一错误类型。
 //!
-//! 有两种形态，前端都吃：
+//! **所有命令都返回 `AppResult<T>`**，Tauri 把错误序列化成
+//! `{ code, message, params }`：
 //!
-//! - **结构化**（迁移完成的模块）：命令返回 `AppResult<T>`，Tauri 把错误序列化成
-//!   `{ code, message, params }`。前端按 `code` 查 `src/i18n/errorCodes.ts` 取译文，
-//!   因此**改中文措辞不会让译文静默失效** —— 这正是 i18n 过渡层最大的坑。
-//! - **字符串**（尚未迁移的模块）：命令返回 `Result<T, String>`，即中文原文，
-//!   前端继续走旧的「精确表 + 正则表」兜底。
+//! - `code` 是给前端的稳定标识，前端按它查 `src/i18n/errorCodes.ts` 取译文；
+//! - `message` 是中文原文，只用于日志、`Display` 与诊断导出；
+//! - `params` 填译文的占位符。
 //!
-//! 迁移一个命令只需把签名从 `Result<T, String>` 换成 `AppResult<T>`，
-//! 顺手删掉 `map_err(|e| e.to_string())`（`?` 会走 `From`）。
+//! 于是**改中文措辞不会让译文静默失效** —— 这正是旧的「按中文文本匹配」方案
+//! 最大的坑（改一个字译文就没了，而且没人会发现）。
+//!
+//! ## 两种构造方式
+//!
+//! - 有具体语义的失败：`AppError::coded("site.not_found", "站点不存在：1", &[…])`，
+//!   译文由 `errorCodes.ts` 里对应的条目决定；
+//! - 包装外部错误（IO / JSON / 子进程输出…）：直接用 `?` 或粗粒度变体，
+//!   它们各自有一个**通用码**（`io` / `json` / `process` …），译文模板里用
+//!   `{detail}` 透传外部文本（那部分是操作系统或第三方库给的，本来就翻不了）。
+//!
+//! 判断标准很简单：**消息里有自己写的中文措辞 → 必须用 `coded`**。
+//! 只包了一层外部错误、措辞来自 `AppError` 变体本身的 → 直接用变体。
+//! `scripts/error-codes-check.mjs` 会拦下「中文字面量直接塞进原始变体」的写法。
+//!
+//! 刻意**不实现** `From<String>` / `From<&str>`：字符串进不来，构造错误就必须显式
+//! 说清「用哪个码」还是「用哪个变体」，避免再退回 `Err("中文".into())` 的旧写法。
 
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
@@ -54,8 +68,6 @@ pub enum AppError {
     Other(String),
 
     /// 带稳定错误码的错误：`code` 不变、`message` 可随意改措辞。
-    ///
-    /// 用于高频路径（文章、站点），前端按 `code` 取译文，`params` 填模板占位符。
     #[error("{message}")]
     Coded {
         code: &'static str,
@@ -66,6 +78,9 @@ pub enum AppError {
 
 impl AppError {
     /// 构造带稳定错误码的错误。
+    ///
+    /// `message` 只给人看（日志、`Display`），前端认的是 `code`；
+    /// `params` 填 `errorCodes.ts` 译文里的 `{name}` 占位符。
     ///
     /// ```
     /// # use hexo_manager_lib::utils::error::AppError;
@@ -86,10 +101,11 @@ impl AppError {
         }
     }
 
-    /// 稳定的机器可读标识。粗粒度变体给通用码，`Coded` 给具体码。
+    /// 稳定的机器可读标识。
     ///
-    /// 前端没有对应译文时会退回 `message`（中文原文）走旧的字符串映射，
-    /// 因此这里新增码是安全的。
+    /// 粗粒度变体给通用码（`io` / `db` / …），译文模板靠 `{detail}` 透传外部文本；
+    /// `Coded` 给具体码。前端没有对应译文时会退回 `message`（中文原文），
+    /// 因此漏写不会崩，只是英文界面会露出中文 —— 由 `npm run i18n:check` 拦截。
     pub fn code(&self) -> &'static str {
         match self {
             AppError::Database(_) => "db",
@@ -108,7 +124,7 @@ impl AppError {
         }
     }
 
-    /// 中文原文：日志、旧映射表兜底、以及未翻译语言都靠它。
+    /// 中文原文：日志、`Display`、以及未翻译语言都靠它。
     pub fn message(&self) -> String {
         match self {
             AppError::Coded { message, .. } => message.clone(),
@@ -116,31 +132,33 @@ impl AppError {
         }
     }
 
-    /// 译文模板的占位值；无占位符时为空表。
-    pub fn params(&self) -> &BTreeMap<String, String> {
+    /// 译文模板的占位值。
+    ///
+    /// 粗粒度变体统一给一个 `detail`（外部错误文本，通常来自 OS 或第三方库），
+    /// 这样译文模板可以写成 `I/O error: {detail}`，不必解析中文前缀。
+    pub fn params(&self) -> BTreeMap<String, String> {
+        let detail = |s: String| BTreeMap::from([("detail".to_string(), s)]);
+
         match self {
-            AppError::Coded { params, .. } => params,
-            _ => &EMPTY_PARAMS,
+            AppError::Coded { params, .. } => params.clone(),
+            AppError::Database(e) => detail(e.to_string()),
+            AppError::Io(e) => detail(e.to_string()),
+            AppError::Json(e) => detail(e.to_string()),
+            AppError::Template(e) => detail(e.to_string()),
+            AppError::Yaml(s)
+            | AppError::Network(s)
+            | AppError::Process(s)
+            | AppError::PathNotFound(s)
+            | AppError::InvalidArgument(s)
+            | AppError::NotFound(s)
+            | AppError::Forbidden(s)
+            | AppError::Other(s) => detail(s.clone()),
         }
     }
 }
 
-static EMPTY_PARAMS: BTreeMap<String, String> = BTreeMap::new();
-
 impl From<tauri::Error> for AppError {
     fn from(e: tauri::Error) -> Self {
-        AppError::Other(e.to_string())
-    }
-}
-
-impl From<String> for AppError {
-    fn from(e: String) -> Self {
-        AppError::Other(e)
-    }
-}
-
-impl From<&str> for AppError {
-    fn from(e: &str) -> Self {
         AppError::Other(e.to_string())
     }
 }
@@ -150,20 +168,12 @@ impl Serialize for AppError {
         let mut st = serializer.serialize_struct("AppError", 3)?;
         st.serialize_field("code", self.code())?;
         st.serialize_field("message", &self.message())?;
-        st.serialize_field("params", self.params())?;
+        st.serialize_field("params", &self.params())?;
         st.end()
     }
 }
 
 pub type AppResult<T> = Result<T, AppError>;
-
-/// 便捷宏：快速构造 `AppError::Other`
-#[macro_export]
-macro_rules! err {
-    ($($arg:tt)*) => {
-        $crate::utils::error::AppError::Other(format!($($arg)*))
-    };
-}
 
 #[cfg(test)]
 mod tests {
@@ -183,17 +193,28 @@ mod tests {
         assert_eq!(json["params"]["id"], "12");
     }
 
-    /// 粗粒度变体也有码，且 params 是空对象（不是 null，前端可直接展开）。
+    /// 粗粒度变体也有码，且把内部文本放进 `params.detail`：
+    /// 译文模板靠它拼出 `I/O error: …`，不必去解析中文前缀。
     #[test]
-    fn test_plain_variant_serializes_with_generic_code() {
+    fn test_plain_variant_puts_detail_in_params() {
         let e = AppError::Forbidden("路径不在站点目录内".into());
         let json = serde_json::to_value(&e).unwrap();
         assert_eq!(json["code"], "forbidden");
         assert_eq!(json["message"], "操作被拒绝: 路径不在站点目录内");
-        assert!(json["params"].as_object().unwrap().is_empty());
+        assert_eq!(json["params"]["detail"], "路径不在站点目录内");
     }
 
-    /// `to_string()` 仍是中文原文 —— 旧模块用 `.map_err(|e| e.to_string())` 不受影响。
+    /// 外部错误同样透传 detail，前端拿到的英文前缀由字典决定。
+    #[test]
+    fn test_wrapped_variant_exposes_detail() {
+        let e: AppError = serde_json::from_str::<serde_json::Value>("{")
+            .unwrap_err()
+            .into();
+        assert_eq!(e.code(), "json");
+        assert!(!e.params()["detail"].is_empty());
+    }
+
+    /// `to_string()` 仍是中文原文 —— 日志与诊断导出读它。
     #[test]
     fn test_display_stays_plain_chinese() {
         let e = AppError::coded("article.not_found", "文章不存在：7", &[]);

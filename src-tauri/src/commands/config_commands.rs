@@ -1,10 +1,9 @@
 //! 配置管理命令（站点配置、原始 YAML、插件）。
 
 use crate::db::{site_path_of, Db};
-use crate::err;
 use crate::models::Plugin;
 use crate::utils::blocking;
-use crate::utils::error::AppResult;
+use crate::utils::error::{AppError, AppResult};
 use crate::AppState;
 use rusqlite::params;
 use serde_json::Value;
@@ -72,7 +71,11 @@ fn save_site_config_impl(
     } else if let Some(value) = config {
         crate::hexo::config_parser::write_yaml_file(&cfg, &value)?;
     } else {
-        return Err("必须提供 config 或 raw 其中之一".into());
+        return Err(AppError::coded(
+            "config.payload_missing",
+            "必须提供 config 或 raw 其中之一",
+            &[],
+        ));
     }
 
     // 同步站点表的关键字段
@@ -109,8 +112,18 @@ pub fn validate_config(content: String, config_type: Option<String>) -> AppResul
     match config_type.as_deref() {
         Some("json") => serde_json::from_str::<Value>(&content)
             .map(|_| ())
-            .map_err(|e| err!("JSON 格式错误：{}", e)),
-        Some("toml") => Err("TOML 校验暂未内置，请在保存前自行确认格式".into()),
+            .map_err(|e| {
+                AppError::coded(
+                    "config.json_invalid",
+                    format!("JSON 格式错误：{}", e),
+                    &[("detail", e.to_string())],
+                )
+            }),
+        Some("toml") => Err(AppError::coded(
+            "config.toml_unsupported",
+            "TOML 校验暂未内置，请在保存前自行确认格式",
+            &[],
+        )),
         // 默认按 YAML 校验
         _ => crate::hexo::config_parser::validate_yaml(&content),
     }
@@ -164,10 +177,20 @@ pub async fn restore_site_config(state: State<'_, AppState>, site_id: i64) -> Ap
         let backup = format!("{}.bak", cfg);
 
         if !std::path::Path::new(&backup).exists() {
-            return Err("没有可恢复的配置备份".into());
+            return Err(AppError::coded(
+                "config.backup_missing",
+                "没有可恢复的配置备份",
+                &[],
+            ));
         }
 
-        std::fs::copy(&backup, &cfg).map_err(|e| err!("恢复配置失败：{}", e))?;
+        std::fs::copy(&backup, &cfg).map_err(|e| {
+            AppError::coded(
+                "config.restore_failed",
+                format!("恢复配置失败：{}", e),
+                &[("detail", e.to_string())],
+            )
+        })?;
         Ok(())
     })
     .await
@@ -221,8 +244,13 @@ pub async fn import_config(
 fn import_config_impl(db: &Db, site_id: i64, payload: &str) -> AppResult<()> {
     let (site_path, cfg) = config_path_of(db, site_id)?;
 
-    let value: Value =
-        serde_json::from_str(payload).map_err(|e| err!("解析导入内容失败：{}", e))?;
+    let value: Value = serde_json::from_str(payload).map_err(|e| {
+        AppError::coded(
+            "config.import_parse_failed",
+            format!("解析导入内容失败：{}", e),
+            &[("detail", e.to_string())],
+        )
+    })?;
 
     if let Some(site_config) = value.get("siteConfig").filter(|v| !v.is_null()) {
         crate::hexo::config_parser::write_yaml_file(&cfg, site_config)?;
@@ -396,7 +424,11 @@ pub async fn install_plugin(
     .await?;
 
     if !out.success {
-        return Err(err!("安装插件失败：\n{}", out.combined()));
+        return Err(AppError::coded(
+            "config.plugin_install_failed",
+            format!("安装插件失败：\n{}", out.combined()),
+            &[("detail", out.combined())],
+        ));
     }
 
     // 记录到插件表
@@ -431,7 +463,11 @@ pub async fn uninstall_plugin(
     .await?;
 
     if !out.success {
-        return Err(err!("卸载插件失败：\n{}", out.combined()));
+        return Err(AppError::coded(
+            "config.plugin_uninstall_failed",
+            format!("卸载插件失败：\n{}", out.combined()),
+            &[("detail", out.combined())],
+        ));
     }
 
     if let Ok(conn) = db.conn() {

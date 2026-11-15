@@ -251,7 +251,13 @@ fn build_registry() -> AppResult<Handlebars<'static>> {
     hb.set_strict_mode(false);
     for tpl in TEMPLATES {
         hb.register_template_string(tpl.id, tpl.source)
-            .map_err(|e| AppError::Other(format!("模板 {} 注册失败：{}", tpl.id, e)))?;
+            .map_err(|e| {
+                AppError::coded(
+                    "deploy.template_register_failed",
+                    format!("模板 {} 注册失败：{}", tpl.id, e),
+                    &[("id", tpl.id.to_string()), ("detail", e.to_string())],
+                )
+            })?;
     }
 
     // 辅助：把环境变量列表渲染为 KEY=value 形式
@@ -432,8 +438,13 @@ pub fn build_context(input: &crate::models::GenerateConfigInput) -> TemplateCont
 
 /// 渲染单个模板 id。
 pub fn render_file(hb: &Handlebars, template_id: &str, ctx: &TemplateContext) -> AppResult<String> {
-    hb.render(template_id, ctx)
-        .map_err(|e| AppError::Other(format!("模板 {} 渲染失败：{}", template_id, e)))
+    hb.render(template_id, ctx).map_err(|e| {
+        AppError::coded(
+            "deploy.template_render_failed",
+            format!("模板 {} 渲染失败：{}", template_id, e),
+            &[("id", template_id.to_string()), ("detail", e.to_string())],
+        )
+    })
 }
 
 /// 汇总为一个平台集合：默认生成全部平台 + 边缘层 + README。

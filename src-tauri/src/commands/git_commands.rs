@@ -47,7 +47,11 @@ pub async fn git_commit(
     let hash = crate::git::operations::commit(&path, &message).await?;
 
     if hash.is_empty() {
-        return Err("没有可提交的变更".into());
+        return Err(AppError::coded(
+            "git.nothing_to_commit",
+            "没有可提交的变更",
+            &[],
+        ));
     }
 
     // 写入 Git 配置表

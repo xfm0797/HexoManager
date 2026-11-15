@@ -63,6 +63,8 @@ pub fn run() {
                 ),
             );
 
+            // setup 阶段失败会直接终止进程，没有前端错误通道，故保持中文字符串
+            // error-codes-check: skip
             let db = Db::open(&db_path)
                 .map_err(|e| format!("数据库初始化失败（{}）：{}", db_path.display(), e))?;
 

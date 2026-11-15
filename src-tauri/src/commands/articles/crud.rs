@@ -156,11 +156,17 @@ pub(crate) async fn create_article_impl(
     conn.query_row(&sql, params![article_id], row_to_article)
         .map_err(|e| match e {
             // 记录确实不存在
-            rusqlite::Error::QueryReturnedNoRows => {
-                AppError::NotFound(format!("新建文章后未能读取记录：{}", file_path.display()))
-            }
+            rusqlite::Error::QueryReturnedNoRows => AppError::coded(
+                "article.new_record_unreadable",
+                format!("新建文章后未能读取记录：{}", file_path.display()),
+                &[("path", file_path.display().to_string())],
+            ),
             // 其他错误（如列索引错位）保留原始信息，避免再次被误报为「记录不存在」
-            other => AppError::Other(format!("读取新建文章记录失败：{}", other)),
+            other => AppError::coded(
+                "article.new_record_read_failed",
+                format!("读取新建文章记录失败：{}", other),
+                &[("detail", other.to_string())],
+            ),
         })
 }
 
@@ -356,7 +362,7 @@ pub(crate) async fn update_article_impl(
     let conn = db.conn()?;
     let sql = format!("SELECT {} FROM articles WHERE id = ?1", ARTICLE_COLUMNS);
     conn.query_row(&sql, params![article_id], row_to_article)
-        .map_err(|_| AppError::NotFound("更新后未能读取文章".into()))
+        .map_err(|_| AppError::coded("article.reload_failed", "更新后未能读取文章", &[]))
 }
 
 /// 删除文章（同时删除磁盘文件）。
@@ -370,12 +376,24 @@ pub async fn delete_article(state: State<'_, AppState>, article_id: i64) -> AppR
             params![article_id],
             |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
         )
-        .map_err(|_| format!("文章不存在：{}", article_id))?
+        .map_err(|_| {
+            AppError::coded(
+                "article.not_found",
+                format!("文章不存在：{}", article_id),
+                &[("id", article_id.to_string())],
+            )
+        })?
     };
 
     let p = std::path::Path::new(&file_path);
     if p.exists() {
-        std::fs::remove_file(p).map_err(|e| format!("删除文件失败：{}", e))?;
+        std::fs::remove_file(p).map_err(|e| {
+            AppError::coded(
+                "file.remove_failed",
+                format!("删除文件失败：{}", e),
+                &[("detail", e.to_string())],
+            )
+        })?;
     }
 
     {
@@ -414,7 +432,7 @@ pub async fn import_articles(
         }
         let name = src
             .file_name()
-            .ok_or_else(|| "无法解析文件名".to_string())?
+            .ok_or_else(|| AppError::coded("article.filename_invalid", "无法解析文件名", &[]))?
             .to_string_lossy()
             .to_string();
         let mut dst = posts_dir.join(&name);
@@ -431,7 +449,13 @@ pub async fn import_articles(
             dst = posts_dir.join(format!("{}-{}.{}", stem, counter, ext));
             counter += 1;
         }
-        std::fs::copy(src, &dst).map_err(|e| format!("复制文件失败：{}", e))?;
+        std::fs::copy(src, &dst).map_err(|e| {
+            AppError::coded(
+                "file.copy_failed",
+                format!("复制文件失败：{}", e),
+                &[("detail", e.to_string())],
+            )
+        })?;
         imported.push(dst.display().to_string());
     }
 

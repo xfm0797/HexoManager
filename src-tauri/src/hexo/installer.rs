@@ -98,10 +98,11 @@ pub async fn init_site(path: &str, name: Option<&str>) -> AppResult<String> {
     if target.exists() {
         let mut entries = std::fs::read_dir(target)?;
         if entries.next().is_some() {
-            return Err(AppError::InvalidArgument(format!(
-                "目标目录非空，无法初始化站点：{}",
-                path
-            )));
+            return Err(AppError::coded(
+                "hexo.dir_not_empty",
+                format!("目标目录非空，无法初始化站点：{}", path),
+                &[("path", path.to_string())],
+            ));
         }
     } else {
         std::fs::create_dir_all(target)?;
@@ -122,20 +123,28 @@ pub async fn init_site(path: &str, name: Option<&str>) -> AppResult<String> {
         )
         .await?;
         if !fallback.success {
-            return Err(AppError::Process(format!(
-                "Hexo 初始化失败：\n{}\n---回退方案---\n{}",
-                out.combined(),
-                fallback.combined()
-            )));
+            return Err(AppError::coded(
+                "hexo.init_failed",
+                format!(
+                    "Hexo 初始化失败：\n{}\n---回退方案---\n{}",
+                    out.combined(),
+                    fallback.combined()
+                ),
+                &[
+                    ("detail", out.combined()),
+                    ("fallback", fallback.combined()),
+                ],
+            ));
         }
         // 安装依赖
         let npm_bin = crate::utils::node::npm();
         let install = process::run(npm_bin, &["install"], Some(target), Some(900)).await?;
         if !install.success {
-            return Err(AppError::Process(format!(
-                "依赖安装失败：\n{}",
-                install.combined()
-            )));
+            return Err(AppError::coded(
+                "hexo.deps_install_failed",
+                format!("依赖安装失败：\n{}", install.combined()),
+                &[("detail", install.combined())],
+            ));
         }
     }
 

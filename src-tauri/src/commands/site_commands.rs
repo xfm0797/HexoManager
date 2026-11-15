@@ -253,7 +253,13 @@ pub async fn delete_site(
             params![site_id],
             |r| r.get(0),
         )
-        .map_err(|_| format!("站点不存在：{}", site_id))?
+        .map_err(|_| {
+            AppError::coded(
+                "site.not_found",
+                format!("站点不存在：{}", site_id),
+                &[("id", site_id.to_string())],
+            )
+        })?
     };
 
     // 先停止该站点的预览服务（同时回收子进程句柄）
@@ -265,7 +271,13 @@ pub async fn delete_site(
     let quarantined = if delete_files.unwrap_or(false) {
         let p = std::path::Path::new(&path);
         if p.exists() {
-            Some(quarantine_dir(p).map_err(|e| format!("删除站点目录失败：{}", e))?)
+            Some(quarantine_dir(p).map_err(|e| {
+                AppError::coded(
+                    "site.dir_remove_failed",
+                    format!("删除站点目录失败：{}", e),
+                    &[("detail", e.to_string())],
+                )
+            })?)
         } else {
             None
         }
@@ -800,7 +812,13 @@ pub async fn rescan_articles(db: &Db, site_id: i64, site_path: &str) -> AppResul
     // 读盘是阻塞 IO：放进 blocking 线程池，避免占住 tokio worker 让其他 IPC 排队
     let found = tokio::task::spawn_blocking(move || scan_articles(&root, &fingerprints))
         .await
-        .map_err(|e| AppError::Other(format!("扫描文章失败：{}", e)))?;
+        .map_err(|e| {
+            AppError::coded(
+                "article.scan_failed",
+                format!("扫描文章失败：{}", e),
+                &[("detail", e.to_string())],
+            )
+        })?;
 
     // 这里是整站扫描：允许清理磁盘上已不存在的记录
     crate::commands::article_commands::reconcile_site(db, site_id, found).await
