@@ -122,7 +122,7 @@
 - **同步命令移出主线程**：Tauri 2 里普通 `fn` 命令跑在**主线程**上，此前的
   `read_file` / `read_file_base64` / `list_files` / `get_file_tree` / `copy_path` 等
   一旦遇到大文件或大目录就会把窗口卡死。现在这些命令统一改为 `async fn` +
-  `spawn_blocking`（新增 `utils::blocking::{run, cmd}`），涉及：
+  `spawn_blocking`（新增 `utils::blocking::run`），涉及：
   `file_commands` 全部 10 个命令、`theme_commands` 的主题列表/配置读写/卸载/预览链接、
   `config_commands` 的站点配置读写与导入导出/插件列表、`deploy_commands` 的生成/预览/
   文件冲突检查/部署日志、`site_commands` 的文件树与站点复制/备份、`update_commands`
@@ -163,16 +163,37 @@
   - 17 个语义错误码带参数（`site.not_found` / `site.path_taken` / `path.outside_site` /
     `article.not_found` / `article.file_missing` / `git.show_failed` …），
     译文集中在新增的 `src/i18n/errorCodes.ts`，用 `{name}` 占位符插值
-  - 前端 `invoke.ts` 先按 code 取译文，未收录再退回旧的中文文本映射 —— 迁移期间不会出现
-    「英文界面漏中文」的中间态，旧表因此可以慢慢收缩
+  - 前端 `invoke.ts` 只按 `code` 查译文，`{name}` 占位符由 `params` 填充
   - 顺带修正语义：`get_article` / `update_article` 原本把**任何**数据库错误都报成
     「文章不存在」，现在只有 `QueryReturnedNoRows` 才算不存在，其余保留原始错误
+- **错误码化收官：删掉 292 行的中文文本映射表**：上一轮只迁移了文章/站点两个模块，
+  其余模块仍靠 `src/i18n/backendMessages.ts` 按中文原文匹配。现在把剩余 **41 处 `err!`
+  宏调用**与 **约 90 处「中文字面量直入原始变体」**（`AppError::Other("…")`、
+  `Err("…".into())`、`map_err(|e| format!("…"))`）全部改成语义码，覆盖主题、文件、
+  配置、模板、部署、更新、Git、预览服务与子进程，语义码从 **17 个增至 111 个**：
+  - 覆盖 `err!` 的代价是每处都要起一个「模块.语义」名字（`theme.in_use`、
+    `file.dir_remove_failed`、`update.signature_mismatch` …），但这些名字正是译文的锚点 ——
+    改中文措辞再也不会让译文失效
+  - 包装外部错误（IO / JSON / 子进程输出）不再自造文案，直接用 `AppError` 的粗粒度变体：
+    `params()` 为它们统一填 `{ detail }`，译文模板写成 `I/O error: {detail}`，
+    外部文本（OS 或第三方库给的）原样透传
+  - 顺带删掉 `err!` 宏、`blocking::cmd` 与 `From<String> / From<&str>`：三者都是
+    「写错误时忘了给码」的捷径（`Err("中文".into())` 曾散落 13 处），没有调用方后
+    一并移除，此后构造错误必须显式选码或选变体
+  - `backendMessages.ts` 整体删除；`toBackendErrorPayload` / `translateBackendError`
+    迁到 `src/i18n/backendError.ts`，不再做中文文本匹配
+  - 顺带修掉两处「中文界面也读不出人话」的提示：主题配置缺失时不再把主题名/站点路径
+    拼在句尾，改为结构化参数让译文自己组织语序
 
 ### 工程化
 
 - 新增 `scripts/error-codes-check.mjs`：静态比对 Rust 里 `AppError::coded("…")` 用到的
   code 与 `errorCodes.ts` 的条目，缺失或有中文残留即退出码 1；并入 `npm run i18n:check`，
   CI 的检查步骤相应改为跑 `npm run i18n:check`（含覆盖率 + 错误码两项）
+- 错误码检查扩为 6 条规则，专门拦「翻译层删掉后才暴露」的退化：语义码命名必须是
+  `<模块>.<语义>`、通用码集合必须与 `AppError::code()` 完全一致、禁止再用 `err!`、
+  禁止把中文字面量塞进没有码的构造（`AppError::Other("…")` / `Err("…".into())` /
+  `map_err(|e| format!("…"))` / `ok_or_else(|| "…")`，测试模块自动豁免）
 - **Rust 侧统一格式并清空 clippy 告警**：全仓 `cargo fmt`（21 个文件、净减 76 行），
   CI 的 `cargo fmt --check` 从 `continue-on-error` 改为硬卡口；clippy 清掉 6 条真实告警
   （复杂返回类型抽 `FileFingerprints` 别名、`ServerRegistry` 补 `is_empty`、

@@ -51,9 +51,8 @@
   （内部 `translateIn(locale, …)`）。写进 `useMemo`/`useCallback` 依赖数组既合法
   又能在切语言时重算；反之模块级 `import { t }` 不能进依赖数组（lint 会报
   「外部作用域的值」），非组件代码才用模块级 `t`
-- 后端 250+ 条中文错误不改 Rust 签名，由 `src/i18n/backendMessages.ts`
-  （`EXACT` 精确表 + `RULES` 带参正则）在 `services/invoke.ts` 的 catch 里映射。
-  **该表所有键必须加引号** —— 纯中文裸键在 JS 里是合法标识符，但含 `，`/空格/全角括号会语法错误
+- 后端错误**只按错误码翻译**（`src/i18n/errorCodes.ts` + `backendError.ts`），
+  旧的 `backendMessages.ts`（按中文原文匹配的 292 行过渡表）已在迭代 6 删除，别再复活
 - 工具链（无依赖 Node 脚本，已接入 CI check job）：`npm run i18n:merge`
   （`_parts/*.json` → `en-US.ts`，增量且幂等）、`npm run i18n:check`
   （缺译文**或英文译文残留 CJK** 时退出码 1）。唯一豁免：语言选项的母语自称「简体中文」
@@ -62,13 +61,19 @@
 
 - **全部命令**返回 `AppResult<T>`（`Result<T, AppError>`）；`AppError::Serialize` 输出
   `{ code, message, params }` 对象，`Display` 仍是中文原文（日志/旧路径不受影响）
-- 新增语义错误用 `AppError::coded("模块.语义", 中文原文, &[("id", …)])`；
-  临时错误用 `err!` 宏（`AppError::Other`）。前端 `invoke.ts` 先查 `src/i18n/errorCodes.ts`
-  的 code 字典，未命中再退回 `backendMessages.ts` 的中文文本映射
-- **必须**同步 `errorCodes.ts`：`npm run i18n:check` 会比对 Rust `coded("…")` 与字典条目，
-  缺失或译文含中文即失败（`scripts/error-codes-check.mjs`）
-- `#[tauri::command]` 改返回类型时注意 `blocking::cmd`（闭包返回 String）要换成
-  `blocking::run`；`rows.collect::<Result<Vec<_>,_>>()` 需补 `.map_err(AppError::from)`
+- 构造错误只有两条路：有自己写的中文措辞 → `AppError::coded("模块.语义", 中文原文, &[("id", …)])`；
+  只是包一层外部错误 → 直接用粗粒度变体（`?` 或 `AppError::Io/e`）。**`err!` 宏与
+  `From<String>/From<&str>` 已删除**，写不出无码的字符串错误
+- 粗粒度变体（`io`/`db`/`json`/`yaml`/`template`/`network`/`process`/`path_not_found`/
+  `invalid_argument`/`not_found`/`forbidden`/`other`）由 `AppError::params()` 统一带
+  `{ detail }`，译文模板写成 `I/O error: {detail}` —— 只翻前缀，外部文本透传
+- **必须**同步 `errorCodes.ts`：`npm run i18n:check` 会跑 `scripts/error-codes-check.mjs`
+  （6 条规则：缺条目 / 译文含中文 / 命名规范 / 通用码集合与 `AppError::code()` 一致 /
+  禁 `err!` / 禁中文字面量直入原始变体）。豁免标记：命中行上方 3 行内
+  `// error-codes-check: skip`（目前只有 `lib.rs` setup 期一处）
+- `rows.collect::<Result<Vec<_>,_>>()` 这类要补 `.map_err(AppError::from)`
+- 已知未码化：`check_hexo_env` 的 `issues`、更新清单 `清单格式无法识别`、`未命名站点`
+  等是**数据**不是错误（不经 invoke catch），仍是中文串
 - 翻译边界：写文件/DB 的值、传给 Rust 的参数、比较与匹配用的字面量、
   枚举状态值、CSS 类名、localStorage 键、URL、正则、路径、日志内容**都不翻**
 

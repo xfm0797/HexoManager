@@ -294,7 +294,8 @@ hexo-manager/
 │   ├── constants/                    # 常量与枚举
 │   ├── i18n/                         # 国际化（中文原文即词条）
 │   │   ├── index.ts                  # t() / useI18n() / 语言解析与切换
-│   │   ├── backendMessages.ts        # 后端中文错误的英文映射层
+│   │   ├── errorCodes.ts             # 后端错误码 → 英文译文（唯一来源）
+│   │   ├── backendError.ts           # 错误载荷归一与按 code 翻译
 │   │   └── locales/en-US.ts          # 英文词条字典（由脚本生成，勿手改）
 │   └── styles/global.css             # 全局样式与 CSS 变量
 │
@@ -546,7 +547,13 @@ import { t } from '@/i18n';        // 模块级 / 非组件代码直接用（非
 
 ### 后端错误的英文映射
 
-Rust 侧命令统一返回 `Result<T, String>`，错误文案是中文。为避免改动 60+ 个命令签名，新增了一个**过渡层** `src/i18n/backendMessages.ts`：`src/services/invoke.ts` 在 catch 中调用 `translateBackendMessage()`，按「精确表 + 带参正则规则表」映射为英文，未命中则原样返回中文。彻底解法是把 Rust 侧错误改为错误码枚举，届时该文件即可移除。
+后端所有命令都返回 `AppResult<T>`，Tauri 把错误序列化成 `{ code, message, params }`，`src/services/invoke.ts` 的 catch 拿到后**只按 `code` 查译文**（`src/i18n/errorCodes.ts`），`params` 填模板里的 `{name}` 占位符。
+
+- 语义码形如 `<模块>.<语义>`，一条对应一种具体失败，例如 `site.not_found`、`theme.in_use`；
+- 通用码对应 `AppError` 的粗粒度变体（`io` / `json` / `process` …），这类正文来自操作系统或第三方库、本来就翻不了，模板里用 `{detail}` 原样透传，只翻译前缀；
+- 查不到译文时回退中文原文（开发模式会告警），`npm run i18n:check` 会静态比对 Rust 的 `AppError::coded("…")` 与本表，漏一条就失败。
+
+因此 **Rust 侧改中文措辞不会让译文失效** —— 这是旧的「按中文原文匹配」方案最大的坑。
 
 ---
 

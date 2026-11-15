@@ -20,8 +20,10 @@
 > `i18n:check`（含错误码一致性）/ `version:check` 全绿，CI 上 52 个 Rust 测试通过。
 >
 > **仍未落地**：CI 中 `cargo clippy` 仍是软卡口（`-- -D warnings` 已生效但不阻塞；
-> 本地已清零 6 条告警，留软卡口是为了躲开工具链新增 lint 导致的发布阻塞）；
-> `backendMessages.ts` 的中文文本映射表仍作为兜底存在，待 `err!`/粗粒度错误逐步细化后即可删除。
+> 本地已清零 6 条告警，留软卡口是为了躲开工具链新增 lint 导致的发布阻塞）。
+>
+> P3-3 已收官：`backendMessages.ts` 已删除，后端的最后 41 处 `err!` 与约 90 处
+> 「中文字面量直入原始变体」全部改成语义码（17 → 111 个），前端只按 `code` 查译文。
 
 ---
 
@@ -74,7 +76,7 @@
 │  配置草稿、部署状态、模板、UI（主题/通知/预览服务）、更新        │
 ├──────────────────────────────────────────────────────────────┤
 │ 服务层 src/services/ (11 个) —— 一对一映射 Rust 命令，             │
-│  call() 统一错误归一 + 后端中文错误英译（i18n/backendMessages）   │
+│  call() 统一错误归一 + 按错误码查译文（i18n/errorCodes）          │
 ├────────────────────────── IPC (invoke) ──────────────────────┤
 │ 命令层 src-tauri/src/commands/ (11 模块, 130+ 命令)              │
 │  职责：参数校验、DB 访问、编排领域模块、emit 事件                │
@@ -514,11 +516,11 @@ updated: ...
 
 **建议**：`scripts/bump-version.mjs <x.y.z>`，读 `version.json` 为唯一来源，正则改写其余 7 处 + 追加 history + 更新 CHANGELOG 的 `[Unreleased]` 标题；接入 `npm run release:prepare`。同时 CI 增加一步"版本一致性校验"（读 7 处，不一致即失败）。
 
-#### P3-3　i18n 的过渡层
+#### P3-3　i18n 的过渡层　✅ 已完成
 
-`backendMessages.ts` 292 行手工维护 `EXACT` + `RULES`（把 Rust 中文错误串映射为英文）。CHANGELOG 已自认这是过渡方案。风险是 Rust 侧改一个字的措辞，映射静默失效（1.2.0 就修过两条少空格的键）。
+`backendMessages.ts` 292 行手工维护 `EXACT` + `RULES`（把 Rust 中文错误串映射为英文）。风险是 Rust 侧改一个字的措辞，映射静默失效（1.2.0 就修过两条少空格的键）。
 
-**建议**：Rust 侧错误改为 `{ code, params }` 结构化（`AppError` 已有枚举，只需给每个变体加稳定 `code`），前端按 code 查字典。可分模块渐进：先做 `article`/`site` 两个高频模块。
+**做法**：Rust 侧错误改为 `{ code, message, params }` 结构化，前端只按 code 查字典；分两批迁移（先 `article`/`site`，再其余 9 个模块），最后删掉文本映射表。细节见下方「落地记录」。
 
 #### P3-4　可观测性
 
@@ -598,11 +600,13 @@ updated: ...
 | 结构化错误载荷 | `AppError::Coded { code, message, params }`，`Serialize` 改为 `{code,message,params}`，`Display` 保持中文原文 | 未迁移前 `.map_err(|e| e.to_string())` 的输出一字不变，可安全分批推进 |
 | 命令迁移 | 全部命令签名 `Result<T, String>` → `AppResult<T>`，删掉约 150 处 `map_err` | 净减 300+ 行样板；`get_article` 之类把「任何 DB 错误都说成文章不存在」的误导性提示一并修正 |
 | 具体错误码 | 17 个语义码（`site.not_found` / `path.outside_site` / `article.reload_failed` …），译文在 `src/i18n/errorCodes.ts`，`{name}` 占位符由 `params` 填充 | 改中文措辞不再让译文失效 —— 这正是旧文本映射的根本缺陷 |
-| 双形态兼容 | `invoke.ts` 先按 code 取译文，未收录再退回旧的中文文本映射 | 迁移过程中不会出现「英文界面漏中文」的中间态 |
+| 覆盖率 | 语义码 17 → **111 个**，`err!` 宏与 `AppError::Other("…")` / `Err("…".into())` 等 130 余处中文构造全部改造 | 删掉 `backendMessages.ts` 后英文界面仍能全量英化 |
+| 通用码透传 | `AppError::params()` 为 IO / JSON / 子进程等粗粒度变体统一填 `{ detail }`，译文模板写成 `I/O error: {detail}` | 外部错误（OS / 第三方库）本就翻不了，只翻前缀；不必再解析中文前缀 |
 | 一致性卡口 | `scripts/error-codes-check.mjs`：比对 Rust `coded("…")` 与字典条目，缺失或译文含中文即失败；并入 `npm run i18n:check` 与 CI | 手写跨语言字符串最容易漏，静态核对把它变成 CI 错误 |
 
-**遗留（低优先）**：`err!` / 粗粒度变体仍输出中文原文，靠 `backendMessages.ts` 兜底。
-把这些高频消息逐个升级为语义码后，那张 292 行的过渡表即可整体删除。
+**遗留（低优先）**：`check_hexo_env` 的 `issues`、更新清单的 `清单格式无法识别` 等字段是
+**数据**而非错误（不经 `invoke` 的 catch），仍是中文串。要让英文界面彻底无中文，需把它们
+改成 `{ code, params }` 结构化载荷并由前端翻译 —— 属于另一类改造，与错误码无关。
 
 ### 建议不做 / 暂缓
 
