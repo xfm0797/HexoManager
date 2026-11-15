@@ -1,11 +1,11 @@
 //! 部署配置命令（对应大纲 7.5）。
 
 use crate::db::Db;
+use crate::err;
 use crate::models::{
     DeployConfig, DeployLog, DeployTemplate, EnvVar, GenerateConfigInput, GeneratedFile,
 };
 use crate::utils::blocking;
-use crate::err;
 use crate::utils::error::{AppError, AppResult};
 use crate::AppState;
 use rusqlite::params;
@@ -16,9 +16,7 @@ use tauri::State;
 ///
 /// 会渲染全部模板并写文件，放到阻塞线程池。
 #[tauri::command]
-pub async fn generate_deploy_config(
-    input: GenerateConfigInput,
-) -> AppResult<Vec<GeneratedFile>> {
+pub async fn generate_deploy_config(input: GenerateConfigInput) -> AppResult<Vec<GeneratedFile>> {
     blocking::run(move || {
         validate_input(&input)?;
         crate::deploy::config_generator::generate_all(&input)
@@ -28,13 +26,8 @@ pub async fn generate_deploy_config(
 
 /// 预览部署配置（不写盘）。
 #[tauri::command]
-pub async fn preview_deploy_config(
-    input: GenerateConfigInput,
-) -> AppResult<Vec<GeneratedFile>> {
-    blocking::run(move || {
-        crate::deploy::config_generator::preview_all(&input)
-    })
-    .await
+pub async fn preview_deploy_config(input: GenerateConfigInput) -> AppResult<Vec<GeneratedFile>> {
+    blocking::run(move || crate::deploy::config_generator::preview_all(&input)).await
 }
 
 /// 生成指定 Pages 平台的配置。
@@ -43,11 +36,8 @@ pub async fn generate_pages_config(
     input: GenerateConfigInput,
     platform: String,
 ) -> AppResult<Vec<GeneratedFile>> {
-    blocking::run(move || {
-        crate::deploy::pages_generator::generate_for_platform(&input, &platform)
-            
-    })
-    .await
+    blocking::run(move || crate::deploy::pages_generator::generate_for_platform(&input, &platform))
+        .await
 }
 
 /// 获取可用的部署模板清单。
@@ -82,7 +72,10 @@ pub fn save_deploy_config(
         .get("buildCommand")
         .and_then(Value::as_str)
         .unwrap_or("npm install && npx hexo generate");
-    let branch = config.get("branch").and_then(Value::as_str).unwrap_or("main");
+    let branch = config
+        .get("branch")
+        .and_then(Value::as_str)
+        .unwrap_or("main");
     let output_dir = config
         .get("outputDir")
         .and_then(Value::as_str)
@@ -218,36 +211,30 @@ pub async fn get_deploy_logs(
     blocking::run(move || get_deploy_logs_impl(&db, site_id, limit)).await
 }
 
-fn get_deploy_logs_impl(
-    db: &Db,
-    site_id: i64,
-    limit: Option<i64>,
-) -> AppResult<Vec<DeployLog>> {
+fn get_deploy_logs_impl(db: &Db, site_id: i64, limit: Option<i64>) -> AppResult<Vec<DeployLog>> {
     let conn = db.conn()?;
     let n = limit.unwrap_or(50);
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, site_id, status, commit_message, commit_hash, branch, duration_ms,
+    let mut stmt = conn.prepare(
+        "SELECT id, site_id, status, commit_message, commit_hash, branch, duration_ms,
                     error_message, output, created_at
              FROM deploy_logs WHERE site_id = ?1 ORDER BY id DESC LIMIT ?2",
-        )?;
+    )?;
 
-    let rows = stmt
-        .query_map(params![site_id, n], |r| {
-            Ok(DeployLog {
-                id: r.get(0)?,
-                site_id: r.get(1)?,
-                status: r.get(2)?,
-                commit_message: r.get(3)?,
-                commit_hash: r.get(4)?,
-                branch: r.get(5)?,
-                duration_ms: r.get(6)?,
-                error_message: r.get(7)?,
-                output: r.get(8)?,
-                created_at: r.get(9)?,
-            })
-        })?;
+    let rows = stmt.query_map(params![site_id, n], |r| {
+        Ok(DeployLog {
+            id: r.get(0)?,
+            site_id: r.get(1)?,
+            status: r.get(2)?,
+            commit_message: r.get(3)?,
+            commit_hash: r.get(4)?,
+            branch: r.get(5)?,
+            duration_ms: r.get(6)?,
+            error_message: r.get(7)?,
+            output: r.get(8)?,
+            created_at: r.get(9)?,
+        })
+    })?;
 
     rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
@@ -274,8 +261,7 @@ pub async fn rollback_deploy(
     // 回滚前先暂存当前改动，避免丢失
     let _ = crate::git::operations::stash(&path).await;
 
-    let out = crate::git::operations::reset_hard(&path, &commit_hash)
-        .await?;
+    let out = crate::git::operations::reset_hard(&path, &commit_hash).await?;
 
     // 记录一条回滚日志
     if let Ok(conn) = db.conn() {
@@ -342,12 +328,9 @@ pub fn validate_domain(domain: String) -> AppResult<()> {
 ///
 /// 需要渲染全部模板再逐个 `stat`，放到阻塞线程池。
 #[tauri::command]
-pub async fn check_deploy_files(
-    input: GenerateConfigInput,
-) -> AppResult<Vec<(String, bool)>> {
+pub async fn check_deploy_files(input: GenerateConfigInput) -> AppResult<Vec<(String, bool)>> {
     blocking::run(move || {
-        let files =
-            crate::deploy::config_generator::preview_all(&input)?;
+        let files = crate::deploy::config_generator::preview_all(&input)?;
         let root = std::path::Path::new(&input.site_path);
 
         Ok(files

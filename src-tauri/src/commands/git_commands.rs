@@ -2,27 +2,24 @@
 
 use crate::db::{site_path_of, Db};
 use crate::models::{CommitLog, GitConfig, GitStatus};
-use crate::utils::now_utc;
 use crate::utils::error::{AppError, AppResult};
+use crate::utils::now_utc;
 use crate::AppState;
 use rusqlite::params;
 use tauri::State;
-
 
 /// 初始化 Git 仓库。
 #[tauri::command]
 pub async fn git_init(state: State<'_, AppState>, site_id: i64) -> AppResult<String> {
     let path = site_path_of(&state.db, site_id)?;
-    crate::git::operations::init(&path)
-        .await
+    crate::git::operations::init(&path).await
 }
 
 /// 查看 Git 状态。
 #[tauri::command]
 pub async fn git_status(state: State<'_, AppState>, site_id: i64) -> AppResult<GitStatus> {
     let path = site_path_of(&state.db, site_id)?;
-    crate::git::status::git_status(&path)
-        .await
+    crate::git::status::git_status(&path).await
 }
 
 /// 暂存文件。
@@ -34,8 +31,7 @@ pub async fn git_add(
 ) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
     let path = site_path_of(&db, site_id)?;
-    crate::git::operations::add(&path, files)
-        .await
+    crate::git::operations::add(&path, files).await
 }
 
 /// 提交变更。
@@ -48,8 +44,7 @@ pub async fn git_commit(
     let db = Db::from_arc(&state.db);
     let db = &db;
     let path = site_path_of(db, site_id)?;
-    let hash = crate::git::operations::commit(&path, &message)
-        .await?;
+    let hash = crate::git::operations::commit(&path, &message).await?;
 
     if hash.is_empty() {
         return Err("没有可提交的变更".into());
@@ -64,16 +59,11 @@ pub async fn git_commit(
         );
     }
 
-    let logs = crate::git::operations::log(&path, Some(1))
-        .await?;
+    let logs = crate::git::operations::log(&path, Some(1)).await?;
 
-    logs.into_iter().next().ok_or_else(|| {
-        AppError::coded(
-            "git.commit_read_failed",
-            "提交成功但未能读取提交记录",
-            &[],
-        )
-    })
+    logs.into_iter()
+        .next()
+        .ok_or_else(|| AppError::coded("git.commit_read_failed", "提交成功但未能读取提交记录", &[]))
 }
 
 /// 推送到远程。
@@ -81,8 +71,7 @@ pub async fn git_commit(
 pub async fn git_push(state: State<'_, AppState>, site_id: i64) -> AppResult<String> {
     let db = &state.db;
     let path = site_path_of(db, site_id)?;
-    let out = crate::git::operations::push(&path)
-        .await?;
+    let out = crate::git::operations::push(&path).await?;
 
     if let Ok(conn) = db.conn() {
         let _ = conn.execute(
@@ -98,8 +87,7 @@ pub async fn git_push(state: State<'_, AppState>, site_id: i64) -> AppResult<Str
 #[tauri::command]
 pub async fn git_pull(state: State<'_, AppState>, site_id: i64) -> AppResult<String> {
     let path = site_path_of(&state.db, site_id)?;
-    crate::git::operations::pull(&path)
-        .await
+    crate::git::operations::pull(&path).await
 }
 
 /// 获取提交历史。
@@ -111,16 +99,14 @@ pub async fn git_log(
 ) -> AppResult<Vec<CommitLog>> {
     let db = Db::from_arc(&state.db);
     let path = site_path_of(&db, site_id)?;
-    crate::git::operations::log(&path, limit)
-        .await
+    crate::git::operations::log(&path, limit).await
 }
 
 /// 查看工作区差异。
 #[tauri::command]
 pub async fn git_diff(state: State<'_, AppState>, site_id: i64) -> AppResult<String> {
     let path = site_path_of(&state.db, site_id)?;
-    crate::git::operations::diff(&path)
-        .await
+    crate::git::operations::diff(&path).await
 }
 
 /// 设置远程仓库。
@@ -135,8 +121,7 @@ pub async fn git_set_remote(
     let db = &db;
     let path = site_path_of(db, site_id)?;
     let branch_ref = branch.as_deref();
-    crate::git::operations::set_remote(&path, &url, branch_ref)
-        .await?;
+    crate::git::operations::set_remote(&path, &url, branch_ref).await?;
 
     let branch_value = branch.unwrap_or_else(|| "main".into());
     {
@@ -162,32 +147,26 @@ pub async fn git_discard_changes(
 ) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
     let path = site_path_of(&db, site_id)?;
-    crate::git::operations::discard_changes(&path, files)
-        .await
+    crate::git::operations::discard_changes(&path, files).await
 }
 
 /// 暂存当前改动。
 #[tauri::command]
 pub async fn git_stash(state: State<'_, AppState>, site_id: i64) -> AppResult<String> {
     let path = site_path_of(&state.db, site_id)?;
-    crate::git::operations::stash(&path)
-        .await
+    crate::git::operations::stash(&path).await
 }
 
 /// 恢复暂存的改动。
 #[tauri::command]
 pub async fn git_stash_pop(state: State<'_, AppState>, site_id: i64) -> AppResult<String> {
     let path = site_path_of(&state.db, site_id)?;
-    crate::git::operations::stash_pop(&path)
-        .await
+    crate::git::operations::stash_pop(&path).await
 }
 
 /// 获取站点的 Git 配置。
 #[tauri::command]
-pub fn get_git_config(
-    state: State<'_, AppState>,
-    site_id: i64,
-) -> AppResult<Option<GitConfig>> {
+pub fn get_git_config(state: State<'_, AppState>, site_id: i64) -> AppResult<Option<GitConfig>> {
     let conn = state.db.conn()?;
     let result = conn
         .query_row(

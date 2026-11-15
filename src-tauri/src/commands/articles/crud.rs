@@ -64,7 +64,9 @@ pub(crate) async fn create_article_impl(
     let template = match template_id {
         Some(id) => {
             let conn = db.conn()?;
-            Some(crate::commands::template_commands::load_template(&conn, id)?)
+            Some(crate::commands::template_commands::load_template(
+                &conn, id,
+            )?)
         }
         None => None,
     };
@@ -170,8 +172,7 @@ pub async fn update_article(
     updates: UpdateArticleInput,
 ) -> AppResult<Article> {
     let db = Db::from_arc(&state.db);
-    update_article_impl(&db, article_id, updates)
-        .await
+    update_article_impl(&db, article_id, updates).await
 }
 
 pub(crate) async fn update_article_impl(
@@ -434,8 +435,7 @@ pub async fn import_articles(
         imported.push(dst.display().to_string());
     }
 
-    crate::commands::site_commands::rescan_articles(db, site_id, &site_path)
-        .await?;
+    crate::commands::site_commands::rescan_articles(db, site_id, &site_path).await?;
 
     // 返回新导入文章的记录
     let mut result = Vec::new();

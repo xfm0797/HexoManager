@@ -38,10 +38,7 @@ static SINK: OnceLock<Mutex<Sink>> = OnceLock::new();
 pub fn init(dir: PathBuf) {
     let sink = SINK.get_or_init(|| {
         let _ = std::fs::create_dir_all(&dir);
-        Mutex::new(Sink {
-            dir,
-            current: None,
-        })
+        Mutex::new(Sink { dir, current: None })
     });
 
     prune_old_files(sink);
@@ -141,7 +138,12 @@ fn write(level: &str, scope: &str, message: &str) {
     let day = today();
 
     // 跨天时换文件
-    if guard.current.as_ref().map(|(d, _)| d != &day).unwrap_or(true) {
+    if guard
+        .current
+        .as_ref()
+        .map(|(d, _)| d != &day)
+        .unwrap_or(true)
+    {
         let path = guard.dir.join(format!("app-{}.log", day));
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
@@ -173,8 +175,8 @@ fn prune_old_files(sink: &Mutex<Sink>) {
         return;
     };
 
-    let cutoff = std::time::SystemTime::now()
-        - std::time::Duration::from_secs(KEEP_DAYS * 24 * 60 * 60);
+    let cutoff =
+        std::time::SystemTime::now() - std::time::Duration::from_secs(KEEP_DAYS * 24 * 60 * 60);
 
     for entry in entries.flatten() {
         let path = entry.path();

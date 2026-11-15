@@ -98,18 +98,19 @@ jobs:
           grep -E '^(---- |thread .* panicked|assertion|  left:|  right:|test result:)' /tmp/cargo-test.log \
             | head -60 | sed 's/^/::error::/'
 
-      # 本仓库自身的代码当前 0 clippy 告警；`-- -D warnings` 让告警直接变成失败标记，
-      # 但保留 continue-on-error，避免某个工具链版本新增的 lint 卡住整条发布流水线。
-      # 等攒够一轮清理后应去掉 continue-on-error。
+      # 本仓库自身的代码当前 0 clippy 告警（已清 6 条：复杂返回类型、len/is_empty 成对、
+      # 多余借用、多余 return、游离 doc 注释）。仍保留 continue-on-error：clippy 会随
+      # 工具链版本新增 lint，硬卡会让「只是升级了 stable」变成发布阻塞。
       - name: Clippy 检查
         working-directory: ./src-tauri
         run: cargo clippy --all-targets -- -D warnings
         continue-on-error: true
 
+      # rustfmt 输出与版本无关（不随工具链新增规则），因此设为硬卡口；
+      # 全仓已 `cargo fmt` 统一，改代码后忘记格式化会在这里被拦下
       - name: Rust 格式检查
         working-directory: ./src-tauri
         run: cargo fmt --check
-        continue-on-error: true
 
   # ===== 多平台打包 =====
   build:

@@ -22,7 +22,10 @@ pub async fn get_articles(
     get_articles_impl(&db, query).await
 }
 
-pub(crate) async fn get_articles_impl(db: &Db, query: ArticleQuery) -> AppResult<PaginatedArticles> {
+pub(crate) async fn get_articles_impl(
+    db: &Db,
+    query: ArticleQuery,
+) -> AppResult<PaginatedArticles> {
     // 只读库：扫描由「刷新」按钮 / 站点切换 / 导入后显式触发（refresh_articles）。
     // 此前每次翻页都做全站扫描（500 篇 ≈ 500 次文件读 + YAML 解析 + 全表 UPDATE）。
 
@@ -92,16 +95,16 @@ pub fn get_article(state: State<'_, AppState>, article_id: i64) -> AppResult<Art
     let db = &state.db;
     let conn = db.conn()?;
     let sql = format!("SELECT {} FROM articles WHERE id = ?1", ARTICLE_COLUMNS);
-    let mut article: Article = conn.query_row(&sql, params![article_id], row_to_article).map_err(
-        |e| match e {
+    let mut article: Article = conn
+        .query_row(&sql, params![article_id], row_to_article)
+        .map_err(|e| match e {
             rusqlite::Error::QueryReturnedNoRows => AppError::coded(
                 "article.not_found",
                 format!("文章不存在：{}", article_id),
                 &[("id", article_id.to_string())],
             ),
             other => AppError::Database(other),
-        },
-    )?;
+        })?;
 
     // 优先返回磁盘最新内容
     if let Ok((front, body)) = read_article_file(&article.file_path) {

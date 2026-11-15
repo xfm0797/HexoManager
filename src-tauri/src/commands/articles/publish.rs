@@ -17,22 +17,14 @@ use tauri::State;
 
 /// 发布草稿（移动到 _posts 并写入 date）。
 #[tauri::command]
-pub async fn publish_article(
-    state: State<'_, AppState>,
-    article_id: i64,
-) -> AppResult<Article> {
-    publish_article_impl(&state.db, article_id, true)
-        .await
+pub async fn publish_article(state: State<'_, AppState>, article_id: i64) -> AppResult<Article> {
+    publish_article_impl(&state.db, article_id, true).await
 }
 
 /// 下架文章（移回 _drafts）。
 #[tauri::command]
-pub async fn unpublish_article(
-    state: State<'_, AppState>,
-    article_id: i64,
-) -> AppResult<Article> {
-    publish_article_impl(&state.db, article_id, false)
-        .await
+pub async fn unpublish_article(state: State<'_, AppState>, article_id: i64) -> AppResult<Article> {
+    publish_article_impl(&state.db, article_id, false).await
 }
 
 /// 在 `dir` 下为 `file_name` 找一个不冲突的路径：`x.md` → `x-1.md` → `x-2.md`…
@@ -65,7 +57,11 @@ fn unique_target_path(dir: &std::path::Path, file_name: &std::ffi::OsStr) -> std
     }
 }
 
-pub(crate) async fn publish_article_impl(db: &Db, article_id: i64, publish: bool) -> AppResult<Article> {
+pub(crate) async fn publish_article_impl(
+    db: &Db,
+    article_id: i64,
+    publish: bool,
+) -> AppResult<Article> {
     let (site_id, file_path) = {
         let conn = db.conn()?;
         conn.query_row(
@@ -178,6 +174,14 @@ pub async fn create_draft(
     template_id: Option<i64>,
 ) -> AppResult<Article> {
     let db = Db::from_arc(&state.db);
-    create_article_impl(&db, site_id, &title, true, Vec::new(), Vec::new(), template_id)
-        .await
+    create_article_impl(
+        &db,
+        site_id,
+        &title,
+        true,
+        Vec::new(),
+        Vec::new(),
+        template_id,
+    )
+    .await
 }

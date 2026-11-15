@@ -8,10 +8,10 @@
 //! - `article_commands` 负责把合并结果写回文章文件（新建 / 套用到已有文章）。
 
 use crate::db::Db;
+use crate::err;
 use crate::models::{
     ApplyTemplateInput, ApplyTemplateResult, FrontMatterTemplate, SaveFrontMatterTemplateInput,
 };
-use crate::err;
 use crate::utils::error::{AppError, AppResult};
 use crate::utils::{now_utc, slugify};
 use crate::AppState;
@@ -141,8 +141,14 @@ fn row_to_template(row: &rusqlite::Row<'_>) -> rusqlite::Result<FrontMatterTempl
 // ==================== 内置模板 ====================
 
 /// 内置模板定义：(排序, 名称, 图标, 说明, 字段, 正文骨架)。
-fn builtin_templates() -> Vec<(i64, &'static str, &'static str, &'static str, Value, &'static str)>
-{
+fn builtin_templates() -> Vec<(
+    i64,
+    &'static str,
+    &'static str,
+    &'static str,
+    Value,
+    &'static str,
+)> {
     vec![
         (
             10,
@@ -239,8 +245,7 @@ pub fn get_front_matter_templates(
         TEMPLATE_COLUMNS
     );
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt
-        .query_map([], row_to_template)?;
+    let rows = stmt.query_map([], row_to_template)?;
     rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
@@ -304,7 +309,16 @@ fn save_front_matter_template_impl(
                     SET name = ?2, description = ?3, icon = ?4, fields = ?5, body = ?6,
                         sort_order = COALESCE(?7, sort_order), updated_at = ?8
                   WHERE id = ?1",
-                params![id, name, description, icon, fields_json, body, input.sort_order, now],
+                params![
+                    id,
+                    name,
+                    description,
+                    icon,
+                    fields_json,
+                    body,
+                    input.sort_order,
+                    now
+                ],
             )?;
             if affected == 0 {
                 return Err(AppError::NotFound(format!("模板不存在：{}", id)));
@@ -342,10 +356,7 @@ fn save_front_matter_template_impl(
 
 /// 删除模板。内置模板不可删除（可编辑或另存为新模板）。
 #[tauri::command]
-pub fn delete_front_matter_template(
-    state: State<'_, AppState>,
-    template_id: i64,
-) -> AppResult<()> {
+pub fn delete_front_matter_template(state: State<'_, AppState>, template_id: i64) -> AppResult<()> {
     let conn = state.db.conn()?;
     let builtin: Option<i64> = conn
         .query_row(
@@ -375,8 +386,7 @@ pub async fn apply_front_matter_template(
     input: ApplyTemplateInput,
 ) -> AppResult<ApplyTemplateResult> {
     let db = Db::from_arc(&state.db);
-    apply_front_matter_template_impl(&db, input)
-        .await
+    apply_front_matter_template_impl(&db, input).await
 }
 
 async fn apply_front_matter_template_impl(
@@ -434,7 +444,15 @@ async fn apply_front_matter_template_impl(
     let skeleton = template
         .body
         .as_deref()
-        .map(|b| render_body(b, &RenderContext { title: &title, slug: &slug }))
+        .map(|b| {
+            render_body(
+                b,
+                &RenderContext {
+                    title: &title,
+                    slug: &slug,
+                },
+            )
+        })
         .unwrap_or_default();
 
     let original_body = body.clone();
@@ -464,9 +482,11 @@ async fn apply_front_matter_template_impl(
     // 分类/标签等派生字段需要重新同步回数据库
     let site_path = {
         let conn = db.conn()?;
-        conn.query_row("SELECT path FROM sites WHERE id = ?1", params![site_id], |r| {
-            r.get::<_, String>(0)
-        })
+        conn.query_row(
+            "SELECT path FROM sites WHERE id = ?1",
+            params![site_id],
+            |r| r.get::<_, String>(0),
+        )
         .map_err(|_| AppError::NotFound(format!("站点不存在：{}", site_id)))?
     };
     crate::commands::site_commands::rescan_articles(db, site_id, &site_path).await?;
@@ -477,7 +497,11 @@ async fn apply_front_matter_template_impl(
         crate::commands::article_commands::ARTICLE_COLUMNS
     );
     let article = conn
-        .query_row(&sql, params![input.article_id], crate::commands::article_commands::row_to_article)
+        .query_row(
+            &sql,
+            params![input.article_id],
+            crate::commands::article_commands::row_to_article,
+        )
         .map_err(|_| AppError::NotFound("套用模板后未能读取文章".into()))?;
 
     Ok(ApplyTemplateResult {
@@ -579,10 +603,7 @@ mod tests {
             title: "Hello 世界",
             slug: "hello-world",
         };
-        let out = render_body(
-            "{{title}} | {{slug}} | {{unknown}} | {{datetime}}",
-            &ctx,
-        );
+        let out = render_body("{{title}} | {{slug}} | {{unknown}} | {{datetime}}", &ctx);
         assert!(out.starts_with("Hello 世界 | hello-world | {{unknown}} | 20"));
     }
 
@@ -593,16 +614,23 @@ mod tests {
 
         ensure_seeded(&conn).expect("播种失败");
         let first: i64 = conn
-            .query_row("SELECT COUNT(*) FROM front_matter_templates", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM front_matter_templates", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(first, builtin_templates().len() as i64);
 
         // 用户删掉一个内置模板后再次播种，不应把它加回来
-        conn.execute("DELETE FROM front_matter_templates WHERE sort_order = 10", [])
-            .unwrap();
+        conn.execute(
+            "DELETE FROM front_matter_templates WHERE sort_order = 10",
+            [],
+        )
+        .unwrap();
         ensure_seeded(&conn).expect("二次播种失败");
         let second: i64 = conn
-            .query_row("SELECT COUNT(*) FROM front_matter_templates", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM front_matter_templates", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(second, first - 1);
     }
@@ -638,10 +666,8 @@ mod tests {
         assert!(dup.is_err(), "同名模板应被拒绝");
 
         // 字段不是对象 → 拒绝
-        let bad = save_front_matter_template_impl(
-            &conn,
-            make("数组字段", serde_json::json!(["a", "b"])),
-        );
+        let bad =
+            save_front_matter_template_impl(&conn, make("数组字段", serde_json::json!(["a", "b"])));
         assert!(bad.is_err(), "字段必须为对象");
 
         // 空名字 → 拒绝

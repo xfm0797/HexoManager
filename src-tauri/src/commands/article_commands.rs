@@ -29,10 +29,10 @@ pub use crate::commands::articles::taxonomy::{
 };
 
 // 数据层与 Front Matter 辅助：站点扫描、模板套用等模块直接复用
-pub use crate::commands::articles::store::{reconcile_site, upsert_article, ScannedArticle};
 pub(crate) use crate::commands::articles::front_matter::{
     build_front_matter, read_article_file, split_front_matter, to_string_list,
 };
+pub use crate::commands::articles::store::{reconcile_site, upsert_article, ScannedArticle};
 pub(crate) use crate::commands::articles::store::{row_to_article, ARTICLE_COLUMNS};
 
 #[cfg(test)]
@@ -247,10 +247,8 @@ mod tests {
     /// `reconcile_site` 保留「整站对账」语义：文件真的不在磁盘上了才清理对应记录。
     #[tokio::test]
     async fn test_reconcile_site_removes_missing_rows() {
-        let dir = std::env::temp_dir().join(format!(
-            "hexo-mgr-reconcile-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("hexo-mgr-reconcile-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("建临时目录");
         let keep_path = dir.join("keep.md");
@@ -291,10 +289,8 @@ mod tests {
     /// 这里的 total 会变成 1 而不是 0。
     #[tokio::test]
     async fn test_get_articles_does_not_touch_disk() {
-        let dir = std::env::temp_dir().join(format!(
-            "hexo-mgr-list-only-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("hexo-mgr-list-only-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("source").join("_posts")).expect("建目录");
         std::fs::write(dir.join("source").join("_posts").join("x.md"), "# x\n").expect("写文件");

@@ -1,15 +1,14 @@
 //! 配置管理命令（站点配置、原始 YAML、插件）。
 
 use crate::db::{site_path_of, Db};
+use crate::err;
 use crate::models::Plugin;
 use crate::utils::blocking;
-use crate::err;
 use crate::utils::error::AppResult;
 use crate::AppState;
 use rusqlite::params;
 use serde_json::Value;
 use tauri::State;
-
 
 fn config_path_of(db: &Db, site_id: i64) -> AppResult<(String, String)> {
     let site_path = site_path_of(db, site_id)?;
@@ -19,10 +18,7 @@ fn config_path_of(db: &Db, site_id: i64) -> AppResult<(String, String)> {
 
 /// 读取站点配置（结构化）。
 #[tauri::command]
-pub async fn get_site_config(
-    state: State<'_, AppState>,
-    site_id: i64,
-) -> AppResult<Value> {
+pub async fn get_site_config(state: State<'_, AppState>, site_id: i64) -> AppResult<Value> {
     let db = Db::from_arc(&state.db);
     blocking::run(move || {
         let (_, cfg) = config_path_of(&db, site_id)?;
@@ -33,10 +29,7 @@ pub async fn get_site_config(
 
 /// 读取站点配置原始文本（保留注释）。
 #[tauri::command]
-pub async fn get_site_config_raw(
-    state: State<'_, AppState>,
-    site_id: i64,
-) -> AppResult<String> {
+pub async fn get_site_config_raw(state: State<'_, AppState>, site_id: i64) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     blocking::run(move || {
         let (_, cfg) = config_path_of(&db, site_id)?;
@@ -125,10 +118,7 @@ pub fn validate_config(content: String, config_type: Option<String>) -> AppResul
 
 /// 获取配置差异（对比备份文件 `_config.yml.bak`）。
 #[tauri::command]
-pub async fn diff_site_config(
-    state: State<'_, AppState>,
-    site_id: i64,
-) -> AppResult<String> {
+pub async fn diff_site_config(state: State<'_, AppState>, site_id: i64) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
     blocking::run(move || {
         let (_, cfg) = config_path_of(&db, site_id)?;
@@ -167,10 +157,7 @@ pub async fn diff_site_config(
 
 /// 恢复配置备份。
 #[tauri::command]
-pub async fn restore_site_config(
-    state: State<'_, AppState>,
-    site_id: i64,
-) -> AppResult<()> {
+pub async fn restore_site_config(state: State<'_, AppState>, site_id: i64) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
     blocking::run(move || {
         let (_, cfg) = config_path_of(&db, site_id)?;
@@ -193,8 +180,7 @@ pub async fn export_config(state: State<'_, AppState>, site_id: i64) -> AppResul
     blocking::run(move || {
         let (site_path, cfg) = config_path_of(&db, site_id)?;
 
-        let site_config =
-            crate::hexo::config_parser::parse_yaml_file(&cfg).unwrap_or(Value::Null);
+        let site_config = crate::hexo::config_parser::parse_yaml_file(&cfg).unwrap_or(Value::Null);
         let theme_name = site_config
             .get("theme")
             .and_then(|v| v.as_str())
@@ -346,10 +332,7 @@ pub fn get_config_templates() -> Vec<Value> {
 
 /// 获取站点的插件列表（从 package.json 依赖中读取）。
 #[tauri::command]
-pub async fn get_plugins(
-    state: State<'_, AppState>,
-    site_id: i64,
-) -> AppResult<Vec<Plugin>> {
+pub async fn get_plugins(state: State<'_, AppState>, site_id: i64) -> AppResult<Vec<Plugin>> {
     let db = Db::from_arc(&state.db);
     blocking::run(move || get_plugins_impl(&db, site_id)).await
 }

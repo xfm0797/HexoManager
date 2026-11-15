@@ -173,6 +173,11 @@
 - 新增 `scripts/error-codes-check.mjs`：静态比对 Rust 里 `AppError::coded("…")` 用到的
   code 与 `errorCodes.ts` 的条目，缺失或有中文残留即退出码 1；并入 `npm run i18n:check`，
   CI 的检查步骤相应改为跑 `npm run i18n:check`（含覆盖率 + 错误码两项）
+- **Rust 侧统一格式并清空 clippy 告警**：全仓 `cargo fmt`（21 个文件、净减 76 行），
+  CI 的 `cargo fmt --check` 从 `continue-on-error` 改为硬卡口；clippy 清掉 6 条真实告警
+  （复杂返回类型抽 `FileFingerprints` 别名、`ServerRegistry` 补 `is_empty`、
+  多余的 `&` 借用与 `return Ok(())`、一处游离 doc 注释），`-- -D warnings` 仍保留软卡口
+  以免工具链新增 lint 阻塞发布
 
 ## [1.2.0] - 2026-10-10
 

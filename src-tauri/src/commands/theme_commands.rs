@@ -1,9 +1,9 @@
 //! 主题管理命令（对应大纲 7.7）。
 
 use crate::db::{site_path_of, Db};
+use crate::err;
 use crate::models::{Theme, ThemeConfig, ThemeInfo};
 use crate::utils::blocking;
-use crate::err;
 use crate::utils::error::{AppError, AppResult};
 use crate::utils::{format_system_time, process};
 use crate::AppState;
@@ -11,7 +11,6 @@ use rusqlite::params;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tauri::State;
-
 
 /// 读取站点 _config.yml 中当前启用的主题名。
 ///
@@ -121,10 +120,7 @@ fn read_theme_meta(
 /// 会遍历 `themes/` 下每个子目录并读取其 `package.json`，主题多时达几十次 IO，
 /// 因此放到阻塞线程池执行（同步命令在 Tauri 2 会跑在主线程上）。
 #[tauri::command]
-pub async fn get_themes(
-    state: State<'_, AppState>,
-    site_id: i64,
-) -> AppResult<Vec<Theme>> {
+pub async fn get_themes(state: State<'_, AppState>, site_id: i64) -> AppResult<Vec<Theme>> {
     let db = Db::from_arc(&state.db);
     blocking::run(move || {
         let site_path = site_path_of(&db, site_id)?;
@@ -210,8 +206,7 @@ pub async fn install_theme(
     source: Option<String>,
 ) -> AppResult<Theme> {
     let db = Db::from_arc(&state.db);
-    install_theme_impl(&db, site_id, &name, source.as_deref())
-        .await
+    install_theme_impl(&db, site_id, &name, source.as_deref()).await
 }
 
 async fn install_theme_impl(
@@ -327,11 +322,7 @@ async fn install_theme_impl(
 
 /// 切换站点主题（写入 `_config.yml` 的 theme 字段）。
 #[tauri::command]
-pub async fn switch_theme(
-    state: State<'_, AppState>,
-    site_id: i64,
-    name: String,
-) -> AppResult<()> {
+pub async fn switch_theme(state: State<'_, AppState>, site_id: i64, name: String) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
     let db = &db;
     let site_path = site_path_of(db, site_id)?;
@@ -401,11 +392,7 @@ pub async fn get_theme_config(
     blocking::run(move || get_theme_config_impl(&db, site_id, theme)).await
 }
 
-fn get_theme_config_impl(
-    db: &Db,
-    site_id: i64,
-    theme: Option<String>,
-) -> AppResult<ThemeConfig> {
+fn get_theme_config_impl(db: &Db, site_id: i64, theme: Option<String>) -> AppResult<ThemeConfig> {
     let site_path = site_path_of(db, site_id)?;
 
     // 优先使用调用方指定的主题名（来自界面点击的那个主题卡片）
@@ -501,7 +488,9 @@ fn get_theme_config_impl(
 
     Err(err!(
         "{}（主题名：{}，站点路径：{}）",
-        hint, theme_name, site_path
+        hint,
+        theme_name,
+        site_path
     ))
 }
 
@@ -561,8 +550,7 @@ fn update_theme_config_impl(
 /// 搜索主题（基于公开主题清单，离线回退为内置列表）。
 #[tauri::command]
 pub async fn search_themes(query: Option<String>) -> AppResult<Vec<ThemeInfo>> {
-    search_themes_impl(query.as_deref())
-        .await
+    search_themes_impl(query.as_deref()).await
 }
 
 async fn search_themes_impl(query: Option<&str>) -> AppResult<Vec<ThemeInfo>> {
@@ -850,11 +838,11 @@ mod tests {
     #[test]
     fn test_current_theme_opt_string_form() {
         let site = temp_site("str");
-        write(
-            &site.join("_config.yml"),
-            "title: Demo\ntheme: next\n",
+        write(&site.join("_config.yml"), "title: Demo\ntheme: next\n");
+        assert_eq!(
+            current_theme_opt(site.to_str().unwrap()),
+            Some("next".into())
         );
-        assert_eq!(current_theme_opt(site.to_str().unwrap()), Some("next".into()));
         let _ = fs::remove_dir_all(&site);
     }
 

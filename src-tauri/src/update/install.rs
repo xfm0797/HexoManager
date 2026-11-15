@@ -63,7 +63,10 @@ pub async fn install_update(
         }
     }
 
-    crate::utils::log::info("update", format!("更新包验签通过，准备启动安装器：{}", path));
+    crate::utils::log::info(
+        "update",
+        format!("更新包验签通过，准备启动安装器：{}", path),
+    );
 
     let ext = p
         .extension()
@@ -79,13 +82,13 @@ pub async fn install_update(
         } else {
             process::run("cmd", &["/C", "start", "", path], None, None).await?;
         }
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(target_os = "macos")]
     {
         process::run("open", &[path], None, None).await?;
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(target_os = "linux")]

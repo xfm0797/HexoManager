@@ -55,14 +55,10 @@ fn validate_hexo_site(path: &str) -> AppResult<()> {
 
 /// 创建新站点：可选脚手架初始化，然后登记入库。
 #[tauri::command]
-pub async fn create_site(
-    state: State<'_, AppState>,
-    input: CreateSiteInput,
-) -> AppResult<Site> {
+pub async fn create_site(state: State<'_, AppState>, input: CreateSiteInput) -> AppResult<Site> {
     // 取出数据库句柄的独立所有权，避免在 await 期间持有 State 借用（否则 future 不满足 Send）
     let db = Db::from_arc(&state.db);
-    create_site_impl(&db, input)
-        .await
+    create_site_impl(&db, input).await
 }
 
 async fn create_site_impl(db: &Db, input: CreateSiteInput) -> AppResult<Site> {
@@ -237,8 +233,7 @@ pub async fn import_site(state: State<'_, AppState>, path: String) -> AppResult<
         }
     }
 
-    rescan_articles(db, id, &path)
-        .await?;
+    rescan_articles(db, id, &path).await?;
     get_site_by_id(db, id)
 }
 
@@ -384,8 +379,7 @@ pub async fn duplicate_site(
     new_path: String,
 ) -> AppResult<Site> {
     let db = Db::from_arc(&state.db);
-    duplicate_site_impl(&db, site_id, &new_name, &new_path)
-        .await
+    duplicate_site_impl(&db, site_id, &new_name, &new_path).await
 }
 
 async fn duplicate_site_impl(
@@ -445,8 +439,7 @@ async fn duplicate_site_impl(
         conn.last_insert_rowid()
     };
 
-    rescan_articles(db, id, new_path)
-        .await?;
+    rescan_articles(db, id, new_path).await?;
     get_site_by_id(db, id)
 }
 
@@ -496,15 +489,13 @@ pub async fn get_site_stats(state: State<'_, AppState>, site_id: i64) -> AppResu
         let mut tag_counter: std::collections::BTreeMap<String, i64> =
             std::collections::BTreeMap::new();
 
-        let mut stmt = conn
-            .prepare("SELECT categories, tags FROM articles WHERE site_id = ?1")?;
-        let rows = stmt
-            .query_map(params![site_id], |r| {
-                Ok((
-                    r.get::<_, Option<String>>(0)?,
-                    r.get::<_, Option<String>>(1)?,
-                ))
-            })?;
+        let mut stmt = conn.prepare("SELECT categories, tags FROM articles WHERE site_id = ?1")?;
+        let rows = stmt.query_map(params![site_id], |r| {
+            Ok((
+                r.get::<_, Option<String>>(0)?,
+                r.get::<_, Option<String>>(1)?,
+            ))
+        })?;
 
         for row in rows.flatten() {
             for (raw, counter) in [(row.0, &mut cat_counter), (row.1, &mut tag_counter)] {
@@ -575,8 +566,7 @@ pub async fn backup_site(
     backup_path: String,
 ) -> AppResult<String> {
     let db = Db::from_arc(&state.db);
-    backup_site_impl(&db, site_id, &backup_path)
-        .await
+    backup_site_impl(&db, site_id, &backup_path).await
 }
 
 async fn backup_site_impl(db: &Db, site_id: i64, backup_path: &str) -> AppResult<String> {
@@ -619,11 +609,11 @@ async fn backup_site_impl(db: &Db, site_id: i64, backup_path: &str) -> AppResult
 
 // ==================== 文章扫描（供导入与统计复用） ====================
 
-/// 现有文章的指纹：`file_path -> (mtime_ns, size)`。
-fn load_fingerprints(
-    db: &Db,
-    site_id: i64,
-) -> AppResult<std::collections::HashMap<String, (Option<i64>, Option<i64>)>> {
+/// 文章文件指纹：`file_path -> (mtime_ns, size)`。
+type FileFingerprints = std::collections::HashMap<String, (Option<i64>, Option<i64>)>;
+
+/// 读出现有文章的指纹，供增量扫描比对。
+fn load_fingerprints(db: &Db, site_id: i64) -> AppResult<FileFingerprints> {
     let conn = db.conn()?;
     let mut stmt =
         conn.prepare("SELECT file_path, file_mtime, file_size FROM articles WHERE site_id = ?1")?;
@@ -823,8 +813,7 @@ pub async fn rescan_articles(db: &Db, site_id: i64, site_path: &str) -> AppResul
 pub async fn refresh_articles(state: State<'_, AppState>, site_id: i64) -> AppResult<()> {
     let db = Db::from_arc(&state.db);
     let site = get_site_by_id(&db, site_id)?;
-    rescan_articles(&db, site_id, &site.path)
-        .await
+    rescan_articles(&db, site_id, &site.path).await
 }
 
 /// 获取站点的文件树（供文件管理页使用）。
@@ -857,11 +846,8 @@ mod tests {
     use super::*;
 
     fn temp_site_dir(tag: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "hexo-mgr-site-test-{}-{}",
-            tag,
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("hexo-mgr-site-test-{}-{}", tag, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("source").join("_posts")).unwrap();
         dir

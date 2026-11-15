@@ -86,7 +86,8 @@ pub(crate) fn row_to_article(row: &rusqlite::Row<'_>) -> rusqlite::Result<Articl
     })
 }
 
-pub(crate) const ARTICLE_COLUMNS: &str = "id, site_id, title, slug, file_path, content, excerpt, status, \
+pub(crate) const ARTICLE_COLUMNS: &str =
+    "id, site_id, title, slug, file_path, content, excerpt, status, \
                                categories, tags, cover_image, is_top, allow_comment, word_count, \
                                created_at, updated_at, published_at";
 
@@ -94,7 +95,8 @@ pub(crate) const ARTICLE_COLUMNS: &str = "id, site_id, title, slug, file_path, c
 ///
 /// 这样 `row_to_article` 的索引无需第二套映射（少一处错位风险），同时列表不再
 /// 传全文 —— 500 篇文章的正文经 IPC JSON 序列化是数量级的浪费。
-pub(crate) const ARTICLE_LIST_COLUMNS: &str = "id, site_id, title, slug, file_path, NULL, excerpt, status, \
+pub(crate) const ARTICLE_LIST_COLUMNS: &str =
+    "id, site_id, title, slug, file_path, NULL, excerpt, status, \
                                categories, tags, cover_image, is_top, allow_comment, word_count, \
                                created_at, updated_at, published_at";
 

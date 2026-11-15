@@ -5,11 +5,8 @@ use crate::models::{Article, BuildResult, DeployResult, EnvCheck, PreviewServer}
 use crate::utils::error::AppResult;
 use crate::utils::now_utc;
 use crate::AppState;
-use tauri::{Emitter, State};
-
-/// 从数据库读取站点路径。
-
 use rusqlite::params;
+use tauri::{Emitter, State};
 
 /// 记录一次部署日志。
 ///
@@ -57,8 +54,7 @@ pub async fn hexo_build(
     let path = site_path_of(&db, site_id)?;
 
     let _ = app.emit("hexo:build-start", serde_json::json!({ "siteId": site_id }));
-    let result = crate::hexo::builder::build(&path)
-        .await?;
+    let result = crate::hexo::builder::build(&path).await?;
     let _ = app.emit(
         "hexo:build-finish",
         serde_json::json!({
@@ -75,8 +71,7 @@ pub async fn hexo_build(
 #[tauri::command]
 pub async fn hexo_clean(state: State<'_, AppState>, site_id: i64) -> AppResult<BuildResult> {
     let path = site_path_of(&state.db, site_id)?;
-    crate::hexo::builder::clean(&path)
-        .await
+    crate::hexo::builder::clean(&path).await
 }
 
 /// 生成静态文件：`hexo generate`。
@@ -92,8 +87,7 @@ pub async fn hexo_generate(
         "hexo:generate-start",
         serde_json::json!({ "siteId": site_id }),
     );
-    let result = crate::hexo::builder::generate(&path)
-        .await?;
+    let result = crate::hexo::builder::generate(&path).await?;
     let _ = app.emit(
         "hexo:generate-finish",
         serde_json::json!({ "siteId": site_id, "success": result.success }),
@@ -119,8 +113,7 @@ pub async fn hexo_server_start(
     let desired = port.unwrap_or(4000);
     let actual_port = crate::hexo::server::find_free_port(desired).await;
 
-    let server = crate::hexo::server::spawn_server(site_id, &path, actual_port)
-        .await?;
+    let server = crate::hexo::server::spawn_server(site_id, &path, actual_port).await?;
     let info = server.info.clone();
 
     // 句柄交给注册表持有：退出应用时由 `stop_all` 统一回收
@@ -157,8 +150,7 @@ pub async fn hexo_new_post(
     let db = Db::from_arc(&state.db);
     let db = &db;
     let path = site_path_of(db, site_id)?;
-    let out = crate::hexo::builder::new_post(&path, "post", &title)
-        .await?;
+    let out = crate::hexo::builder::new_post(&path, "post", &title).await?;
     let _ = crate::commands::site_commands::rescan_articles(db, site_id, &path).await;
     Ok(out)
 }
@@ -173,8 +165,7 @@ pub async fn hexo_new_draft(
     let db = Db::from_arc(&state.db);
     let db = &db;
     let path = site_path_of(db, site_id)?;
-    let out = crate::hexo::builder::new_post(&path, "draft", &title)
-        .await?;
+    let out = crate::hexo::builder::new_post(&path, "draft", &title).await?;
     let _ = crate::commands::site_commands::rescan_articles(db, site_id, &path).await;
     Ok(out)
 }
@@ -189,8 +180,7 @@ pub async fn hexo_publish(
     let db = Db::from_arc(&state.db);
     let db = &db;
     let path = site_path_of(db, site_id)?;
-    let out = crate::hexo::builder::publish_post(&path, &slug)
-        .await?;
+    let out = crate::hexo::builder::publish_post(&path, &slug).await?;
     let _ = crate::commands::site_commands::rescan_articles(db, site_id, &path).await;
     Ok(out)
 }
@@ -210,8 +200,7 @@ pub async fn hexo_deploy(
         "hexo:deploy-start",
         serde_json::json!({ "siteId": site_id }),
     );
-    let result = crate::hexo::builder::deploy_local(&path)
-        .await?;
+    let result = crate::hexo::builder::deploy_local(&path).await?;
 
     let _ = record_deploy_log(
         db,
@@ -254,15 +243,13 @@ pub async fn check_hexo_env(
         (None, Some(id)) => site_path_of(&state.db, id)?,
         (None, None) => ".".to_string(),
     };
-    crate::hexo::installer::check_env(&target)
-        .await
+    crate::hexo::installer::check_env(&target).await
 }
 
 /// 安装 Hexo CLI。
 #[tauri::command]
 pub async fn install_hexo(path: Option<String>) -> AppResult<String> {
-    crate::hexo::installer::install_hexo(path.as_deref())
-        .await
+    crate::hexo::installer::install_hexo(path.as_deref()).await
 }
 
 /// 一键部署：git add + commit + push。
@@ -274,8 +261,7 @@ pub async fn deploy_site(
     message: String,
 ) -> AppResult<DeployResult> {
     let db = Db::from_arc(&state.db);
-    deploy_site_impl(&app, &db, site_id, &message)
-        .await
+    deploy_site_impl(&app, &db, site_id, &message).await
 }
 
 async fn deploy_site_impl(

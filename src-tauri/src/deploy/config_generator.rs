@@ -576,11 +576,7 @@ fn platform_meta(platform: &str) -> (&'static str, &'static str, &'static str) {
             "智能回源、故障转移与多源站容灾配置脚本",
             "https://developers.cloudflare.com/workers/",
         ),
-        "common" => (
-            "通用配置",
-            "部署说明文档，所有平台通用",
-            "",
-        ),
+        "common" => ("通用配置", "部署说明文档，所有平台通用", ""),
         _ => ("未知平台", "", ""),
     }
 }

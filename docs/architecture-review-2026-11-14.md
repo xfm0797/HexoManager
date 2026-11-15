@@ -19,7 +19,8 @@
 > `cargo check --all-targets` / `tsc --noEmit` / `eslint --max-warnings 0` /
 > `i18n:check`（含错误码一致性）/ `version:check` 全绿，CI 上 52 个 Rust 测试通过。
 >
-> **仍未落地**：CI 中 `cargo clippy` / `cargo fmt` 仍是软卡口（需先清历史告警并统一格式）；
+> **仍未落地**：CI 中 `cargo clippy` 仍是软卡口（`-- -D warnings` 已生效但不阻塞；
+> 本地已清零 6 条告警，留软卡口是为了躲开工具链新增 lint 导致的发布阻塞）；
 > `backendMessages.ts` 的中文文本映射表仍作为兜底存在，待 `err!`/粗粒度错误逐步细化后即可删除。
 
 ---

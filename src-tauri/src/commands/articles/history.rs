@@ -98,8 +98,7 @@ pub async fn get_article_at_commit(
         .unwrap_or(file_path);
 
     let spec = format!("{}:{}", commit_hash, rel);
-    let out = crate::utils::process::run("git", &["show", &spec], Some(root), Some(60))
-        .await?;
+    let out = crate::utils::process::run("git", &["show", &spec], Some(root), Some(60)).await?;
 
     if !out.success {
         return Err(AppError::coded(

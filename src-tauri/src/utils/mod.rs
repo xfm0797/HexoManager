@@ -142,14 +142,18 @@ pub fn local_time_to_utc(raw: &str) -> Option<String> {
         "%Y-%m-%dT%H:%M",
     ] {
         if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(s, fmt) {
-            return Some(format_utc(naive.and_local_timezone(chrono::Local).single()?));
+            return Some(format_utc(
+                naive.and_local_timezone(chrono::Local).single()?,
+            ));
         }
     }
 
     // 4) 只有日期
     let date = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok()?;
     let naive = date.and_hms_opt(0, 0, 0)?;
-    Some(format_utc(naive.and_local_timezone(chrono::Local).single()?))
+    Some(format_utc(
+        naive.and_local_timezone(chrono::Local).single()?,
+    ))
 }
 
 /// 折算成数据库统一的 UTC 字符串形态（`YYYY-MM-DD HH:MM:SS`）。

@@ -158,6 +158,11 @@ impl ServerRegistry {
     pub fn len(&self) -> usize {
         lock(&self.0).len()
     }
+
+    /// 注册表是否为空（clippy 要求与 `len` 成对，也是更直观的空判断）。
+    pub fn is_empty(&self) -> bool {
+        lock(&self.0).is_empty()
+    }
 }
 
 /// 生成站点预览 URL。
@@ -168,11 +173,7 @@ fn preview_url(port: u16) -> String {
 /// 启动 `hexo server`。
 ///
 /// `npx hexo server -p <port>`；返回的对象持有子进程句柄，须登记进注册表。
-pub async fn spawn_server(
-    site_id: i64,
-    site_path: &str,
-    port: u16,
-) -> AppResult<RunningServer> {
+pub async fn spawn_server(site_id: i64, site_path: &str, port: u16) -> AppResult<RunningServer> {
     let cwd = Path::new(site_path);
     if !cwd.exists() {
         return Err(AppError::PathNotFound(site_path.to_string()));
@@ -188,7 +189,7 @@ pub async fn spawn_server(
 
     let npx_bin = crate::utils::node::npx();
 
-    let mut cmd = Command::new(&npx_bin);
+    let mut cmd = Command::new(npx_bin);
     cmd.args(["hexo", "server", "-p", &port.to_string()])
         .current_dir(cwd)
         .stdout(Stdio::piped())
@@ -205,14 +206,25 @@ pub async fn spawn_server(
     let mut child = cmd
         .spawn()
         .map_err(|e| AppError::Process(format!("启动预览服务失败：{}", e)))?;
-    let pid = child
-        .id();
+    let pid = child.id();
 
     // 后台线程读走输出：不读会把管道写满，进程阻塞在 write 上（"预览卡死"）
     let log_tail: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
     for (stream, tag) in [
-        (child.stdout.take().map(|s| Box::new(s) as Box<dyn std::io::Read + Send>), "out"),
-        (child.stderr.take().map(|s| Box::new(s) as Box<dyn std::io::Read + Send>), "err"),
+        (
+            child
+                .stdout
+                .take()
+                .map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
+            "out",
+        ),
+        (
+            child
+                .stderr
+                .take()
+                .map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
+            "err",
+        ),
     ] {
         let Some(stream) = stream else { continue };
         let tail = Arc::clone(&log_tail);
@@ -284,10 +296,7 @@ pub async fn spawn_server(
 
     crate::utils::log::info(
         "preview",
-        format!(
-            "站点 {} 预览服务已启动：pid={} port={}",
-            site_id, pid, port
-        ),
+        format!("站点 {} 预览服务已启动：pid={} port={}", site_id, pid, port),
     );
 
     Ok(server)
@@ -382,7 +391,7 @@ pub async fn find_free_port(start: u16) -> u16 {
 /// 通过 `npx hexo version` 确认 hexo 可用。
 pub async fn probe_hexo(site_path: &str) -> bool {
     process::run(
-        &crate::utils::node::npx(),
+        crate::utils::node::npx(),
         &["hexo", "version"],
         Some(Path::new(site_path)),
         Some(45),

@@ -14,12 +14,12 @@
 //! 同步命令在 Tauri 2 会跑在主线程上，读一张 30 MB 的图片或遍历 node_modules
 //! 都会让窗口假死 —— 详见 `utils::blocking` 的模块注释。
 
-use crate::AppState;
 use crate::db::Db;
-use crate::utils::blocking;
 use crate::err;
+use crate::utils::blocking;
 use crate::utils::error::{AppError, AppResult};
 use crate::utils::{FileInfo, FileTreeNode};
+use crate::AppState;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
@@ -491,6 +491,9 @@ mod tests {
         assert!(ensure_safe(&db, "   ", false).is_err());
         let root = std::path::MAIN_SEPARATOR.to_string();
         assert!(ensure_safe(&db, &root, false).is_err());
-        assert!(ensure_safe(&db, &root, true).is_err(), "根目录即便放行也不允许");
+        assert!(
+            ensure_safe(&db, &root, true).is_err(),
+            "根目录即便放行也不允许"
+        );
     }
 }
